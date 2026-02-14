@@ -25,7 +25,7 @@
             margin-bottom: 6px;
             font-weight: 700;
         }
-        input, textarea, button {
+        input, textarea, button, select {
             width: 100%;
             box-sizing: border-box;
             border-radius: 8px;
@@ -75,6 +75,9 @@
             border: 1px solid #333;
             border-radius: 8px;
         }
+        [hidden] {
+            display: none !important;
+        }
     </style>
 </head>
 <body>
@@ -82,37 +85,45 @@
     <p class="hint">NIP-7 API nach außen, intern optional NIP-46.</p>
 
     <div class="card">
-        <label>
-            <input id="prefer-native" class="inline" type="checkbox" checked>
-            Natives NIP-7 bevorzugen (wenn vorhanden)
-        </label>
+        <label class="label" for="connect-mode">Connect-Modus</label>
+        <select id="connect-mode">
+            <option value="auto">Auto (NIP-7, sonst NIP-46)</option>
+            <option value="nip7">Nur NIP-7 (Extension)</option>
+            <option value="nip46">Nur NIP-46 (Signer/Bridge)</option>
+        </select>
 
-        <label class="label" for="signer-url">Signer URL (iframe)</label>
-        <input id="signer-url" value="./signer.html">
+        <div id="nip46-options">
+            <label class="label" for="signer-url">Signer URL (iframe)</label>
+            <input id="signer-url" value="./signer.html">
 
-        <label>
-            <input id="embed-signer" class="inline" type="checkbox" checked>
-            Signer eingebettet starten
-        </label>
+            <label>
+                <input id="embed-signer" class="inline" type="checkbox" checked>
+                Signer eingebettet starten
+            </label>
 
-        <button id="sync-iframe-btn">Connection URI aus iframe holen</button>
-        <iframe id="signer-frame" title="Signer" src="./signer.html"></iframe>
+            <button id="sync-iframe-btn">Connection URI aus iframe holen</button>
+            <iframe id="signer-frame" title="Signer" src="./signer.html"></iframe>
+        </div>
     </div>
 
     <div class="card">
-        <label class="label" for="conn-uri">Connection URI (nostrconnect:// oder bunker://)</label>
-        <input id="conn-uri" placeholder="nostrconnect://<pubkey>?relay=wss%3A%2F%2F...">
-        <button id="install-btn">NIP-7 Provider initialisieren</button>
+        <div id="conn-uri-row">
+            <label class="label" for="conn-uri">Connection URI (nostrconnect:// oder bunker://)</label>
+            <input id="conn-uri" placeholder="nostrconnect://<pubkey>?relay=wss%3A%2F%2F...">
+        </div>
+        <button id="install-btn">Verbinden</button>
+        <p id="connect-hint" class="hint">Schritt 1: Verbinden. Danach unten Nachricht senden.</p>
         <div id="status">Noch nicht initialisiert</div>
         <pre id="user"></pre>
     </div>
 
     <div class="card">
-        <h3>NIP-7 Client Test</h3>
+        <h3>Nachricht senden</h3>
+        <p class="hint">Schritt 2: Gleich in beiden Modi: signieren und publizieren.</p>
         <label class="label" for="content">Event Content (kind:1)</label>
         <textarea id="content">Hallo aus mpv-nostr-client.html</textarea>
-        <button id="pubkey-btn" disabled>window.nostr.getPublicKey()</button>
-        <button id="send-btn" disabled>window.nostr.signEvent() + Publish</button>
+        <button id="pubkey-btn" disabled>Public Key anzeigen (optional)</button>
+        <button id="send-btn" disabled>Nachricht signieren + senden</button>
         <pre id="result"></pre>
     </div>
 
@@ -127,7 +138,10 @@
             "wss://relay.snort.social"
         ];
 
-        const preferNativeInput = document.getElementById("prefer-native");
+        const connectModeInput = document.getElementById("connect-mode");
+        const connectHintEl = document.getElementById("connect-hint");
+        const nip46OptionsEl = document.getElementById("nip46-options");
+        const connUriRowEl = document.getElementById("conn-uri-row");
         const signerUrlInput = document.getElementById("signer-url");
         const embedSignerInput = document.getElementById("embed-signer");
         const syncIframeBtn = document.getElementById("sync-iframe-btn");
@@ -160,15 +174,60 @@
             sendBtn.disabled = false;
         }
 
-        function adoptNativeProviderIfAvailable() {
-            if (!preferNativeInput.checked) return false;
-            if (!looksLikeNip7Provider(window.nostr)) return false;
-            setProviderReady(window.nostr);
-            setStatus("Natives NIP-7 erkannt. Bereit.");
-            if (!userEl.textContent) {
-                userEl.textContent = "Modus: NIP-7 (native)\nProvider erkannt.";
+        function selectedConnectMode() {
+            return connectModeInput?.value || "auto";
+        }
+
+        function shouldUseNativeMode() {
+            const mode = selectedConnectMode();
+            return mode === "auto" || mode === "nip7";
+        }
+
+        function hasNativeProviderAvailable() {
+            return shouldUseNativeMode() && looksLikeNip7Provider(window.nostr);
+        }
+
+        function updateConnectHint() {
+            const mode = selectedConnectMode();
+            if (mode === "nip7") {
+                connectHintEl.textContent = hasNativeProviderAvailable()
+                    ? "Schritt 1: Mit NIP-7 verbinden. Danach unten Nachricht senden."
+                    : "NIP-7 nicht gefunden. Bitte Extension aktivieren oder Modus auf NIP-46 wechseln.";
+                return;
             }
-            return true;
+            if (mode === "nip46") {
+                connectHintEl.textContent = "Schritt 1: Mit NIP-46 verbinden (Signer/Bridge). Danach unten Nachricht senden.";
+                return;
+            }
+            connectHintEl.textContent = hasNativeProviderAvailable()
+                ? "Schritt 1: Auto verbindet per NIP-7 (falls vorhanden), sonst NIP-46. Danach unten Nachricht senden."
+                : "Schritt 1: Auto nutzt NIP-46 (kein NIP-7 erkannt). Danach unten Nachricht senden.";
+        }
+
+        function updateConnectModeUi() {
+            const mode = selectedConnectMode();
+            const showNip46Options = mode !== "nip7";
+
+            nip46OptionsEl.hidden = !showNip46Options;
+            connUriRowEl.hidden = !showNip46Options;
+            signerUrlInput.disabled = !showNip46Options;
+            embedSignerInput.disabled = !showNip46Options;
+            syncIframeBtn.disabled = !showNip46Options;
+            if (!showNip46Options) {
+                signerFrame.style.display = "none";
+                signerFrame.src = "about:blank";
+            } else {
+                refreshSignerFrame();
+            }
+
+            if (mode === "nip7") {
+                installBtn.textContent = "Mit NIP-7 verbinden";
+            } else if (mode === "nip46") {
+                installBtn.textContent = "Mit NIP-46 verbinden";
+            } else {
+                installBtn.textContent = "Auto verbinden";
+            }
+            updateConnectHint();
         }
 
         function setStatus(text, isError = false) {
@@ -239,6 +298,10 @@
 
         function refreshSignerFrame() {
             try {
+                if (selectedConnectMode() === "nip7") {
+                    signerFrame.style.display = "none";
+                    return;
+                }
                 const signerUrl = buildSignerFrameSrc(signerUrlInput.value.trim() || "./signer.html");
                 signerFrameOrigin = signerUrl.origin;
                 signerFrame.src = signerUrl.toString();
@@ -299,6 +362,8 @@
 
         function bridgeMessageHandler(event) {
             if (!signerFrameOrigin || event.origin !== signerFrameOrigin) return;
+            if (selectedConnectMode() === "nip7") return;
+            if (selectedConnectMode() === "auto" && hasNativeProviderAvailable()) return;
             const data = event.data;
             if (!data || data.source !== BRIDGE_SOURCE) return;
             if (data.type !== "ready" && data.type !== "connection-info" && data.type !== "locked") return;
@@ -465,12 +530,16 @@
         }
 
         async function installProvider() {
-            setStatus("Initialisiere Provider...");
+            setStatus("Verbinde...");
             resultEl.textContent = "";
+            const mode = selectedConnectMode();
 
-            if (preferNativeInput.checked && looksLikeNip7Provider(window.nostr)) {
+            if (mode === "nip7" || (mode === "auto" && hasNativeProviderAvailable())) {
+                if (!hasNativeProviderAvailable()) {
+                    throw new Error("Kein natives NIP-7 gefunden. Waehle 'Auto' oder 'Nur NIP-46'.");
+                }
                 setProviderReady(window.nostr);
-                setStatus("Natives NIP-7 wird genutzt.");
+                setStatus("Verbunden. Unten Nachricht senden.");
                 userEl.textContent = "Modus: NIP-7 (native)\npubkey: (nicht abgefragt)";
                 try {
                     await ensurePublishContextForProvider();
@@ -483,11 +552,11 @@
             const connected = await connectViaNip46();
             setProviderReady(connected.provider);
 
-            if (!window.nostr || !preferNativeInput.checked) {
+            if (mode === "nip46" || !window.nostr) {
                 window.nostr = nostrProvider;
             }
 
-            setStatus("NIP-46 verbunden, NIP-7 Adapter aktiv.");
+            setStatus("Verbunden. Unten Nachricht senden.");
             userEl.textContent =
                 `Modus: NIP-46 -> NIP-7 Adapter\n` +
                 `pubkey: ${connected.user.pubkey}\n` +
@@ -515,7 +584,7 @@
             };
             if (cachedPubkey) unsignedEvent.pubkey = cachedPubkey;
 
-            resultEl.textContent = "Signiere via window.nostr.signEvent()...";
+            resultEl.textContent = "Signiere Nachricht...";
             const signedEvent = await withTimeout(
                 nostrProvider.signEvent(unsignedEvent),
                 25000,
@@ -604,16 +673,23 @@
 
         window.addEventListener("message", bridgeMessageHandler);
         refreshSignerFrame();
+        updateConnectModeUi();
 
-        // Wenn bereits ein NIP-7 Provider vorhanden ist, direkt nutzbar machen.
-        adoptNativeProviderIfAvailable();
+        connectModeInput.addEventListener("change", () => {
+            updateConnectModeUi();
+            nostrProvider = null;
+            pubkeyBtn.disabled = true;
+            sendBtn.disabled = true;
+            setStatus("Modus geaendert. Bitte Provider neu initialisieren.");
+        });
 
         // Viele Extensions injizieren asynchron.
-        window.addEventListener("nostr:ready", adoptNativeProviderIfAvailable);
+        window.addEventListener("nostr:ready", updateConnectHint);
         let nativeProbeCount = 0;
         const nativeProbe = setInterval(() => {
             nativeProbeCount++;
-            if (adoptNativeProviderIfAvailable() || nativeProbeCount > 20) {
+            updateConnectHint();
+            if (hasNativeProviderAvailable() || nativeProbeCount > 20) {
                 clearInterval(nativeProbe);
             }
         }, 250);
