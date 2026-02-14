@@ -472,7 +472,7 @@ open http://localhost:8000/tests/sendevent.html
 
 ## 📄 Lizenz
 
-Dieses Projekt ist ein **Educational Template**. Nutze es frei für deine Projekte!
+CC0. Dieses Projekt ist ein **Educational Template**. Nutze es frei für deine Projekte!
 
 ## 🤝 Beiträge
 
