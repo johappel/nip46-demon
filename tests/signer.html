@@ -5,9 +5,68 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>JS Nostr Signer (No-Popup)</title>
     <style>
-        body { font-family: sans-serif; padding: 20px; background: #121212; color: white; }
+        body {
+            font-family: sans-serif;
+            margin: 0;
+            padding: 10px;
+            background: #121212;
+            color: white;
+            font-size: 14px;
+        }
+        #app-title {
+            margin: 0 0 8px 0;
+            font-size: 16px;
+            font-weight: 700;
+        }
+        #status {
+            margin: 0 0 4px 0;
+            font-weight: 700;
+        }
+        #user-info {
+            margin: 0;
+            color: #9ad1ff;
+            white-space: pre-wrap;
+        }
+        #tab-nav {
+            display: flex;
+            gap: 6px;
+            margin: 10px 0;
+        }
+        .tab-btn {
+            margin: 0;
+            padding: 8px 10px;
+            background: #242424;
+            color: #fff;
+            border: 1px solid #343434;
+        }
+        .tab-btn.active {
+            background: #2f7cfe;
+            border-color: #2f7cfe;
+        }
+        .tab-panel {
+            display: none;
+        }
+        .tab-panel.active {
+            display: block;
+        }
+        #tab-signer {
+            padding: 10px;
+            background: #171717;
+            border: 1px solid #333;
+            border-radius: 8px;
+        }
+        #connection-info {
+            margin-top: 0;
+            padding: 12px;
+            background: #171717;
+            border: 1px solid #333;
+            border-radius: 8px;
+            white-space: pre-wrap;
+            overflow: auto;
+            max-height: 180px;
+        }
         #unlock-panel, #key-manager {
-            margin-top: 12px;
+            margin-top: 10px;
             padding: 12px;
             background: #171717;
             border: 1px solid #333;
@@ -28,10 +87,10 @@
         #unlock-panel p, #key-manager p { margin: 0 0 10px 0; color: #bbb; }
         #active-key-info { margin-bottom: 10px; color: #9ad1ff; white-space: pre-wrap; }
         #request-log {
-            margin-top: 12px;
+            margin-top: 10px;
             padding: 10px;
-            min-height: 80px;
-            max-height: 180px;
+            min-height: 100px;
+            max-height: 220px;
             overflow: auto;
             background: #171717;
             border: 1px solid #333;
@@ -53,79 +112,94 @@
 </head>
 <body>
 
-    <h1>NIP-46 JS Signer</h1>
+    <div id="app-title">NIP-46 Signer</div>
     <div id="status">Verbinde mit Relay...</div>
-    <div id="user-info"></div>
-    <div id="unlock-panel">
-        <h3 id="unlock-title">Signer entsperren</h3>
-        <p id="unlock-hint"></p>
-        <div id="unlock-key-row">
-            <label for="unlock-key-select">Gespeicherter Schlüssel</label>
-            <select id="unlock-key-select"></select>
-        </div>
-        <div id="unlock-name-row">
-            <label for="unlock-name-input">Schlüsselname (optional)</label>
-            <input id="unlock-name-input" placeholder="z.B. Laptop, Test, Main" />
-        </div>
-        <div id="unlock-nsec-row">
-            <label for="unlock-nsec-input">nsec</label>
-            <input id="unlock-nsec-input" placeholder="nsec1..." />
-        </div>
-        <div id="unlock-generate-row" class="button-row">
-            <button class="btn-allow-temporary" id="unlock-generate-btn" type="button">Neuen nsec generieren</button>
-        </div>
-        <div id="unlock-password-row">
-            <label for="unlock-password-input">Passwort</label>
-            <input id="unlock-password-input" type="password" placeholder="Passwort" />
-        </div>
-        <div id="unlock-password-confirm-row">
-            <label for="unlock-password-confirm-input">Passwort wiederholen</label>
-            <input id="unlock-password-confirm-input" type="password" placeholder="Passwort wiederholen" />
-        </div>
-        <div id="unlock-remember-row">
-            <label for="unlock-remember-select">Entsperrt bleiben (optional)</label>
-            <select id="unlock-remember-select">
-                <option value="none">Nein (bei Reload wieder sperren)</option>
-                <option value="session">Während dieser Browser-Session</option>
-                <option value="15m">15 Minuten</option>
-                <option value="1h">1 Stunde</option>
-            </select>
-        </div>
-        <div class="button-row">
-            <button class="btn-approve" id="unlock-submit-btn">Weiter</button>
-            <button class="btn-reject" id="unlock-cancel-btn">Abbrechen</button>
-        </div>
+
+    <div id="tab-nav">
+        <button class="tab-btn active" id="tab-btn-signer" type="button">Signer</button>
+        <button class="tab-btn" id="tab-btn-info" type="button">Info/Log</button>
+        <button class="tab-btn" id="tab-btn-management" type="button">Verwaltung</button>
     </div>
 
-    <div id="key-manager">
-        <h3>Schlüsselverwaltung</h3>
-        <div id="active-key-info"></div>
-        <label for="saved-keys-select">Gespeicherte Schlüssel</label>
-        <select id="saved-keys-select"></select>
-        <div class="button-row">
-            <button class="btn-allow-temporary" id="switch-key-btn">Zu Auswahl wechseln</button>
-            <button class="btn-approve" id="download-key-btn">Aktiven Schlüssel herunterladen</button>
-        </div>
-        <label for="new-key-name-input">Neuer Schlüsselname (optional)</label>
-        <input id="new-key-name-input" placeholder="z.B. Phone Backup" />
-        <label for="new-key-nsec-input">nsec importieren oder generieren</label>
-        <input id="new-key-nsec-input" placeholder="nsec1..." />
-        <div class="button-row">
-            <button class="btn-allow-temporary" id="generate-key-btn">Neuen Schlüssel generieren</button>
-            <button class="btn-approve" id="save-key-btn">Schlüssel speichern</button>
-        </div>
-        <label for="change-password-current-input">Aktuelles Passwort</label>
-        <input id="change-password-current-input" type="password" placeholder="Aktuelles Passwort" />
-        <label for="change-password-new-input">Neues Passwort</label>
-        <input id="change-password-new-input" type="password" placeholder="Neues Passwort (mind. 8 Zeichen)" />
-        <label for="change-password-confirm-input">Neues Passwort wiederholen</label>
-        <input id="change-password-confirm-input" type="password" placeholder="Neues Passwort wiederholen" />
-        <div class="button-row">
-            <button class="btn-approve" id="change-password-btn">Passwort ändern</button>
-        </div>
-    </div>
+    <section class="tab-panel active" id="tab-signer">
+        <div id="user-info">Starte Signer...</div>
+    </section>
 
-    <pre id="request-log"></pre>
+    <section class="tab-panel" id="tab-info">
+        <pre id="connection-info">Verbindungsinformationen folgen nach Entsperrung.</pre>
+        <pre id="request-log"></pre>
+    </section>
+
+    <section class="tab-panel" id="tab-management">
+        <div id="unlock-panel">
+            <h3 id="unlock-title">Signer entsperren</h3>
+            <p id="unlock-hint"></p>
+            <div id="unlock-key-row">
+                <label for="unlock-key-select">Gespeicherter Schlüssel</label>
+                <select id="unlock-key-select"></select>
+            </div>
+            <div id="unlock-name-row">
+                <label for="unlock-name-input">Schlüsselname (optional)</label>
+                <input id="unlock-name-input" placeholder="z.B. Laptop, Test, Main" />
+            </div>
+            <div id="unlock-nsec-row">
+                <label for="unlock-nsec-input">nsec</label>
+                <input id="unlock-nsec-input" placeholder="nsec1..." />
+            </div>
+            <div id="unlock-generate-row" class="button-row">
+                <button class="btn-allow-temporary" id="unlock-generate-btn" type="button">Neuen nsec generieren</button>
+            </div>
+            <div id="unlock-password-row">
+                <label for="unlock-password-input">Passwort</label>
+                <input id="unlock-password-input" type="password" placeholder="Passwort" />
+            </div>
+            <div id="unlock-password-confirm-row">
+                <label for="unlock-password-confirm-input">Passwort wiederholen</label>
+                <input id="unlock-password-confirm-input" type="password" placeholder="Passwort wiederholen" />
+            </div>
+            <div id="unlock-remember-row">
+                <label for="unlock-remember-select">Entsperrt bleiben (optional)</label>
+                <select id="unlock-remember-select">
+                    <option value="none">Nein (bei Reload wieder sperren)</option>
+                    <option value="session">Während dieser Browser-Session</option>
+                    <option value="15m">15 Minuten</option>
+                    <option value="1h">1 Stunde</option>
+                </select>
+            </div>
+            <div class="button-row">
+                <button class="btn-approve" id="unlock-submit-btn">Weiter</button>
+                <button class="btn-reject" id="unlock-cancel-btn">Abbrechen</button>
+            </div>
+        </div>
+
+        <div id="key-manager">
+            <h3>Schlüsselverwaltung</h3>
+            <div id="active-key-info"></div>
+            <label for="saved-keys-select">Gespeicherte Schlüssel</label>
+            <select id="saved-keys-select"></select>
+            <div class="button-row">
+                <button class="btn-allow-temporary" id="switch-key-btn">Zu Auswahl wechseln</button>
+                <button class="btn-approve" id="download-key-btn">Aktiven Schlüssel herunterladen</button>
+            </div>
+            <label for="new-key-name-input">Neuer Schlüsselname (optional)</label>
+            <input id="new-key-name-input" placeholder="z.B. Phone Backup" />
+            <label for="new-key-nsec-input">nsec importieren oder generieren</label>
+            <input id="new-key-nsec-input" placeholder="nsec1..." />
+            <div class="button-row">
+                <button class="btn-allow-temporary" id="generate-key-btn">Neuen Schlüssel generieren</button>
+                <button class="btn-approve" id="save-key-btn">Schlüssel speichern</button>
+            </div>
+            <label for="change-password-current-input">Aktuelles Passwort</label>
+            <input id="change-password-current-input" type="password" placeholder="Aktuelles Passwort" />
+            <label for="change-password-new-input">Neues Passwort</label>
+            <input id="change-password-new-input" type="password" placeholder="Neues Passwort (mind. 8 Zeichen)" />
+            <label for="change-password-confirm-input">Neues Passwort wiederholen</label>
+            <input id="change-password-confirm-input" type="password" placeholder="Neues Passwort wiederholen" />
+            <div class="button-row">
+                <button class="btn-approve" id="change-password-btn">Passwort ändern</button>
+            </div>
+        </div>
+    </section>
 
     <div id="overlay" class="overlay"></div>
     <div id="auth-modal">
@@ -705,6 +779,26 @@
             logEl.innerText = combined.trimEnd();
         }
 
+        function setActiveTab(tabName) {
+            const tabs = ["signer", "info", "management"];
+            for (const tab of tabs) {
+                const panel = document.getElementById(`tab-${tab}`);
+                const btn = document.getElementById(`tab-btn-${tab}`);
+                if (panel) panel.classList.toggle("active", tab === tabName);
+                if (btn) btn.classList.toggle("active", tab === tabName);
+            }
+        }
+
+        function setupTabNavigation() {
+            const signerBtn = document.getElementById("tab-btn-signer");
+            const infoBtn = document.getElementById("tab-btn-info");
+            const managementBtn = document.getElementById("tab-btn-management");
+
+            signerBtn.addEventListener("click", () => setActiveTab("signer"));
+            infoBtn.addEventListener("click", () => setActiveTab("info"));
+            managementBtn.addEventListener("click", () => setActiveTab("management"));
+        }
+
         function showUnlockPanel(options) {
             const panel = document.getElementById("unlock-panel");
             const titleEl = document.getElementById("unlock-title");
@@ -754,6 +848,7 @@
             confirmInput.value = "";
             rememberSelect.value = options.defaultRememberMode || "none";
 
+            setActiveTab("management");
             panel.style.display = "block";
 
             return new Promise((resolve, reject) => {
@@ -1226,14 +1321,21 @@
                 nostrconnectUri
             };
 
-            document.getElementById("status").innerText = "Bereit für Anfragen";
+            document.getElementById("status").innerText = "Signer bereit";
             document.getElementById("user-info").innerText =
                 `Aktiver Schlüssel: ${unlocked.keyName}\n` +
-                `Aktiv als: ${user.npub.substring(0, 12)}...\n` +
+                `npub: ${user.npub.substring(0, 16)}...\n` +
+                "Warte auf NostrConnect-Anfragen.";
+            document.getElementById("connection-info").innerText =
+                `Aktiver Schlüssel: ${unlocked.keyName}\n` +
+                `pubkey: ${user.pubkey}\n` +
+                `npub: ${user.npub}\n` +
+                `Relays: ${RELAYS.join(", ")}\n` +
                 `Bunker URI: ${bunkerUri}\n` +
                 `Nostrconnect URI: ${nostrconnectUri}`;
 
             renderKeyManager();
+            setActiveTab("signer");
 
             const nip46Backend = new NDKNip46Backend(
                 ndk,
@@ -1313,6 +1415,7 @@
             document.getElementById("auth-modal").style.display = "none";
         }
 
+        setupTabNavigation();
         setupKeyManagerHandlers();
         window.addEventListener("message", bridgeMessageHandler);
 
