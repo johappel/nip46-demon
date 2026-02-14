@@ -85,6 +85,12 @@
             color: #fff;
         }
         #unlock-panel p, #key-manager p { margin: 0 0 10px 0; color: #bbb; }
+        .field-feedback {
+            margin: -4px 0 10px 0 !important;
+            color: #ff7676 !important;
+            font-size: 12px;
+            min-height: 16px;
+        }
         #active-key-info { margin-bottom: 10px; color: #9ad1ff; white-space: pre-wrap; }
         #request-log {
             margin-top: 10px;
@@ -190,6 +196,7 @@
                 <label for="unlock-password-confirm-input">Passwort wiederholen</label>
                 <input id="unlock-password-confirm-input" type="password" placeholder="Passwort wiederholen" />
             </div>
+            <p id="unlock-password-feedback" class="field-feedback"></p>
             <div id="unlock-remember-row">
                 <label for="unlock-remember-select">Entsperrt bleiben (optional)</label>
                 <select id="unlock-remember-select">
@@ -228,6 +235,7 @@
             <input id="change-password-new-input" type="password" placeholder="Neues Passwort (mind. 8 Zeichen)" />
             <label for="change-password-confirm-input">Neues Passwort wiederholen</label>
             <input id="change-password-confirm-input" type="password" placeholder="Neues Passwort wiederholen" />
+            <p id="change-password-feedback" class="field-feedback"></p>
             <div class="button-row">
                 <button class="btn-approve" id="change-password-btn">Passwort ändern</button>
             </div>
@@ -280,6 +288,8 @@
         // ===== Kryptographische Konstanten =====
         // PBKDF2 Iterationen für Passwort-Hashing (210.000 = NIST empfohlen für 2024)
         const PBKDF2_ITERATIONS = 210000;
+        // Mindestlänge für neue Passwörter
+        const MIN_PASSWORD_LENGTH = 8;
         // NIP-46 Methoden, die automatisch genehmigt werden (keine User-Bestätigung nötig)
         const AUTO_ALLOW_METHODS = new Set(["connect", "ping", "get_public_key"]);
         // NIP-46 Methoden, die Benutzer-Bestätigung benötigen (sensitiv)
@@ -366,6 +376,17 @@
             const raw = String(input || "").toLowerCase();
             const slug = raw.replace(/[^a-z0-9_-]+/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "");
             return slug || "nostr-key";
+        }
+
+        /**
+         * Setzt Inline-Feedback für ein Formularfeld.
+         * @param {HTMLElement|null} element - Ziel-Element für Feedback
+         * @param {string} message - Fehlermeldung (leer = Feedback ausblenden)
+         */
+        function setFieldFeedback(element, message) {
+            if (!element) return;
+            element.innerText = message || "";
+            element.style.display = message ? "block" : "none";
         }
 
         // ===== Basis-Konvertierungen (Bytes, Base64) =====
@@ -1345,6 +1366,7 @@
             const nsecInput = document.getElementById("unlock-nsec-input");
             const passwordInput = document.getElementById("unlock-password-input");
             const confirmInput = document.getElementById("unlock-password-confirm-input");
+            const passwordFeedbackEl = document.getElementById("unlock-password-feedback");
             const rememberSelect = document.getElementById("unlock-remember-select");
             const generateBtn = document.getElementById("unlock-generate-btn");
             const submitBtn = document.getElementById("unlock-submit-btn");
@@ -1378,6 +1400,34 @@
             passwordInput.value = "";
             confirmInput.value = "";
             rememberSelect.value = options.defaultRememberMode || "none";
+            setFieldFeedback(passwordFeedbackEl, "");
+
+            const validateUnlockPasswordFeedback = () => {
+                if (!options.askConfirm) {
+                    setFieldFeedback(passwordFeedbackEl, "");
+                    return true;
+                }
+                const password = passwordInput.value || "";
+                const passwordConfirm = confirmInput.value || "";
+
+                if (password && password.length < MIN_PASSWORD_LENGTH) {
+                    setFieldFeedback(passwordFeedbackEl, `Passwort muss mindestens ${MIN_PASSWORD_LENGTH} Zeichen haben.`);
+                    scheduleFrameSizeNotification(false);
+                    return false;
+                }
+
+                if (passwordConfirm && password !== passwordConfirm) {
+                    setFieldFeedback(passwordFeedbackEl, "Passwörter stimmen nicht überein.");
+                    scheduleFrameSizeNotification(false);
+                    return false;
+                }
+
+                setFieldFeedback(passwordFeedbackEl, "");
+                return true;
+            };
+
+            passwordInput.oninput = validateUnlockPasswordFeedback;
+            confirmInput.oninput = validateUnlockPasswordFeedback;
 
             setActiveTab("management");
             panel.style.display = "block";
@@ -1388,11 +1438,16 @@
                     submitBtn.onclick = null;
                     cancelBtn.onclick = null;
                     generateBtn.onclick = null;
+                    passwordInput.oninput = null;
+                    confirmInput.oninput = null;
+                    setFieldFeedback(passwordFeedbackEl, "");
                     panel.style.display = "none";
                     scheduleFrameSizeNotification(true);
                 };
 
                 submitBtn.onclick = () => {
+                    if (!validateUnlockPasswordFeedback()) return;
+
                     const value = {
                         keyId: keySelect.value,
                         keyName: nameInput.value.trim(),
@@ -1402,11 +1457,11 @@
                         rememberMode: rememberSelect.value || "none"
                     };
                     cleanup();
-                    resolve(value);
+                    if (unlock.password.length < MIN_PASSWORD_LENGTH) throw new Error(`Passwort muss mindestens ${MIN_PASSWORD_LENGTH} Zeichen haben.`);
                 };
 
                 cancelBtn.onclick = () => {
-                    cleanup();
+            if (setup.password.length < MIN_PASSWORD_LENGTH) throw new Error(`Passwort muss mindestens ${MIN_PASSWORD_LENGTH} Zeichen haben.`);
                     reject(new Error("Entsperren abgebrochen."));
                 };
 
@@ -1536,15 +1591,22 @@
             const currentInput = document.getElementById("change-password-current-input");
             const newInput = document.getElementById("change-password-new-input");
             const confirmInput = document.getElementById("change-password-confirm-input");
+            const changePasswordFeedback = document.getElementById("change-password-feedback");
 
             const currentPassword = currentInput.value;
             const newPassword = newInput.value;
             const newPasswordConfirm = confirmInput.value;
 
+            setFieldFeedback(changePasswordFeedback, "");
+
             if (!currentPassword) throw new Error("Bitte aktuelles Passwort eingeben.");
             if (currentPassword !== sessionPassword) throw new Error("Aktuelles Passwort ist falsch.");
             if (!newPassword) throw new Error("Bitte neues Passwort eingeben.");
-            if (newPassword.length < 8) throw new Error("Neues Passwort muss mindestens 8 Zeichen haben.");
+            if (newPassword.length < MIN_PASSWORD_LENGTH) {
+                setFieldFeedback(changePasswordFeedback, `Neues Passwort muss mindestens ${MIN_PASSWORD_LENGTH} Zeichen haben.`);
+                newInput.focus();
+                throw new Error(`Neues Passwort muss mindestens ${MIN_PASSWORD_LENGTH} Zeichen haben.`);
+            }
             if (newPassword !== newPasswordConfirm) throw new Error("Neue Passwörter stimmen nicht überein.");
             if (newPassword === sessionPassword) throw new Error("Neues Passwort muss sich vom aktuellen unterscheiden.");
 
@@ -1570,10 +1632,25 @@
             currentInput.value = "";
             newInput.value = "";
             confirmInput.value = "";
+            setFieldFeedback(changePasswordFeedback, "");
             appendRequestLog("Passwort geändert. Alle gespeicherten Schlüssel wurden neu verschlüsselt.");
         }
 
         function setupKeyManagerHandlers() {
+            const newPasswordInput = document.getElementById("change-password-new-input");
+            const changePasswordFeedback = document.getElementById("change-password-feedback");
+
+            const validateChangePasswordFeedback = () => {
+                const value = newPasswordInput.value || "";
+                if (value && value.length < MIN_PASSWORD_LENGTH) {
+                    setFieldFeedback(changePasswordFeedback, `Neues Passwort muss mindestens ${MIN_PASSWORD_LENGTH} Zeichen haben.`);
+                    return;
+                }
+                setFieldFeedback(changePasswordFeedback, "");
+            };
+
+            newPasswordInput.addEventListener("input", validateChangePasswordFeedback);
+
             document.getElementById("switch-key-btn").addEventListener("click", async () => {
                 try {
                     await switchToSelectedKey();
