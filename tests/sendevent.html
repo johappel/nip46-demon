@@ -109,6 +109,8 @@
             "wss://relay.primal.net",
             "wss://relay.snort.social"
         ];
+        const MIN_SIGNER_FRAME_HEIGHT = 180;
+        const MAX_SIGNER_FRAME_HEIGHT = 1200;
         const connInput = document.getElementById("conn-uri");
         const signerUrlInput = document.getElementById("signer-url");
         const embedSignerInput = document.getElementById("embed-signer");
@@ -126,6 +128,7 @@
         let signerFrameOrigin = null;
         let lastBridgeConnectionInfo = null;
         let activeRelayUrls = [];
+        let currentSignerFrameHeight = 300;
 
         function toBunkerUri(uri, relays = []) {
             const url = new URL(uri);
@@ -207,6 +210,19 @@
             statusEl.className = isError ? "err" : "ok";
         }
 
+        function clampSignerFrameHeight(height) {
+            return Math.max(MIN_SIGNER_FRAME_HEIGHT, Math.min(MAX_SIGNER_FRAME_HEIGHT, height));
+        }
+
+        function applySignerFrameHeight(height) {
+            const numeric = Number(height);
+            if (!Number.isFinite(numeric)) return;
+            const px = Math.round(clampSignerFrameHeight(numeric));
+            if (Math.abs(px - currentSignerFrameHeight) < 2) return;
+            currentSignerFrameHeight = px;
+            signerFrame.style.height = `${px}px`;
+        }
+
         function buildSignerFrameSrc(rawUrl) {
             const signerUrl = new URL(rawUrl, window.location.href);
             signerUrl.searchParams.set("parentOrigin", window.location.origin);
@@ -218,6 +234,7 @@
                 const signerUrl = buildSignerFrameSrc(signerUrlInput.value.trim() || "./signer.html");
                 signerFrameOrigin = signerUrl.origin;
                 signerFrame.src = signerUrl.toString();
+                applySignerFrameHeight(MIN_SIGNER_FRAME_HEIGHT);
                 signerFrame.style.display = embedSignerInput.checked ? "block" : "none";
             } catch (err) {
                 console.error(err);
@@ -253,6 +270,10 @@
                     if (event.origin !== signerFrameOrigin) return;
                     const data = event.data;
                     if (!data || data.source !== BRIDGE_SOURCE) return;
+                    if (data.type === "frame-size") {
+                        applySignerFrameHeight(data.payload?.height);
+                        return;
+                    }
                     if (data.type !== "ready" && data.type !== "connection-info" && data.type !== "locked") return;
 
                     clearTimeout(timeout);
@@ -276,6 +297,10 @@
             if (!signerFrameOrigin || event.origin !== signerFrameOrigin) return;
             const data = event.data;
             if (!data || data.source !== BRIDGE_SOURCE) return;
+            if (data.type === "frame-size") {
+                applySignerFrameHeight(data.payload?.height);
+                return;
+            }
             if (data.type !== "ready" && data.type !== "connection-info" && data.type !== "locked") return;
 
             if (data.type === "locked") {
@@ -525,6 +550,14 @@
         });
         signerFrame.addEventListener("load", async () => {
             if (!embedSignerInput.checked) return;
+            try {
+                signerFrame.contentWindow?.postMessage(
+                    { source: BRIDGE_SOURCE, type: "request-frame-size" },
+                    signerFrameOrigin
+                );
+            } catch (_err) {
+                // ignore if iframe not yet ready
+            }
             try {
                 const info = await requestConnectionInfoFromIframe(1500);
                 applyConnectionInfo(info);

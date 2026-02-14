@@ -251,6 +251,8 @@
         let activeKeyId = null;
         let activeNsec = null;
         let activeUser = null;
+        let lastPostedFrameHeight = 0;
+        let frameSizeNotifyScheduled = false;
 
         function isValidNsec(nsec) {
             return typeof nsec === "string" && nsec.startsWith("nsec1") && nsec.length > 20;
@@ -777,6 +779,55 @@
             const previous = logEl.innerText ? `${logEl.innerText}\n` : "";
             const combined = `[${now}] ${line}\n${previous}`.split("\n").slice(0, 60).join("\n");
             logEl.innerText = combined.trimEnd();
+            scheduleFrameSizeNotification();
+        }
+
+        function computeDocumentHeight() {
+            const body = document.body;
+            const html = document.documentElement;
+            if (!body || !html) return 0;
+
+            return Math.max(
+                body.scrollHeight,
+                body.offsetHeight,
+                html.clientHeight,
+                html.scrollHeight,
+                html.offsetHeight
+            );
+        }
+
+        function notifyParentFrameSize(force = false) {
+            const height = Math.max(160, computeDocumentHeight());
+            if (!force && Math.abs(height - lastPostedFrameHeight) < 4) return;
+            lastPostedFrameHeight = height;
+            postBridgeMessage("frame-size", { height });
+        }
+
+        function scheduleFrameSizeNotification(force = false) {
+            if (force) {
+                frameSizeNotifyScheduled = false;
+                notifyParentFrameSize(true);
+                return;
+            }
+            if (frameSizeNotifyScheduled) return;
+            frameSizeNotifyScheduled = true;
+            requestAnimationFrame(() => {
+                frameSizeNotifyScheduled = false;
+                notifyParentFrameSize(false);
+            });
+        }
+
+        function setupFrameAutoResizeBridge() {
+            const resizeTarget = document.documentElement;
+
+            if (typeof ResizeObserver === "function") {
+                const ro = new ResizeObserver(() => scheduleFrameSizeNotification(false));
+                ro.observe(resizeTarget);
+                if (document.body) ro.observe(document.body);
+            }
+
+            window.addEventListener("resize", () => scheduleFrameSizeNotification(false));
+            scheduleFrameSizeNotification(true);
         }
 
         function setActiveTab(tabName) {
@@ -787,6 +838,7 @@
                 if (panel) panel.classList.toggle("active", tab === tabName);
                 if (btn) btn.classList.toggle("active", tab === tabName);
             }
+            scheduleFrameSizeNotification(false);
         }
 
         function setupTabNavigation() {
@@ -850,6 +902,7 @@
 
             setActiveTab("management");
             panel.style.display = "block";
+            scheduleFrameSizeNotification(true);
 
             return new Promise((resolve, reject) => {
                 const cleanup = () => {
@@ -857,6 +910,7 @@
                     cancelBtn.onclick = null;
                     generateBtn.onclick = null;
                     panel.style.display = "none";
+                    scheduleFrameSizeNotification(true);
                 };
 
                 submitBtn.onclick = () => {
@@ -891,6 +945,7 @@
             const panel = document.getElementById("key-manager");
             if (!currentKeyring || !Array.isArray(currentKeyring.keys) || currentKeyring.keys.length === 0) {
                 panel.style.display = "none";
+                scheduleFrameSizeNotification(false);
                 return;
             }
 
@@ -912,6 +967,7 @@
             activeInfoEl.innerText = `Aktiv: ${currentName}\nnpub: ${npubShort}`;
 
             panel.style.display = "block";
+            scheduleFrameSizeNotification(false);
         }
 
         async function switchToSelectedKey() {
@@ -1123,6 +1179,11 @@
 
             const data = event.data;
             if (!data || data.source !== BRIDGE_SOURCE) return;
+
+            if (data.type === "request-frame-size") {
+                scheduleFrameSizeNotification(true);
+                return;
+            }
 
             if (data.type === "ping" || data.type === "get-connection-info") {
                 if (connectionInfo) {
@@ -1417,6 +1478,7 @@
 
         setupTabNavigation();
         setupKeyManagerHandlers();
+        setupFrameAutoResizeBridge();
         window.addEventListener("message", bridgeMessageHandler);
 
         startSigner().catch((err) => {
