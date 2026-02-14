@@ -114,6 +114,15 @@
             <button class="btn-allow-temporary" id="generate-key-btn">Neuen Schlüssel generieren</button>
             <button class="btn-approve" id="save-key-btn">Schlüssel speichern</button>
         </div>
+        <label for="change-password-current-input">Aktuelles Passwort</label>
+        <input id="change-password-current-input" type="password" placeholder="Aktuelles Passwort" />
+        <label for="change-password-new-input">Neues Passwort</label>
+        <input id="change-password-new-input" type="password" placeholder="Neues Passwort (mind. 8 Zeichen)" />
+        <label for="change-password-confirm-input">Neues Passwort wiederholen</label>
+        <input id="change-password-confirm-input" type="password" placeholder="Neues Passwort wiederholen" />
+        <div class="button-row">
+            <button class="btn-approve" id="change-password-btn">Passwort ändern</button>
+        </div>
     </div>
 
     <pre id="request-log"></pre>
@@ -891,6 +900,49 @@
             renderKeyManager();
         }
 
+        async function changeKeyringPassword() {
+            if (!currentKeyring || !sessionPassword) throw new Error("Keyring ist nicht entsperrt.");
+
+            const currentInput = document.getElementById("change-password-current-input");
+            const newInput = document.getElementById("change-password-new-input");
+            const confirmInput = document.getElementById("change-password-confirm-input");
+
+            const currentPassword = currentInput.value;
+            const newPassword = newInput.value;
+            const newPasswordConfirm = confirmInput.value;
+
+            if (!currentPassword) throw new Error("Bitte aktuelles Passwort eingeben.");
+            if (currentPassword !== sessionPassword) throw new Error("Aktuelles Passwort ist falsch.");
+            if (!newPassword) throw new Error("Bitte neues Passwort eingeben.");
+            if (newPassword.length < 8) throw new Error("Neues Passwort muss mindestens 8 Zeichen haben.");
+            if (newPassword !== newPasswordConfirm) throw new Error("Neue Passwörter stimmen nicht überein.");
+            if (newPassword === sessionPassword) throw new Error("Neues Passwort muss sich vom aktuellen unterscheiden.");
+
+            const reencryptedKeys = [];
+            for (const entry of currentKeyring.keys) {
+                const nsec = await decryptNsec(entry.payload, sessionPassword);
+                const reencryptedPayload = await encryptNsec(nsec, newPassword);
+                reencryptedKeys.push({
+                    ...entry,
+                    payload: reencryptedPayload
+                });
+            }
+
+            currentKeyring = {
+                ...currentKeyring,
+                keys: reencryptedKeys
+            };
+            saveKeyring(currentKeyring);
+
+            sessionPassword = newPassword;
+            saveUnlockCache(newPassword, activeKeyId, "session");
+
+            currentInput.value = "";
+            newInput.value = "";
+            confirmInput.value = "";
+            appendRequestLog("Passwort geändert. Alle gespeicherten Schlüssel wurden neu verschlüsselt.");
+        }
+
         function setupKeyManagerHandlers() {
             document.getElementById("switch-key-btn").addEventListener("click", async () => {
                 try {
@@ -923,6 +975,14 @@
                     await saveAdditionalKey();
                 } catch (err) {
                     appendRequestLog(`Speichern fehlgeschlagen: ${err.message}`);
+                }
+            });
+
+            document.getElementById("change-password-btn").addEventListener("click", async () => {
+                try {
+                    await changeKeyringPassword();
+                } catch (err) {
+                    appendRequestLog(`Passwort ändern fehlgeschlagen: ${err.message}`);
                 }
             });
         }
@@ -1117,11 +1177,34 @@
             rpc.__reliabilityPatched = true;
         }
 
+        function isRetryableUnlockError(err) {
+            const msg = err?.message || "";
+            return msg === "Kein Passwort angegeben." ||
+                msg === "Kein nsec angegeben." ||
+                msg === "Passwörter stimmen nicht überein." ||
+                msg === "Entsperren fehlgeschlagen. Passwort oder Daten sind ungültig." ||
+                msg === "Migration fehlgeschlagen. Passwort oder Alt-Daten sind ungültig." ||
+                msg.startsWith("Passwort muss mindestens ") ||
+                msg.startsWith("Ungültiger nsec");
+        }
+
+        async function getOrAskActiveKeyWithRetry() {
+            while (true) {
+                try {
+                    return await getOrAskActiveKey();
+                } catch (err) {
+                    if (err?.message === "Entsperren abgebrochen.") throw err;
+                    if (!isRetryableUnlockError(err)) throw err;
+                    appendRequestLog(`${err.message} Bitte erneut versuchen.`);
+                }
+            }
+        }
+
         async function startSigner() {
             const ndk = new NDK({ explicitRelayUrls: RELAYS });
             await ndk.connect();
 
-            const unlocked = await getOrAskActiveKey();
+            const unlocked = await getOrAskActiveKeyWithRetry();
             sessionPassword = unlocked.password;
             currentKeyring = unlocked.keyring;
             activeKeyId = unlocked.keyId;
