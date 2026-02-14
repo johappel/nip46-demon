@@ -66,6 +66,14 @@
     <h1>NIP-46 Sender</h1>
 
     <div class="card">
+        <label>
+            <input type="checkbox" id="embed-signer" checked style="width:auto; margin-right:8px;">
+            Signer eingebettet starten (empfohlen)
+        </label>
+        <iframe id="signer-frame" title="Signer" src="./signer.html" style="width:100%; height:300px; border:1px solid #333; border-radius:8px; margin-top:10px;"></iframe>
+    </div>
+
+    <div class="card">
         <label class="label" for="conn-uri">Connection URI</label>
         <input
             id="conn-uri"
@@ -84,9 +92,12 @@
     </div>
 
     <script type="module">
-        import NDK, { NDKEvent, NDKNip46Signer } from "https://esm.sh/@nostr-dev-kit/ndk@3.0.0";
+        import NDK, { NDKEvent, NDKNip46Signer, NDKPrivateKeySigner } from "https://esm.sh/@nostr-dev-kit/ndk@3.0.0";
 
+        const NSEC_STORAGE_KEY = "nip46_demo_nsec";
         const connInput = document.getElementById("conn-uri");
+        const embedSignerInput = document.getElementById("embed-signer");
+        const signerFrame = document.getElementById("signer-frame");
         const connectBtn = document.getElementById("connect-btn");
         const sendBtn = document.getElementById("send-btn");
         const statusEl = document.getElementById("status");
@@ -137,6 +148,23 @@
                 "wss://nos.lol"
             ]);
             return Array.from(merged);
+        }
+
+        async function hydrateUriFromLocalSigner() {
+            const nsec = localStorage.getItem(NSEC_STORAGE_KEY);
+            if (!nsec || !nsec.startsWith("nsec1")) return;
+
+            try {
+                const localSigner = new NDKPrivateKeySigner(nsec);
+                const user = await localSigner.user();
+                const relayQuery = [
+                    "relay=" + encodeURIComponent("wss://relay.damus.io"),
+                    "relay=" + encodeURIComponent("wss://nos.lol")
+                ].join("&");
+                connInput.value = `nostrconnect://${user.pubkey}?${relayQuery}`;
+            } catch (_err) {
+                // ignore: if nsec invalid, keep default URI
+            }
         }
 
         function setStatus(text, isError = false) {
@@ -222,6 +250,17 @@
 
         connectBtn.addEventListener("click", connectSigner);
         sendBtn.addEventListener("click", sendEvent);
+        embedSignerInput.addEventListener("change", () => {
+            if (embedSignerInput.checked) {
+                signerFrame.src = "./signer.html";
+                signerFrame.style.display = "block";
+            } else {
+                signerFrame.src = "about:blank";
+                signerFrame.style.display = "none";
+            }
+        });
+
+        hydrateUriFromLocalSigner();
     </script>
 </body>
 </html>

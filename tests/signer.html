@@ -5,14 +5,28 @@
     <title>JS Nostr Signer (No-Popup)</title>
     <style>
         body { font-family: sans-serif; padding: 20px; background: #121212; color: white; }
+        #request-log {
+            margin-top: 12px;
+            padding: 10px;
+            min-height: 80px;
+            max-height: 180px;
+            overflow: auto;
+            background: #171717;
+            border: 1px solid #333;
+            border-radius: 8px;
+            white-space: pre-wrap;
+        }
         #auth-modal {
             display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
-            background: #222; padding: 20px; border: 1px solid #444; border-radius: 8px; z-index: 1000;
+            background: #222; padding: 20px; border: 1px solid #444; border-radius: 8px; z-index: 1000; max-width: 680px; width: 95%;
         }
         .overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); }
-        button { cursor: pointer; padding: 10px 20px; margin: 5px; border-radius: 5px; border: none; }
+        button { cursor: pointer; padding: 10px 14px; margin: 5px; border-radius: 5px; border: none; }
         .btn-approve { background: #28a745; color: white; }
+        .btn-allow-temporary { background: #2f7cfe; color: white; }
         .btn-reject { background: #dc3545; color: white; }
+        .button-row { display: flex; flex-wrap: wrap; margin-top: 10px; }
+        #request-details { white-space: pre-wrap; max-height: 280px; overflow: auto; background: #171717; border: 1px solid #333; border-radius: 8px; padding: 10px; }
     </style>
 </head>
 <body>
@@ -26,16 +40,31 @@
     <div id="auth-modal">
         <h3 id="request-title">Signier-Anfrage</h3>
         <p id="request-details"></p>
-        <button class="btn-approve" id="approve-btn">Erlauben</button>
-        <button class="btn-reject" id="reject-btn">Ablehnen</button>
+        <div class="button-row">
+            <button class="btn-approve" id="allow-once-btn">Einmal erlauben</button>
+            <button class="btn-allow-temporary" id="allow-15m-btn">15m erlauben</button>
+            <button class="btn-allow-temporary" id="allow-1h-btn">1h erlauben</button>
+            <button class="btn-reject" id="reject-btn">Ablehnen</button>
+        </div>
     </div>
 
     <script type="module">
         import NDK, { NDKNip46Backend, NDKPrivateKeySigner } from "https://esm.sh/@nostr-dev-kit/ndk@3.0.0";
 
         const NSEC_STORAGE_KEY = "nip46_demo_nsec";
+        const PERMISSION_STORAGE_KEY = "nip46_permissions_v1";
         const RELAYS = ["wss://relay.damus.io", "wss://nos.lol"];
-        const AUTO_APPROVE_SIGN_EVENT = true;
+        const AUTO_ALLOW_METHODS = new Set(["connect", "ping", "get_public_key", "switch_relays"]);
+        const SENSITIVE_METHODS = new Set([
+            "sign_event",
+            "nip04_encrypt",
+            "nip04_decrypt",
+            "nip44_encrypt",
+            "nip44_decrypt"
+        ]);
+
+        const pendingPermissionRequests = [];
+        let activePermissionRequest = null;
 
         function getOrAskNsec() {
             const stored = localStorage.getItem(NSEC_STORAGE_KEY);
@@ -69,20 +98,107 @@
             }
         }
 
-        function requestPermission(request) {
-            return new Promise((resolve) => {
-                showModal(
-                    request,
-                    () => resolve(true),
-                    () => resolve(false)
-                );
-            });
-        }
-
         function appendRequestLog(line) {
             const logEl = document.getElementById("request-log");
             const now = new Date().toLocaleTimeString();
-            logEl.innerText = `[${now}] ${line}\n${logEl.innerText}`.trim();
+            const previous = logEl.innerText ? `${logEl.innerText}\n` : "";
+            const combined = `[${now}] ${line}\n${previous}`.split("\n").slice(0, 60).join("\n");
+            logEl.innerText = combined.trimEnd();
+        }
+
+        function loadPermissions() {
+            try {
+                const raw = localStorage.getItem(PERMISSION_STORAGE_KEY);
+                return raw ? JSON.parse(raw) : {};
+            } catch (_err) {
+                return {};
+            }
+        }
+
+        function savePermissions(permissions) {
+            localStorage.setItem(PERMISSION_STORAGE_KEY, JSON.stringify(permissions));
+        }
+
+        function permissionKey(pubkey, method) {
+            return `${pubkey}:${method}`;
+        }
+
+        function clearExpiredPermissions() {
+            const now = Date.now();
+            const permissions = loadPermissions();
+            let changed = false;
+
+            for (const [key, expiresAt] of Object.entries(permissions)) {
+                if (typeof expiresAt !== "number" || expiresAt <= now) {
+                    delete permissions[key];
+                    changed = true;
+                }
+            }
+
+            if (changed) savePermissions(permissions);
+            return permissions;
+        }
+
+        function hasActivePermission(pubkey, method) {
+            const permissions = clearExpiredPermissions();
+            const key = permissionKey(pubkey, method);
+            return typeof permissions[key] === "number" && permissions[key] > Date.now();
+        }
+
+        function grantPermission(pubkey, method, ttlMs) {
+            const permissions = clearExpiredPermissions();
+            permissions[permissionKey(pubkey, method)] = Date.now() + ttlMs;
+            savePermissions(permissions);
+        }
+
+        function processPermissionQueue() {
+            if (activePermissionRequest || pendingPermissionRequests.length === 0) return;
+
+            activePermissionRequest = pendingPermissionRequests.shift();
+            const { request, resolve } = activePermissionRequest;
+            const method = request?.method;
+            const pubkey = request?.pubkey;
+
+            showModal(
+                request,
+                () => {
+                    appendRequestLog(`Erlaubt (einmal): ${method}`);
+                    resolve(true);
+                    activePermissionRequest = null;
+                    processPermissionQueue();
+                },
+                () => {
+                    if (pubkey && method) {
+                        grantPermission(pubkey, method, 15 * 60 * 1000);
+                    }
+                    appendRequestLog(`Erlaubt (15m): ${method}`);
+                    resolve(true);
+                    activePermissionRequest = null;
+                    processPermissionQueue();
+                },
+                () => {
+                    if (pubkey && method) {
+                        grantPermission(pubkey, method, 60 * 60 * 1000);
+                    }
+                    appendRequestLog(`Erlaubt (1h): ${method}`);
+                    resolve(true);
+                    activePermissionRequest = null;
+                    processPermissionQueue();
+                },
+                () => {
+                    appendRequestLog(`Abgelehnt: ${method}`);
+                    resolve(false);
+                    activePermissionRequest = null;
+                    processPermissionQueue();
+                }
+            );
+        }
+
+        function requestPermission(request) {
+            return new Promise((resolve) => {
+                pendingPermissionRequests.push({ request, resolve });
+                processPermissionQueue();
+            });
         }
 
         async function startSigner() {
@@ -93,9 +209,9 @@
             const localSigner = new NDKPrivateKeySigner(nsec);
             const user = await localSigner.user();
 
-            const relay = encodeURIComponent(RELAYS[0]);
-            const bunkerUri = `bunker://${user.pubkey}?relay=${relay}`;
-            const nostrconnectUri = `nostrconnect://${user.pubkey}?relay=${relay}`;
+            const relayQuery = RELAYS.map((relayUrl) => `relay=${encodeURIComponent(relayUrl)}`).join("&");
+            const bunkerUri = `bunker://${user.pubkey}?${relayQuery}`;
+            const nostrconnectUri = `nostrconnect://${user.pubkey}?${relayQuery}`;
 
             document.getElementById("status").innerText = "Bereit für Anfragen";
             document.getElementById("user-info").innerText =
@@ -109,22 +225,21 @@
                 async (request) => {
                     console.log("NIP-46 Anfrage:", request);
                     const method = request?.method;
-                    appendRequestLog(`Methode: ${method} von ${request?.pubkey?.slice(0, 12) || "?"}...`);
-                    const needsUserApproval = new Set([
-                        "sign_event",
-                        "nip04_encrypt",
-                        "nip04_decrypt",
-                        "nip44_encrypt",
-                        "nip44_decrypt"
-                    ]);
+                    const pubkey = request?.pubkey ?? "";
+                    appendRequestLog(`Methode: ${method} von ${pubkey.slice(0, 12) || "?"}...`);
 
-                    if (AUTO_APPROVE_SIGN_EVENT && method === "sign_event") {
-                        appendRequestLog("sign_event automatisch erlaubt");
+                    if (AUTO_ALLOW_METHODS.has(method)) {
+                        appendRequestLog(`Auto erlaubt: ${method}`);
                         return true;
                     }
 
-                    if (!needsUserApproval.has(method)) {
-                        // Handshake/Meta-Methoden automatisch erlauben.
+                    if (!SENSITIVE_METHODS.has(method)) {
+                        appendRequestLog(`Nicht sensitiv, erlaubt: ${method}`);
+                        return true;
+                    }
+
+                    if (pubkey && hasActivePermission(pubkey, method)) {
+                        appendRequestLog(`TTL erlaubt: ${method}`);
                         return true;
                     }
 
@@ -138,7 +253,7 @@
             console.log("Nostrconnect URI:", nostrconnectUri);
         }
 
-        function showModal(req, onApprove, onReject) {
+        function showModal(req, onAllowOnce, onAllow15m, onAllow1h, onReject) {
             document.getElementById("request-title").innerText = `Anfrage: ${req.method}`;
             document.getElementById("request-details").innerText =
                 `Methode: ${req.method}\nParameter: ${formatRequestParams(req)}`;
@@ -146,9 +261,19 @@
             document.getElementById("overlay").style.display = "block";
             document.getElementById("auth-modal").style.display = "block";
 
-            document.getElementById("approve-btn").onclick = () => {
+            document.getElementById("allow-once-btn").onclick = () => {
                 hideModal();
-                onApprove();
+                onAllowOnce();
+            };
+
+            document.getElementById("allow-15m-btn").onclick = () => {
+                hideModal();
+                onAllow15m();
+            };
+
+            document.getElementById("allow-1h-btn").onclick = () => {
+                hideModal();
+                onAllow1h();
             };
 
             document.getElementById("reject-btn").onclick = () => {
