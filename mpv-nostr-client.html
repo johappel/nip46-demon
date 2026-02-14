@@ -130,6 +130,7 @@
     <script type="module">
         import NDK, { NDKEvent, NDKNip46Signer, NDKRelaySet } from "https://esm.sh/@nostr-dev-kit/ndk@3.0.0?bundle&target=es2022";
 
+        // Konstante für das Bridge-Protokoll (muss mit signer.html übereinstimmen)
         const BRIDGE_SOURCE = "nip46-signer-bridge";
         const DEFAULT_RELAYS = [
             "wss://relay.damus.io",
@@ -140,56 +141,110 @@
         const MIN_SIGNER_FRAME_HEIGHT = 110;
         const MAX_SIGNER_FRAME_HEIGHT = 1200;
 
+        // ===== DOM-Elemente =====
+        // Dropdown für die Auswahl des Verbindungsmodus (auto, nip7, nip46)
         const connectModeInput = document.getElementById("connect-mode");
+        // Text-Element für Hinweise zum Verbindungsmodus
         const connectHintEl = document.getElementById("connect-hint");
+        // Bereich für NIP-46 spezifische Optionen
         const nip46OptionsEl = document.getElementById("nip46-options");
+        // Container für die Connection URI Eingabe
         const connUriRowEl = document.getElementById("conn-uri-row");
+        // Input-Feld für die Signer-URL (iframe Quelle)
         const signerUrlInput = document.getElementById("signer-url");
+        // Checkbox zum Aktivieren des eingebetteten Signers
         const embedSignerInput = document.getElementById("embed-signer");
+        // Button zum Synchronisieren der Connection URI aus dem iframe
         const syncIframeBtn = document.getElementById("sync-iframe-btn");
+        // Das iframe-Element, das den Signer NIP-46 integriert
         const signerFrame = document.getElementById("signer-frame");
+        // Input-Feld für die nostrconnect:// oder bunker:// Connection URI
         const connInput = document.getElementById("conn-uri");
+        // Button zum Verbinden/Einloggen
         const installBtn = document.getElementById("install-btn");
+        // Button zum Anzeigen des Public Keys
         const pubkeyBtn = document.getElementById("pubkey-btn");
+        // Button zum Signieren und Senden einer Nachricht
         const sendBtn = document.getElementById("send-btn");
+        // Element zur Anzeige des Verbindungsstatus
         const statusEl = document.getElementById("status");
+        // Element zur Anzeige von Benutzerinformationen
         const userEl = document.getElementById("user");
+        // Element zur Anzeige von Ergebnissen und Fehlern
         const resultEl = document.getElementById("result");
+        // Textarea für den Nachrichteninhalt
         const contentEl = document.getElementById("content");
 
+        // ===== Runtime State Variables =====
+        // Origin des Signer-iframes (für sichere Cross-Origin-Kommunikation)
         let signerFrameOrigin = null;
+        // Letzte erhaltene Verbindungsinformationen vom Signer-iframe
         let lastBridgeConnectionInfo = null;
+        // Aktuelle NDK-Instanz (für Relay-Kommunikation)
         let activeNdk = null;
+        // Array der aktuell verwendeten Relay-URLs
         let activeRelayUrls = [];
+        // Der aktuell aktive Provider (NIP-7 Extension oder NIP-46 Adapter)
         let nostrProvider = null;
+        // Gepufferte Public Key des angemeldeten Benutzers
         let cachedPubkey = "";
+        // Aktuelle Höhe des Signer-iframes in Pixeln
         let currentSignerFrameHeight = 260;
 
+        /**
+         * Prüft ob ein Objekt wie einen NIP-7 Provider aussieht (z.B. window.nostr).
+         * Ein valider NIP-7 Provider muss die Funktionen getPublicKey() und signEvent() bereitstellen.
+         * @param {object} candidate - Das zu prüfende Objekt
+         * @returns {boolean} true wenn das Objekt ein gültiger NIP-7 Provider ist
+         */
         function looksLikeNip7Provider(candidate) {
             return !!candidate &&
                 typeof candidate.getPublicKey === "function" &&
                 typeof candidate.signEvent === "function";
         }
 
+        /**
+         * Speichert den übergebenen Provider als aktiven Provider und aktiviert die UI-Buttons.
+         * Dies signalisiert, dass eine Verbindung hergestellt wurde.
+         * @param {object} provider - Der Provider (NIP-7 oder NIP-46 Adapter)
+         */
         function setProviderReady(provider) {
             nostrProvider = provider;
-            pubkeyBtn.disabled = false;
-            sendBtn.disabled = false;
+            pubkeyBtn.disabled = false;  // Public Key Button wird verfügbar
+            sendBtn.disabled = false;     // Send Message Button wird verfügbar
         }
 
+        /**
+         * Gibt den aktuell ausgewählten Verbindungsmodus zurück.
+         * @returns {string} "auto", "nip7" oder "nip46"
+         */
         function selectedConnectMode() {
             return connectModeInput?.value || "auto";
         }
 
+        /**
+         * Prüft, ob der aktuell ausgewählte Modus native Verbindungen erlaubt.
+         * NIP-7 direktbenutzung ist im "auto"- und "nip7"-Modus möglich.
+         * @returns {boolean} true wenn native Verbindungen erlaubt sind
+         */
         function shouldUseNativeMode() {
             const mode = selectedConnectMode();
             return mode === "auto" || mode === "nip7";
         }
 
+        /**
+         * Prüft, ob eine native NIP-7 Extension verfügbar und verwendbar ist.
+         * Dies ist die Vorbedingung für die schnelle native Authentifizierung.
+         * @returns {boolean} true wenn eine native NIP-7 Extension vorhanden ist
+         */
         function hasNativeProviderAvailable() {
             return shouldUseNativeMode() && looksLikeNip7Provider(window.nostr);
         }
 
+        /**
+         * Aktualisiert the Hint-Text basierend auf dem aktuell ausgewählten Modus.
+         * Informiert den Benutzer über den nächsten Schritt und warnt bei fehlenden Extensions.
+         */
         function updateConnectHint() {
             const mode = selectedConnectMode();
             if (mode === "nip7") {
@@ -207,15 +262,23 @@
                 : "Schritt 1: Auto nutzt NIP-46 (kein NIP-7 erkannt). Danach unten Nachricht senden.";
         }
 
+        /**
+         * Aktualisiert the gesamte UI basierend auf dem aktuellen Verbindungsmodus.
+         * Zeigt oder verbirgt NIP-46 spezifische Optionen und aktualisiert Button-Labels.
+         */
         function updateConnectModeUi() {
             const mode = selectedConnectMode();
+            // NIP-46 Optionen sind nur sichtbar wenn nicht im reinen "nip7"-Modus
             const showNip46Options = mode !== "nip7";
 
+            // NIP-46 Optionen Element sichtbar/verborgen
             nip46OptionsEl.hidden = !showNip46Options;
             connUriRowEl.hidden = !showNip46Options;
             signerUrlInput.disabled = !showNip46Options;
             embedSignerInput.disabled = !showNip46Options;
             syncIframeBtn.disabled = !showNip46Options;
+            
+            // iframe nur im NIP-46 Modus laden/anzeigen
             if (!showNip46Options) {
                 signerFrame.style.display = "none";
                 signerFrame.src = "about:blank";
@@ -223,6 +286,7 @@
                 refreshSignerFrame();
             }
 
+            // Button-Text basierend auf Modus aktualisieren
             if (mode === "nip7") {
                 installBtn.textContent = "Mit NIP-7 verbinden";
             } else if (mode === "nip46") {
@@ -233,72 +297,128 @@
             updateConnectHint();
         }
 
+        /**
+         * Setzt the Status-Nachricht und färbt sie entsprechend ein.
+         * @param {string} text - Die anzuzeigende Status-Nachricht
+         * @param {boolean} isError - true für Fehler (rot), false für Erfolg (grün)
+         */
         function setStatus(text, isError = false) {
             statusEl.textContent = text;
             statusEl.className = isError ? "err" : "ok";
         }
 
+        /**
+         * Beschränkt eine Höhe auf den zulässigen Bereich für das Signer-iframe.
+         * Verhindert unrealistisch große oder kleine Dimensionen.
+         * @param {number} height - Gewünschte Höhe in Pixeln
+         * @returns {number} Auf MIN/MAX Werte begrenzte Höhe
+         */
         function clampSignerFrameHeight(height) {
             return Math.max(MIN_SIGNER_FRAME_HEIGHT, Math.min(MAX_SIGNER_FRAME_HEIGHT, height));
         }
 
+        /**
+         * Aktualisiert the Höhe des Signer-iframes mit Debouncing.
+         * Verhindert UI-Flimmern durch kleine Änderungen und speichert den neuen Wert.
+         * @param {number} height - Neue Höhe in Pixeln
+         */
         function applySignerFrameHeight(height) {
             const numeric = Number(height);
-            if (!Number.isFinite(numeric)) return;
+            if (!Number.isFinite(numeric)) return;  // Ungültige Werte ignorieren
             const px = Math.round(clampSignerFrameHeight(numeric));
-            if (Math.abs(px - currentSignerFrameHeight) < 2) return;
+            if (Math.abs(px - currentSignerFrameHeight) < 2) return;  // Debounce: ignoriere kleine Änderungen
             currentSignerFrameHeight = px;
             signerFrame.style.height = `${px}px`;
         }
 
+        /**
+         * Normalisiert eine Relay-URL in die kanonische Form.
+         * Entfernt trailing Slashes und konvertiert zu einheitlichem Format.
+         * @param {string} url - Die zu normalisierende Relay-URL
+         * @returns {string} Normalisierte URL oder Original-String bei Fehler
+         */
         function canonicalRelayUrl(url) {
             try {
+                // URL-Objekt normalisisiert und entfernt trailing slash
                 return new URL(url).toString().replace(/\/$/, "");
             } catch (_err) {
+                // Bei Fehler: Original zurückgeben
                 return String(url || "");
             }
         }
 
+        /**
+         * Entfernt Duplikate aus einem Array von Relay-URLs, basierend auf kanonischer Form.
+         * Behält die Reihenfolge bei und nutzt eine Map zur Deduplication.
+         * @param {array} relays - Array von Relay-URLs
+         * @returns {array} Array mit eindeutigen Relay-URLs
+         */
         function uniqueRelayUrls(relays) {
             const map = new Map();
             for (const relay of relays || []) {
-                const key = canonicalRelayUrl(relay);
+                const key = canonicalRelayUrl(relay);  // Normalisiert für Vergleich
                 if (!key) continue;
-                if (!map.has(key)) map.set(key, relay);
+                if (!map.has(key)) map.set(key, relay);  // Speichert nur wenn nicht vorhanden
             }
             return Array.from(map.values());
         }
 
+        /**
+         * Extrahiert alle Relay-URLs aus einer nostrconnect:// oder bunker:// URI.
+         * Fügt Standard-Relays hinzu, wenn nicht vorhanden.
+         * @param {string} uri - nostrconnect:// oder bunker:// URI
+         * @returns {array} Array von eindeutigen Relay-URLs
+         */
         function relayUrlsFromUri(uri) {
             const url = new URL(uri);
+            // Holt alle 'relay' Parameter und merged mit DEFAULT_RELAYS
             const relays = url.searchParams.getAll("relay");
             return uniqueRelayUrls([...relays, ...DEFAULT_RELAYS]);
         }
 
+        /**
+         * Konvertiert eine nostrconnect:// URI in eine bunker:// URI oder normalisiert bestehende bunker:// URIs.
+         * bunker:// Format ist der Standard für NIP-46 Remote Signing.
+         * 
+         * Falls bereits bunker:// vorhanden: Führt Relays zusammen
+         * Falls nostrconnect://: Konvertiert zu bunker:// Format und extrahiert secret wenn vorhanden
+         * 
+         * @param {string} uri - nostrconnect:// oder bunker:// URI
+         * @param {array} relays - Zusatzliche Relays zum Hinzufügen (optional)
+         * @returns {string} bunker:// URI im Format bunker://<pubkey>?relay=...&secret=...(optional)
+         * @throws {Error} Wenn URI ungültig oder kein Pubkey vorhanden
+         */
         function toBunkerUri(uri, relays = []) {
             const url = new URL(uri);
 
+            // Fall 1: Schema ist bereits bunker:// - normalisieren und Relays zusammenführen
             if (url.protocol === "bunker:") {
+                // Pubkey aus hostname oder pathname extrahieren
                 const pubkey = url.hostname || url.pathname.replace(/^\/+/, "");
                 const out = new URLSearchParams(url.searchParams);
+                // Alle Relays (existierend + neu) kombinieren ohne Duplikate
                 const mergedRelays = new Set([...out.getAll("relay"), ...relays]);
-                out.delete("relay");
-                for (const relay of mergedRelays) out.append("relay", relay);
+                out.delete("relay");  // Alte Relay-Parameter entfernen
+                for (const relay of mergedRelays) out.append("relay", relay);  // Alle neu hinzufügen
                 const qs = out.toString();
                 return `bunker://${pubkey}${qs ? `?${qs}` : ""}`;
             }
 
+            // Fall 2: Schema muss nostrconnect:// sein
             if (url.protocol !== "nostrconnect:") {
                 throw new Error("URI muss mit nostrconnect:// oder bunker:// beginnen.");
             }
 
+            // Pubkey extrahieren aus hostname oder pathname
             const pubkey = url.hostname || url.pathname.replace(/^\/+/, "");
             if (!pubkey) throw new Error("Kein Pubkey in URI gefunden.");
 
+            // Neue URI mit allen Komponenten zusammensetzen
             const out = new URLSearchParams();
             const mergedRelays = new Set([...url.searchParams.getAll("relay"), ...relays]);
             for (const relay of mergedRelays) out.append("relay", relay);
 
+            // Secret Parameter übernehmen wenn vorhanden (für NIP-46 Authentifizierung)
             const secret = url.searchParams.get("secret");
             if (secret) out.set("secret", secret);
 
@@ -306,38 +426,72 @@
             return `bunker://${pubkey}${qs ? `?${qs}` : ""}`;
         }
 
+        /**
+         * Konstruiert die src-URL für das Signer-iframe mit Sicherheits-Parametern.
+         * Fügt den parentOrigin als Parameter hinzu für sichere Cross-Origin-Kommunikation.
+         * @param {string} rawUrl - Relative URL oder absolute URL des Signer-iframe (z.B. "./signer.html")
+         * @returns {URL} Das bereits komplette URL-Objekt mit parentOrigin Parameter
+         */
         function buildSignerFrameSrc(rawUrl) {
-            const signerUrl = new URL(rawUrl, window.location.href);
-            signerUrl.searchParams.set("parentOrigin", window.location.origin);
+            const signerUrl = new URL(rawUrl, window.location.href);  // Relative zu absolut konvertieren
+            signerUrl.searchParams.set("parentOrigin", window.location.origin);  // Sicherheitsparameter
             return signerUrl;
         }
 
+        /**
+         * Lädt oder aktualisiert das Signer-iframe mit der aktuellen URL.
+         * Berücksichtigt den aktuellen Modus und Sichtbarkeits-Einstellungen.
+         * Bei Fehler wird eine Fehlermeldung angezeigt.
+         */
         function refreshSignerFrame() {
             try {
+                // Im reinen NIP-7 Modus: iframe nicht laden
                 if (selectedConnectMode() === "nip7") {
                     signerFrame.style.display = "none";
                     return;
                 }
+                
+                // iframe URL mit Sicherheits-Parametern konstruieren
                 const signerUrl = buildSignerFrameSrc(signerUrlInput.value.trim() || "./signer.html");
-                signerFrameOrigin = signerUrl.origin;
+                signerFrameOrigin = signerUrl.origin;  // Origin für PostMessage-Sicherheit speichern
                 signerFrame.src = signerUrl.toString();
                 applySignerFrameHeight(MIN_SIGNER_FRAME_HEIGHT);
+                // iframe nur anzeigen wenn Checkbox aktiviert
                 signerFrame.style.display = embedSignerInput.checked ? "block" : "none";
             } catch (err) {
                 setStatus(`Ungültige Signer-URL: ${err.message}`, true);
             }
         }
 
+        /**
+         * Speichert Verbindungsinformationen vom Signer-iframe (bunker:// URI, Relays).
+         * Diese werden später für die Authentifizierung verwendet.
+         * @param {object} info - Verbindungsinformationen mit nostrconnectUri oder bunkerUri und relays
+         */
         function applyConnectionInfo(info) {
             if (!info) return;
+            // Wenn nostrconnect:// URI vorhanden: in Input-Feld übernehmen
             if (typeof info.nostrconnectUri === "string" && info.nostrconnectUri.startsWith("nostrconnect://")) {
                 connInput.value = info.nostrconnectUri;
             }
+            // Verbindungsinformationen für späteren Gebrauch speichern
             lastBridgeConnectionInfo = info;
         }
 
+        /**
+         * Holt Verbindungsinformationen (bunker:// URI, Relays) aus dem eingebetteten Signer-Iframe.
+         * Dies geschieht über window.postMessage für sichere Cross-Origin-Kommunikation.
+         * 
+         * Der iframe wird aufgefordert, seine Verbindungsinformationen zu senden.
+         * Antwortet mit 'ready', 'connection-info' oder 'locked' nach kurzer Zeit.
+         * 
+         * @param {number} timeoutMs - Timeout in Millisekunden (Standard: 3000)
+         * @returns {Promise<object>} Promise, das die Verbindungsinformationen (bunkerUri, relays) enthält
+         * @throws {Error} Wenn iframe nicht aktiv, keine Antwort kommt oder Signer gesperrt ist
+         */
         function requestConnectionInfoFromIframe(timeoutMs = 3000) {
             return new Promise((resolve, reject) => {
+                // Voraussetzungen prüfen
                 if (!embedSignerInput.checked || !signerFrame.contentWindow) {
                     reject(new Error("Signer-iframe nicht aktiv."));
                     return;
@@ -347,103 +501,183 @@
                     return;
                 }
 
+                // Timeout-Handler: Falls der iframe zu lange nicht antwortet
                 const timeout = setTimeout(() => {
                     window.removeEventListener("message", onMessage);
                     reject(new Error("Keine Bridge-Antwort vom Signer-iframe."));
                 }, timeoutMs);
 
+                // Message-Handler für iframe-Antworten
                 function onMessage(event) {
+                    // Sicherheitscheck: Nachricht muss vom erwarteten Origin kommen
                     if (event.origin !== signerFrameOrigin) return;
                     const data = event.data;
-                    if (!data || data.source !== BRIDGE_SOURCE) return;
+                    if (!data || data.source !== BRIDGE_SOURCE) return;  // Muss vom Signer-iframe sein
+                    
+                    // Frame-Size Nachrichten händlen (aber nicht für diese Funktion)
                     if (data.type === "frame-size") {
                         applySignerFrameHeight(data.payload?.height);
                         return;
                     }
+
+                    // Auf Verbindungs-Nachrichten warten ('ready', 'connection-info' oder 'locked')
                     if (data.type !== "ready" && data.type !== "connection-info" && data.type !== "locked") return;
 
+                    // Timeout canceln und Listener entfernen
                     clearTimeout(timeout);
                     window.removeEventListener("message", onMessage);
 
+                    // Fehlerfall: Signer ist gesperrt (braucht Entsperrung)
                     if (data.type === "locked") {
                         reject(new Error(data.payload?.reason || "Signer ist gesperrt."));
                         return;
                     }
 
+                    // Erfolg: Verbindungsinformationen zurückgeben
                     resolve(data.payload);
                 }
 
+                // Listener registrieren und Anfrage an iframe senden
                 window.addEventListener("message", onMessage);
                 signerFrame.contentWindow.postMessage(
                     { source: BRIDGE_SOURCE, type: "get-connection-info" },
-                    signerFrameOrigin
+                    signerFrameOrigin  // Sicherheit: nur an erwarteten Origin senden
                 );
             });
         }
 
+        /**
+         * Globaler Listener für Nachrichten vom Signer-Iframe.
+         * Händelt Events wie 'ready', 'connection-info' und 'locked' sowie Frame-Size-Updates.
+         * Diese Funktion wird als permanenter window.addEventListener registriert.
+         * 
+         * @param {MessageEvent} event - Das PostMessage-Event vom iframe
+         */
         function bridgeMessageHandler(event) {
+            // Sicherheitscheck: Nachricht nur vom Signer-iframe akzeptieren
             if (!signerFrameOrigin || event.origin !== signerFrameOrigin) return;
             const data = event.data;
             if (!data || data.source !== BRIDGE_SOURCE) return;
+            
+            // Frame-Size Nachrichten behandeln (für responsive iframe-Höhe)
             if (data.type === "frame-size") {
                 applySignerFrameHeight(data.payload?.height);
                 return;
             }
+            
+            // Im NIP-7 Modus: keine iframe-Messages händeln
             if (selectedConnectMode() === "nip7") return;
+            
+            // Im Auto-Modus mit verfügbarem NIP-7: keine iframe-Messages nötig
             if (selectedConnectMode() === "auto" && hasNativeProviderAvailable()) return;
+            
+            // Nur für relevante Nachrichtentypen
             if (data.type !== "ready" && data.type !== "connection-info" && data.type !== "locked") return;
 
+            // Signer ist gesperrt - User muss ihn entsperren
             if (data.type === "locked") {
                 setStatus(`Signer gesperrt: ${data.payload?.reason || "Bitte entsperren."}`, true);
                 return;
             }
 
+            // Verbindungsinformationen speichern und Status aktualisieren
             applyConnectionInfo(data.payload);
             setStatus("Signer bereit (Bridge).");
         }
 
+        /**
+         * Wrapper-Funktion für Promises mit Timeout-Sicherheit.
+         * Wirft einen Fehler, wenn die Promise länger als die angegebene Zeit dauert.
+         * 
+         * Beispiel: Wenn window.nostr.signEvent zu lange braucht, wird ein Timeout-Fehler geworfen.
+         * 
+         * @param {Promise} promise - Die zu wrappende Promise
+         * @param {number} ms - Timeout in Millisekunden
+         * @param {string} stepName - Name des Schritts (für Fehlermeldungen)
+         * @returns {Promise} Promise, die entweder löst (original result) oder mit Timeout-Fehler ablehnt
+         */
         function withTimeout(promise, ms, stepName) {
             let timer;
             const timeoutPromise = new Promise((_, reject) => {
                 timer = setTimeout(() => reject(new Error(`${stepName} Timeout nach ${ms}ms`)), ms);
             });
+            // Promise.race: welcher zuerst erledigt wird gewinnt
             return Promise.race([promise, timeoutPromise]).finally(() => clearTimeout(timer));
         }
 
+        /**
+         * Erstellt einen NDKRelaySet aus einer Liste von Relay-URLs.
+         * Ein RelaySet ist ein Set von Nostr-Relays für Kommunikation.
+         * Der Adapter kann damit Events zu mehreren Relays gleichzeitig verbreiten.
+         * 
+         * @param {NDK} ndkInstance - Die NDK-Instanz, die verwendet werden soll
+         * @param {array} relays - Array von Relay-URLs
+         * @returns {NDKRelaySet} Ein NDKRelaySet-Objekt für Event-Publikation
+         */
         function buildFixedRelaySet(ndkInstance, relays) {
+            // URLs in Relay-Objekte konvertieren
             const relayObjs = uniqueRelayUrls(relays)
                 .map((url) => ndkInstance.pool.getRelay(url, true, false))
-                .filter(Boolean);
+                .filter(Boolean);  // Ungültige Relays filtern
             return new NDKRelaySet(new Set(relayObjs), ndkInstance, ndkInstance.pool);
         }
 
+        /**
+         * Stellt sicher, dass NDK und Relays für die Publikation vorbereitet sind.
+         * Falls noch keine NDK-Instanz vorhanden ist, wird eine neue mit den Relays aus der URI initialisiert.
+         * 
+         * Dies ist optional für die NIP-7 Signierung notwendig, aber erforderlich für die Publikation.
+         */
         async function ensurePublishContextForProvider() {
+            // Wenn bereits initialisiert: nichts tun
             if (activeNdk && activeRelayUrls.length > 0) return;
 
             let relays = [];
 
+            // Relays aus der Connection URI extrahieren
             const rawUri = connInput.value.trim();
             if (rawUri) {
                 try {
                     relays = relayUrlsFromUri(rawUri);
                 } catch (_err) {
-                    // ignore and fallback
+                    // Fehler ignorieren, Fallback auf DEFAULT_RELAYS
                 }
             }
 
+            // Falls keine Relays aus URI: Standard-Relays verwenden
             if (relays.length === 0) relays = DEFAULT_RELAYS;
             relays = uniqueRelayUrls(relays);
 
+            // NDK-Instanz mit den Relays erstellen und verbinden
             const ndk = new NDK({ explicitRelayUrls: relays });
             await withTimeout(ndk.connect(), 10000, "relay connect (publish context)");
             activeNdk = ndk;
             activeRelayUrls = relays;
         }
 
+        /**
+         * Erstellt einen Adapter, der sich wie window.nostr (NIP-7) verhält,
+         * aber intern NIP-46 (Remote Signing) über NDK nutzt.
+         * 
+         * Dies ist das "Herzstück" der NIP-46 Integration: Der Adapter kappselt
+         * den Remote-Signer so, dass der restliche Code (z.B. signAndPublishKind1)
+         * generisch und Mode-unabhängig bleibt.
+         * 
+         * @param {object} config - Konfigurationsobjekt mit ndk, signer, user, relays
+         * @returns {object} Ein NIP-7-kompatibler Provider mit getPublicKey, signEvent, nip04, nip44
+         */
         function makeNip7Adapter({ ndk, signer, user, relays }) {
             const pubkey = user.pubkey;
 
+            /**
+             * Implementiert window.nostr.signEvent via NIP-46 Remote Signing.
+             * Das Signieren erfolgt auf dem Remote Signer (z.B. via iframe).
+             * 
+             * @param {object} unsignedEvent - Das zu signierende Event (könnte unvollständig sein)
+             * @returns {Promise<object>} Das fertig signierte Event mit id und sig
+             */
             async function signEventLikeNip7(unsignedEvent) {
+                // Event normalisieren (Defaults für fehlende Felder)
                 const normalized = {
                     ...unsignedEvent,
                     pubkey,
@@ -451,12 +685,17 @@
                     created_at: unsignedEvent?.created_at || Math.floor(Date.now() / 1000)
                 };
 
+                // NDK-Event erstellen
                 const event = new NDKEvent(ndk, normalized);
+                // Hier wird der Remote-Signer (NIP-46) aufgerufen.
+                // Der User sieht ggf. ein Popup im Signer-Fenster/Iframe zum Bestätigen.
                 await withTimeout(event.sign(signer), 20000, "sign_event");
 
+                // Zurückgabe im Rohformat wie von NIP-7 erwartet
                 const raw = typeof event.rawEvent === "function" ? event.rawEvent() : null;
                 if (raw) return raw;
 
+                // Alternative: Manuell aus NDK-Event zusammenstellen
                 return {
                     kind: event.kind,
                     content: event.content,
@@ -468,30 +707,45 @@
                 };
             }
 
+            /**
+             * Verschlüsselung nach NIP-04 (veraltetes Protokoll, aber weit verbreitet)
+             * Nutzt elliptische Kurven-Schlam mit Secp256k1
+             */
             async function nip04Encrypt(pubkeyTarget, plaintext) {
                 if (signer?.nip04?.encrypt) return signer.nip04.encrypt(pubkeyTarget, plaintext);
                 if (typeof signer?.nip04Encrypt === "function") return signer.nip04Encrypt(pubkeyTarget, plaintext);
                 throw new Error("nip04.encrypt nicht verfuegbar.");
             }
 
+            /**
+             * Entschlüsselung nach NIP-04 (veraltetes Protokoll)
+             */
             async function nip04Decrypt(pubkeyTarget, ciphertext) {
                 if (signer?.nip04?.decrypt) return signer.nip04.decrypt(pubkeyTarget, ciphertext);
                 if (typeof signer?.nip04Decrypt === "function") return signer.nip04Decrypt(pubkeyTarget, ciphertext);
                 throw new Error("nip04.decrypt nicht verfuegbar.");
             }
 
+            /**
+             * Verschlüsselung nach NIP-44 (modernes Protokoll, ChaCha20-Poly1305)
+             * Bevorzugt gegenüber NIP-04 für neue Implementierungen
+             */
             async function nip44Encrypt(pubkeyTarget, plaintext) {
                 if (signer?.nip44?.encrypt) return signer.nip44.encrypt(pubkeyTarget, plaintext);
                 if (typeof signer?.nip44Encrypt === "function") return signer.nip44Encrypt(pubkeyTarget, plaintext);
                 throw new Error("nip44.encrypt nicht verfuegbar.");
             }
 
+            /**
+             * Entschlüsselung nach NIP-44 (modernes Protokoll)
+             */
             async function nip44Decrypt(pubkeyTarget, ciphertext) {
                 if (signer?.nip44?.decrypt) return signer.nip44.decrypt(pubkeyTarget, ciphertext);
                 if (typeof signer?.nip44Decrypt === "function") return signer.nip44Decrypt(pubkeyTarget, ciphertext);
                 throw new Error("nip44.decrypt nicht verfuegbar.");
             }
 
+            // Adapter-Objekt zurückgeben: eine NIP-7 kompatible Schnittstelle
             return {
                 getPublicKey: async () => pubkey,
                 signEvent: signEventLikeNip7,
@@ -508,45 +762,70 @@
             };
         }
 
+        /**
+         * Verbindet sich mit einem NIP-46 Signer (Remote Signer / Bunker).
+         * 
+         * Ablauf:
+         * 1. Holt URI aus iframe oder Input-Feld
+         * 2. Verbindet NDK mit den Nostr-Relays
+         * 3. Initialisiert NDKNip46Signer mit der bunker:// URI
+         * 4. Führt Handshake durch (blockUntilReady)
+         * 5. Erstellt einen NIP-7 Adapter für transparente Nutzung
+         * 
+         * @returns {Promise<object>} Objekt mit { provider: NIP-7 Adapter, user: NDKUser, relays: Array }
+         * @throws {Error} Wenn URI ungültig, Relay-Verbindung fehlschlag oder Handshake failed
+         */
         async function connectViaNip46() {
+            // Schritt 1: Verbindungsinformationen holen
             let bridgeInfo = null;
             if (embedSignerInput.checked) {
                 bridgeInfo = await requestConnectionInfoFromIframe().catch(() => null);
-                if (bridgeInfo) applyConnectionInfo(bridgeInfo);
+                if (bridgeInfo) applyConnectionInfo(bridgeInfo);  // UI updaten
             }
 
+            // Schritt 2: Relays und bunker:// URI bestimmen (in Prioritätsordnung)
             let relays;
             let bunkerUri;
 
             if (bridgeInfo?.bunkerUri && Array.isArray(bridgeInfo?.relays) && bridgeInfo.relays.length > 0) {
+                // Priorität 1: Frische Info vom iframe
                 relays = uniqueRelayUrls(bridgeInfo.relays);
                 bunkerUri = bridgeInfo.bunkerUri;
             } else if (lastBridgeConnectionInfo?.bunkerUri && Array.isArray(lastBridgeConnectionInfo?.relays) && lastBridgeConnectionInfo.relays.length > 0) {
+                // Priorität 2: Gepufferte Info vom iframe
                 relays = uniqueRelayUrls(lastBridgeConnectionInfo.relays);
                 bunkerUri = lastBridgeConnectionInfo.bunkerUri;
             } else {
+                // Priorität 3: User-Input in conn-uri
                 const rawUri = connInput.value.trim();
                 if (!rawUri) throw new Error("Bitte Connection URI eingeben oder aus iframe holen.");
                 relays = uniqueRelayUrls(relayUrlsFromUri(rawUri));
                 bunkerUri = toBunkerUri(rawUri, relays);
             }
 
+            // Schritt 3: NDK-Instanz erstellen und mit Relays verbinden
             const ndk = new NDK({ explicitRelayUrls: relays });
             await withTimeout(ndk.connect(), 10000, "relay connect");
 
+            // Schritt 4: NIP-46 Signer initialisieren
             const signer = NDKNip46Signer.bunker(ndk, bunkerUri);
 
+            // Schritt 5: Handshake durchführen (blockUntilReady)
             let user;
             try {
+                // Normalerweise: User-Objekt vom Handhake erhalten
                 user = await withTimeout(signer.blockUntilReady(), 12000, "nip46 handshake");
             } catch (_err) {
+                // Fallback: Pubkey abrufen und User-Objekt manuell erstellen
                 const pubkey = await withTimeout(signer.getPublicKey(), 8000, "get_public_key");
                 user = ndk.getUser({ pubkey });
             }
 
+            // State speichern für spätere Publikation
             activeNdk = ndk;
             activeRelayUrls = relays;
 
+            // NIP-7 Adapter als Provider zurückgeben
             return {
                 provider: makeNip7Adapter({ ndk, signer, user, relays }),
                 user,
@@ -554,33 +833,48 @@
             };
         }
 
+        /**
+         * Hauptfunktion zum "Einloggen" - Verbindet sich mit dem Nostr Provider.
+         * Entscheidet automatisch zwischen:
+         * - NIP-7 (native Browser Extension) wenn verfügbar
+         * - NIP-46 (Remote Signer / Bunker) als Fallback oder auf Anforderung
+         * 
+         * Aktualisiert die UI und speichert den Provider für spätere Operationen.
+         * 
+         * @throws {Error} Wenn weder NIP-7 noch NIP-46 erreichbar sind
+         */
         async function installProvider() {
             setStatus("Verbinde...");
             resultEl.textContent = "";
             const mode = selectedConnectMode();
 
+            // Fall 1: NIP-7 native Extension
             if (mode === "nip7" || (mode === "auto" && hasNativeProviderAvailable())) {
                 if (!hasNativeProviderAvailable()) {
                     throw new Error("Kein natives NIP-7 gefunden. Waehle 'Auto' oder 'Nur NIP-46'.");
                 }
-                setProviderReady(window.nostr);
+                setProviderReady(window.nostr);  // Native Extension als Provider nutzen
                 setStatus("Verbunden. Unten Nachricht senden.");
                 userEl.textContent = "Modus: NIP-7 (native)\npubkey: (nicht abgefragt)";
                 try {
+                    // Optionales Setup für Publikation
                     await ensurePublishContextForProvider();
                 } catch (_err) {
-                    // publish context is optional here; signing still works
+                    // Publikation ist optional für reine Signierung
                 }
                 return;
             }
 
+            // Fall 2: NIP-46 Remote Signing (Fallback oder exklusiv)
             const connected = await connectViaNip46();
-            setProviderReady(connected.provider);
+            setProviderReady(connected.provider);  // NIP-46 Adapter als Provider nutzen
 
+            // Optional: Globales window.nostr setzen wenn kein natives vorhanden
             if (mode === "nip46" || !window.nostr) {
                 window.nostr = nostrProvider;
             }
 
+            // UI updaten mit Verbindungsinformationen
             setStatus("Verbunden. Unten Nachricht senden.");
             userEl.textContent =
                 `Modus: NIP-46 -> NIP-7 Adapter\n` +
@@ -589,27 +883,46 @@
                 `relays: ${connected.relays.join(", ")}`;
         }
 
+        /**
+         * Ruft den Public Key des aktuellen Providers ab.
+         * Dies kann nützlich sein zum Anzeigen oder für Debugging.
+         * 
+         * @throws {Error} Wenn Provider nicht initialisiert oder Aufruf fehlschlägt
+         */
         async function callGetPublicKey() {
             if (!nostrProvider) throw new Error("Provider nicht initialisiert.");
             const pubkey = await withTimeout(nostrProvider.getPublicKey(), 20000, "window.nostr.getPublicKey");
-            cachedPubkey = pubkey;
+            cachedPubkey = pubkey;  // Für spätere Operationen cachen
             if (userEl.textContent.startsWith("Modus: NIP-7 (native)")) {
-                userEl.textContent = `Modus: NIP-7 (native)\npubkey: ${pubkey}`;
+                userEl.textContent = `Modus: NIP-7 (native)\npubkey: ${pubkey}`;  // UI updaten
             }
             resultEl.textContent = `window.nostr.getPublicKey() => ${pubkey}`;
         }
 
+        /**
+         * Erstellt ein Nostr Event (kind:1 = Text Note)
+         * Signiert es über den aktuellen Provider (NIP-7 oder NIP-46)
+         * Veröffentlicht es an den Relays
+         * 
+         * Der Prozess ist Mode-unabhängig dank des NIP-7 Adapters für NIP-46.
+         * 
+         * @throws {Error} Wenn Provider nicht initialisiert oder Operationen fehlschlagen
+         */
         async function signAndPublishKind1() {
             if (!nostrProvider) throw new Error("Provider nicht initialisiert.");
+            
+            // Schritt 1: Unsigniertes Event konstruieren
             const unsignedEvent = {
-                kind: 1,
-                created_at: Math.floor(Date.now() / 1000),
-                tags: [],
-                content: contentEl.value
+                kind: 1,  // kind:1 = Text Note (Nostr Nachricht)
+                created_at: Math.floor(Date.now() / 1000),  // Aktueller Timestamp
+                tags: [],  // Keine Tags in diesem Beispiel
+                content: contentEl.value  // User-eingegeben Text
             };
-            if (cachedPubkey) unsignedEvent.pubkey = cachedPubkey;
+            if (cachedPubkey) unsignedEvent.pubkey = cachedPubkey;  // Public Key wenn bekannt
 
+            // Schritt 2: Signieren (kann Popup in Extension zeigen)
             resultEl.textContent = "Signiere Nachricht...";
+            // Der Aufruf ist identisch für Extension und NIP-46 dank Adapter!
             const signedEvent = await withTimeout(
                 nostrProvider.signEvent(unsignedEvent),
                 25000,
@@ -617,14 +930,23 @@
             );
             resultEl.textContent = `Signiert:\n${JSON.stringify(signedEvent, null, 2)}`;
 
+            // Schritt 3: Veröffentlichen an Relays (nur NDK hat 'publish')
             await ensurePublishContextForProvider();
             const ndkEvent = new NDKEvent(activeNdk, signedEvent);
             const relaySet = buildFixedRelaySet(activeNdk, activeRelayUrls);
             const publishedTo = await withTimeout(ndkEvent.publish(relaySet, 8000, 1), 15000, "publish");
+            
+            // Ergebnis anzeigen: An welche Relays wurde versendet
             resultEl.textContent +=
-                `\n\nPubliziert an:\n${Array.from(publishedTo).map((r) => r.url).join("\n") || "(unbekannt)"}`;
+                `\n\nVeröffentlicht an:\n${Array.from(publishedTo).map((r) => r.url).join("\n") || "(unbekannt)"}`;
         }
 
+        // ===== Event Listener und Initialisierung =====
+
+        /**
+         * Hauptbutton "Verbinden" - Startet den Authentifizierungsprozess
+         * Händelt Fehler elegant ab und deaktiviert Button während des Prozesses
+         */
         installBtn.addEventListener("click", async () => {
             try {
                 installBtn.disabled = true;
@@ -637,6 +959,10 @@
             }
         });
 
+        /**
+         * Button "Public Key anzeigen" - Holt und zeigt den aktuellen Public Key
+         * Nützlich für Debugging und Verifizierung
+         */
         pubkeyBtn.addEventListener("click", async () => {
             try {
                 await callGetPublicKey();
@@ -645,6 +971,11 @@
             }
         });
 
+        /**
+         * Hauptbutton "Nachricht signieren + senden" - Vollständige Workflow
+         * Signiert ein Event und publiziert es an die Relays
+         * Spezialbehandlung für Timeout-Fehler mit hilfreicher Meldung
+         */
         sendBtn.addEventListener("click", async () => {
             try {
                 sendBtn.disabled = true;
@@ -652,11 +983,12 @@
                 await signAndPublishKind1();
             } catch (err) {
                 const msg = String(err?.message || err);
+                // Spezialfall: signEvent Timeout - Benutzer möglicherweise nicht reagiert
                 if (msg.includes("window.nostr.signEvent Timeout")) {
                     resultEl.textContent =
                         `Fehler: ${msg}\n` +
-                        "Hinweis: Bitte Signatur im Extension-Popup bestaetigen. " +
-                        "Wenn bestaetigt wurde und trotzdem Timeout kommt, blockiert die Extension die Antwort.";
+                        "Hinweis: Bitte Signatur im Extension-Popup bestätigen. " +
+                        "Wenn bestätigt wurde und trotzdem Timeout kommt, blockiert die Extension die Antwort.";
                 } else {
                     resultEl.textContent = `Fehler: ${msg}`;
                 }
@@ -666,7 +998,16 @@
             }
         });
 
+        /**
+         * Signer-URL Input - Aktualisiert iframe bei Änderung
+         */
         signerUrlInput.addEventListener("change", refreshSignerFrame);
+
+        /**
+         * "Signer eingebettet starten" Checkbox
+         * Ein: iframe werden geladen und angezeigt
+         * Aus: iframe wird geleert und versteckt
+         */
         embedSignerInput.addEventListener("change", () => {
             if (embedSignerInput.checked) {
                 refreshSignerFrame();
@@ -676,6 +1017,10 @@
             }
         });
 
+        /**
+         * Button "Connection URI aus iframe holen"
+         * Ruft requestConnectionInfoFromIframe auf und aktualisiert das Input-Feld
+         */
         syncIframeBtn.addEventListener("click", async () => {
             try {
                 const info = await requestConnectionInfoFromIframe();
@@ -686,44 +1031,70 @@
             }
         });
 
+        /**
+         * iframe Load-Event - Wird ausgelöst wenn signer.html vollständig geladen ist
+         * Synchronisiert automatisch die Verbindungsinformationen und Frame-Höhe
+         */
         signerFrame.addEventListener("load", async () => {
             if (!embedSignerInput.checked) return;
             try {
+                // Frame-Höhe anfordern (responsive Design)
                 signerFrame.contentWindow?.postMessage(
                     { source: BRIDGE_SOURCE, type: "request-frame-size" },
                     signerFrameOrigin
                 );
             } catch (_err) {
-                // ignore if iframe not yet ready
+                // iframe möglich noch nicht bereit
             }
             try {
+                // Verbindungsinformationen automatisch abrufen (mit kurzer Timeout)
                 const info = await requestConnectionInfoFromIframe(1500);
                 applyConnectionInfo(info);
             } catch (_err) {
-                // optional sync
+                // Optionale Synchronisierung - Fehler ignorieren
             }
         });
 
+        /**
+         * Globaler Message-Listener für Bridge-Kommunikation
+         * Händelt laufende Kommunikation vom Signer-iframe
+         */
         window.addEventListener("message", bridgeMessageHandler);
-        refreshSignerFrame();
-        updateConnectModeUi();
 
+        /**
+         * Dropdown "Connect-Modus" - Änderung des Authentifizierungsmodus
+         * Setzt Provider zurück und zwingt neue Authentifizierung
+         */
         connectModeInput.addEventListener("change", () => {
             updateConnectModeUi();
-            nostrProvider = null;
+            nostrProvider = null;  // Provider zurücksetzen
             pubkeyBtn.disabled = true;
             sendBtn.disabled = true;
-            setStatus("Modus geaendert. Bitte Provider neu initialisieren.");
+            setStatus("Modus geändert. Bitte Provider neu initialisieren.");
         });
 
-        // Viele Extensions injizieren asynchron.
+        // ===== Initialisierungscode =====
+
+        // iframe mit aktueller URL laden
+        refreshSignerFrame();
+        
+        // UI basierend auf aktuellem Modus aktualisieren
+        updateConnectModeUi();
+
+        /**
+         * Viele Browser-Extensions injizieren window.nostr asynchron.
+         * Wir horchen auf das custom "nostr:ready" Event und auch Polling.
+         * Dies gibt Extensions Zeit, sich zu registrieren.
+         */
         window.addEventListener("nostr:ready", updateConnectHint);
+        
+        // Polling für native NIP-7 Provider (max. 20 Iterationen = ~5 Sekunden)
         let nativeProbeCount = 0;
         const nativeProbe = setInterval(() => {
             nativeProbeCount++;
-            updateConnectHint();
+            updateConnectHint();  // Status aktualisieren wenn Extension erkannt wird
             if (hasNativeProviderAvailable() || nativeProbeCount > 20) {
-                clearInterval(nativeProbe);
+                clearInterval(nativeProbe);  // Polling stoppen
             }
         }, 250);
     </script>

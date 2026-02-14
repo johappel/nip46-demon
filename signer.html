@@ -248,23 +248,41 @@
     <script type="module">
         import NDK, { NDKNip46Backend, NDKPrivateKeySigner } from "https://esm.sh/@nostr-dev-kit/ndk@3.0.0?bundle&target=es2022";
 
+        // ===== Storage Keys =====
+        // Älterer Speicherort für unverschlüsselte nsec (nur bei Migration relevant)
         const LEGACY_NSEC_STORAGE_KEY = "nip46_demo_nsec";
+        // Verschlüsselte nsec im alten v1-Format (wird auf neues Keyring-Format migriert)
         const ENCRYPTED_NSEC_STORAGE_KEY = "nip46_demo_nsec_enc_v1";
+        // Modernes Keyring-Format v2 - Array von verschlüsselten Einträgen mit IDs
         const KEYRING_STORAGE_KEY = "nip46_demo_keyring_enc_v2";
+        // Speichert die ID des aktuell aktiven Schlüssels
         const ACTIVE_KEY_ID_STORAGE_KEY = "nip46_demo_active_key_id_v1";
+        // Session-basiertes Entsperra-Caching (wird beim Browser-Reload gelöscht)
         const UNLOCK_CACHE_SESSION_KEY = "nip46_unlock_cache_session_v1";
+        // TTL-basiertes Entsperra-Caching mit Ablaufzeit (15m/1h möglich)
         const UNLOCK_CACHE_TTL_KEY = "nip46_unlock_cache_ttl_v1";
+        // Speichert Genehmigungen für Anfragen (pubkey:method -> TTL oder PERMISSION_FOREVER)
         const PERMISSION_STORAGE_KEY = "nip46_permissions_v1";
+        // Bindet WordPress User-IDs an Nostr Schlüssel (für WP-Integration)
         const WP_USER_BINDINGS_STORAGE_KEY = "nip46_wp_user_bindings_v1";
+        
+        // ===== Relay und Bridge-Konfiguration =====
+        // Standard-Relays für NIP-46 RPC-Kommunikation
         const RELAYS = [
             "wss://relay.damus.io",
             "wss://nos.lol",
             "wss://relay.primal.net",
             "wss://relay.snort.social"
         ];
+        // Identifikator für sichere Cross-Origin PostMessage-Kommunikation mit Parent-Frame
         const BRIDGE_SOURCE = "nip46-signer-bridge";
+        
+        // ===== Kryptographische Konstanten =====
+        // PBKDF2 Iterationen für Passwort-Hashing (210.000 = NIST empfohlen für 2024)
         const PBKDF2_ITERATIONS = 210000;
+        // NIP-46 Methoden, die automatisch genehmigt werden (keine User-Bestätigung nötig)
         const AUTO_ALLOW_METHODS = new Set(["connect", "ping", "get_public_key"]);
+        // NIP-46 Methoden, die Benutzer-Bestätigung benötigen (sensitiv)
         const SENSITIVE_METHODS = new Set([
             "sign_event",
             "nip04_encrypt",
@@ -272,48 +290,104 @@
             "nip44_encrypt",
             "nip44_decrypt"
         ]);
+        // Spezialwert: Genehmigung läuft niemals ab (-1 = unbegrenzt)
         const PERMISSION_FOREVER = -1;
+        // Bech32-Encoding Zeichensatz (für nsec1 Format)
         const BECH32_CHARSET = "qpzry9x8gf2tvdw0s3jn54khce6mua7l";
+        // Bech32 Generator-Polynome (für Checksum-Berechnung)
         const BECH32_GENERATORS = [0x3b6a57b2, 0x26508e6d, 0x1ea119fa, 0x3d4233dd, 0x2a1462b3];
 
+        // ===== Global State =====
+        // Queue für ausstehende Genehmigungsanfragen (FIFO-Verarbeitung)
         const pendingPermissionRequests = [];
+        // Die aktuell zu bearbeitende Genehmigungsanfrage
         let activePermissionRequest = null;
+        // Verbindungsinformationen (bunker URI, pubkey, relays, etc.) nach Entsperrrung
         let connectionInfo = null;
+        // true wenn dieser iframe in einem Parent-Frame lädt (nicht top-level)
         const isEmbeddedContext = window.parent !== window;
 
+        // ===== Signer Session State =====
+        // Das aktuell gespeicherte Passwort (wird nach Entsperrrung in RAM gehalten)
         let sessionPassword = "";
+        // Das gesamte Keyring-Objekt mit allen verschlüsselten Schlüsseln
         let currentKeyring = null;
+        // Die ID des aktuell aktiven Schlüssels
         let activeKeyId = null;
+        // Der entschlüsselte nsec des aktiven Schlüssels (SENSIBEL!)
         let activeNsec = null;
+        // Das NDKUser-Objekt des aktiven Schlüssels (enthält pubkey, npub, etc.)
         let activeUser = null;
+        // Letzte gemeldete Frame-Höhe (für iframe Auto-Resize)
         let lastPostedFrameHeight = 0;
+        // Flag um redundante Frame-Size Updates zu vermeiden (Debouncing)
         let frameSizeNotifyScheduled = false;
 
+        // ===== Validierungs- und Normalisierungs-Funktionen =====
+        
+        /**
+         * Prüft, ob ein String ein gültiger nsec ist.
+         * nsec muss mit "nsec1" beginnen und mindestens 21 Zeichen lang sein.
+         * @param {string} nsec - Zu prüfender Wert
+         * @returns {boolean} true wenn gültiger nsec
+         */
         function isValidNsec(nsec) {
             return typeof nsec === "string" && nsec.startsWith("nsec1") && nsec.length > 20;
         }
 
+        /**
+         * Normalisiert einen Schlüsselnamen (trimmt Whitespace, gibt leeren String bei null zurück).
+         * @param {string} name - Der zu normalisierende Name
+         * @returns {string} Normalisierter Name (trimmed) oder leerer String
+         */
         function normalizeKeyName(name) {
             return typeof name === "string" ? name.trim() : "";
         }
 
+        /**
+         * Erzeugt einen Anzeigetext für einen Schlüssel.
+         * Nutzt den benutzerdefinierten Namen oder fällt auf "Schlüssel N" zurück.
+         * @param {object} entry - Der Keyring-Eintrag mit optionalem name
+         * @param {number} index - Der Index des Eintrags (für Fallback-Text)
+         * @returns {string} Anzeigetext
+         */
         function keyDisplayName(entry, index = 0) {
             const custom = normalizeKeyName(entry?.name);
             return custom || `Schlüssel ${index + 1}`;
         }
 
+        /**
+         * Konvertiert einen beliebigen Input in einen sicheren Dateinamen.
+         * Löscht Sonderzeichen, konvertiert zu Kleinbuchstaben, limitiert auf a-z0-9_-
+         * @param {string} input - Beliebiger Input-String
+         * @returns {string} Sicherer Dateiname oder "nostr-key" als Fallback
+         */
         function safeFilename(input) {
             const raw = String(input || "").toLowerCase();
             const slug = raw.replace(/[^a-z0-9_-]+/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "");
             return slug || "nostr-key";
         }
 
+        // ===== Basis-Konvertierungen (Bytes, Base64) =====
+        
+        /**
+         * Konvertiert ein Uint8Array in einen Base64-String.
+         * Dies wird für Speicherung von binären Daten (salt, iv, ciphertext) verwendet.
+         * @param {Uint8Array} bytes - Die zu kodierenden Bytes
+         * @returns {string} Base64-kodierter String
+         */
         function bytesToBase64(bytes) {
             let binary = "";
             for (const b of bytes) binary += String.fromCharCode(b);
             return btoa(binary);
         }
 
+        /**
+         * Konvertiert einen Base64-String zurück in Uint8Array.
+         * Umkehroperation zu bytesToBase64.
+         * @param {string} base64 - Der zu dekodierte Base64-String
+         * @returns {Uint8Array} Die dekodierten Bytes
+         */
         function base64ToBytes(base64) {
             const binary = atob(base64);
             const bytes = new Uint8Array(binary.length);
@@ -321,6 +395,20 @@
             return bytes;
         }
 
+        // ===== AES-GCM Verschlüsselung (für nsec-Speicherung) =====
+        
+        /**
+         * Leitet einen AES-256 Schlüssel aus einem Passwort ab.
+         * Nutzt PBKDF2 (Password-Based Key Derivation Function) mit SHA-256.
+         * 
+         * Dies ist eine sichere Methode, um aus einem Benutzerpasswort einen starken Verschlüsslungsschlüssel zu generieren.
+         * Ohne PBKDF2 wäre das Passwort zu kurz für direkten AES-Einsatz.
+         * 
+         * @param {string} password - Das Benutzerpasswort
+         * @param {Uint8Array} saltBytes - Ein eindeutiger Salt (pro Verschlüsselung neu generiert)
+         * @param {number} iterations - PBKDF2 Iterationen (default: PBKDF2_ITERATIONS = 210000)
+         * @returns {Promise<CryptoKey>} Ein WebCrypto AES-GCM Schlüssel
+         */
         async function deriveAesKeyFromPassword(password, saltBytes, iterations = PBKDF2_ITERATIONS) {
             const enc = new TextEncoder();
             const passwordKey = await crypto.subtle.importKey(
@@ -345,8 +433,26 @@
             );
         }
 
+        /**
+         * Verschlüssselt einen nsec mit AES-256-GCM.
+         * Generiert zufällige salt und iv (Initialization Vector).
+         * 
+         * Produkt: Ein Object mit folgenden Feldern:
+         * - v: Versionsnummer (aktuell 1)
+         * - kdf: "PBKDF2-SHA256"
+         * - alg: "AES-GCM"
+         * - iter: Anzahl der PBKDF2-Iterationen
+         * - salt: Base64-kodierter Salt
+         * - iv: Base64-kodierter IV
+         * - ct: Base64-kodierter Ciphertext (verschlüsselter nsec)
+         * 
+         * @param {string} nsec - Der zu verschlüsselnde nsec
+         * @param {string} password - Das Benutzerpasswort
+         * @returns {Promise<object>} Verschlüsslungs-Payload mit ct, salt, iv
+         */
         async function encryptNsec(nsec, password) {
             const enc = new TextEncoder();
+            // Zufällige salt und iv generieren (für Sicherheit)
             const salt = crypto.getRandomValues(new Uint8Array(16));
             const iv = crypto.getRandomValues(new Uint8Array(12));
             const key = await deriveAesKeyFromPassword(password, salt);
@@ -369,6 +475,15 @@
             };
         }
 
+        /**
+         * Entschlüsselt einen zuvor mit encryptNsec verschlüsselten nsec.
+         * Extrahiert salt, iv und ciphertext aus dem Payload und entschlüssselt mit dem Passwort.
+         * 
+         * @param {object} payload - Das Verschlüsselungs-Object (mit ct, salt, iv, kdf, alg, iter)
+         * @param {string} password - Das Benutzerpasswort
+         * @returns {Promise<string>} Der entschlüsselte nsec
+         * @throws {Error} Wenn Format ungültig oder Passwort falsch ist
+         */
         async function decryptNsec(payload, password) {
             if (!payload || payload.v !== 1 || !payload.salt || !payload.iv || !payload.ct) {
                 throw new Error("Ungültiges verschlüsseltes Format.");
@@ -388,6 +503,17 @@
             return dec.decode(clear);
         }
 
+        // ===== Bech32-Encoding (für nsec-Generierung) =====
+        // Bech32 ist das Standard-Encoding für Nostr-Werte (nsec, npub, note, usw.)
+        // Format: hrp1 + bech32-encoded-data + 6-stellige Checksumme
+        
+        /**
+         * Berechnet das Bech32-Polynom (Checksummen-Algorithmus).
+         * Dies wird verwendet um Bech32-Strings zu validieren und zu checksum-en.
+         * 
+         * @param {array} values - Array von 5-Bit-Werten
+         * @returns {number} Das Polynom-Ergebnis
+         */
         function bech32Polymod(values) {
             let chk = 1;
             for (const v of values) {
@@ -400,6 +526,13 @@
             return chk;
         }
 
+        /**
+         * Expandiert das Human Readable Part (HRP) für Bech32-Checksumme.
+         * Konvertiert HRP zu speziellem Format für Polynom-Berechnung.
+         * 
+         * @param {string} hrp - Das HRP (z.B. "nsec")
+         * @returns {array} Expandiertes HRP als Array von 5-Bit-Werten
+         */
         function bech32HrpExpand(hrp) {
             const out = [];
             for (let i = 0; i < hrp.length; i++) out.push(hrp.charCodeAt(i) >> 5);
@@ -408,6 +541,13 @@
             return out;
         }
 
+        /**
+         * Erstellt die 6-stellige Bech32-Checksumme für ein HRP und seine Daten.
+         * 
+         * @param {string} hrp - Das Human Readable Part (z.B. "nsec")
+         * @param {array} data - Die 5-Bit-Daten zum Checksum-en
+         * @returns {array} 6-stelliges Checksum als Array
+         */
         function bech32CreateChecksum(hrp, data) {
             const values = [...bech32HrpExpand(hrp), ...data, 0, 0, 0, 0, 0, 0];
             const polymod = bech32Polymod(values) ^ 1;
@@ -418,6 +558,14 @@
             return out;
         }
 
+        /**
+         * Kodiert Daten in Bech32-Format mit HRP und Checksumme.
+         * Dies wird verwendet um nsec1... oder npub1... Strings zu generieren.
+         * 
+         * @param {string} hrp - Das Human Readable Part ("nsec" oder "npub")
+         * @param {array} data - Die 5-Bit-Daten zum Kodieren
+         * @returns {string} Der fertig kodierte Bech32-String (z.B. "nsec1...")
+         */
         function bech32Encode(hrp, data) {
             const combined = [...data, ...bech32CreateChecksum(hrp, data)];
             let encoded = `${hrp}1`;
@@ -425,6 +573,17 @@
             return encoded;
         }
 
+        /**
+         * Konvertiert Bits zwischen verschiedenen Breiten.
+         * Wird von Bech32-Encoding verwendet um 8-Bit Bytes zu 5-Bit Werten zu konvertieren.
+         * 
+         * @param {array} data - Die zu konvertierenden Daten
+         * @param {number} fromBits - Quell-Bit-Breite (normalerweise 8)
+         * @param {number} toBits - Ziel-Bit-Breite (normalerweise 5)
+         * @param {boolean} pad - true um mit Nullen zu padden wenn nötig
+         * @returns {array} Die konvertierten Daten
+         * @throws {Error} Bei ungültigen Eingabe-Werten oder Padding-Problemen
+         */
         function convertBits(data, fromBits, toBits, pad = true) {
             let acc = 0;
             let bits = 0;
@@ -451,6 +610,16 @@
             return out;
         }
 
+        /**
+         * Generiert einen random nsec (geheime Schlüssel-Darstellung).
+         * 
+         * Prozess:
+         * 1. 32 zufällige Bytes generieren (256 Bits)
+         * 2. In 5-Bit-Format konvertieren (für Bech32)
+         * 3. Mit "nsec" HRP in Bech32-Format enkodieren
+         * 
+         * @returns {string} Ein neuer randomisierter nsec1... String
+         */
         function generateRandomNsec() {
             const secret = crypto.getRandomValues(new Uint8Array(32));
             const words = convertBits(secret, 8, 5, true);
@@ -494,6 +663,17 @@
             localStorage.setItem(ACTIVE_KEY_ID_STORAGE_KEY, id);
         }
 
+        // ===== WordPress User ID Bindings =====
+        // Ermöglicht es, WordPress User-IDs an spezifische Nostr-Schlüssel zu binden
+        // (nützlich für WordPress Integrations mit Nostr-Authentifizierung)
+        
+        /**
+         * Normalisiert eine WordPress User-ID und führt Validierung durch.
+         * 
+         * @param {string} userId - Die zu normalisierende WP User-ID
+         * @returns {string} Die normalisierte User-ID (trimmed)
+         * @throws {Error} Wenn userId leer oder zu lang ist
+         */
         function normalizeWpUserId(userId) {
             const normalized = String(userId ?? "").trim();
             if (!normalized) throw new Error("userId fehlt.");
@@ -501,6 +681,13 @@
             return normalized;
         }
 
+        /**
+         * Erzeugt ein Label für einen WP User-Binding aus der User-ID.
+         * Nutzt nur sichere Zeichen (lowercase, a-z0-9._-)
+         * 
+         * @param {string|number} userId - Die WordPress User-ID
+         * @returns {string} Ein Label wie "WP admin" oder "WP user-123"
+         */
         function wpBindingLabelForUser(userId) {
             const compact = String(userId)
                 .toLowerCase()
@@ -510,6 +697,12 @@
             return compact ? `WP ${compact}` : "WP User Key";
         }
 
+        /**
+         * Lädt die WP User ID -> Nostr Key ID Bindings aus localStorage.
+         * Format: { v: 1, byUserId: { "user1": "key_xyz", ... } }
+         * 
+         * @returns {object} Das Bindings-Objekt oder leerer Default
+         */
         function loadWpUserBindings() {
             try {
                 const raw = localStorage.getItem(WP_USER_BINDINGS_STORAGE_KEY);
@@ -531,15 +724,35 @@
             }
         }
 
+        /**
+         * Speichert die WP User ID -> Key ID Bindings im localStorage.
+         * 
+         * @param {object} bindings - Das zu speichernde Bindings-Objekt
+         */
         function saveWpUserBindings(bindings) {
             localStorage.setItem(WP_USER_BINDINGS_STORAGE_KEY, JSON.stringify(bindings));
         }
 
+        // ===== Unlock-Cache (Session und TTL-basiert) =====
+        // Speichert das Passwort temporär um häufiges Eingeben zu vermeiden
+        
+        /**
+         * Löscht den Unlock-Cache vollständig:
+         * - Session-Cache aus sessionStorage
+         * - TTL-Cache aus localStorage
+         */
         function clearUnlockCache() {
             sessionStorage.removeItem(UNLOCK_CACHE_SESSION_KEY);
             localStorage.removeItem(UNLOCK_CACHE_TTL_KEY);
         }
 
+        /**
+         * Lädt den Unlock-Cache aus Session- oder localStorage.
+         * Gibt Priorität dem Session-Cache (wird beim Tab-Schließen gelöscht).
+         * Prüft TTL bei TTL-Cache und löscht abgelaufene Caches.
+         * 
+         * @returns {object|null} { mode: "session"|"ttl", password: str, keyId: str } oder null
+         */
         function loadUnlockCache() {
             try {
                 const sessionRaw = sessionStorage.getItem(UNLOCK_CACHE_SESSION_KEY);
@@ -578,6 +791,19 @@
             }
         }
 
+        /**
+         * Speichert das Unlock-Passwort temporär zur Vermeidung erneuter Eingaben.
+         * 
+         * Modes:
+         * - "none": Keinen Cache speichern (löscht existierenden Cache)
+         * - "session": Im sessionStorage (wird mit Tab-Schließen gelöscht)
+         * - "15m": Im localStorage mit 15 Minuten TTL
+         * - "1h": Im localStorage mit 1 Stunde TTL
+         * 
+         * @param {string} password - Das zu speichernde Passwort
+         * @param {string} keyId - Die ID des zu speichernden Schlüssels (optional)
+         * @param {string} mode - Der Speicher-Modus ("session", "15m", "1h", "none")
+         */
         function saveUnlockCache(password, keyId, mode) {
             clearUnlockCache();
             if (!password || mode === "none") return;
@@ -607,6 +833,12 @@
             );
         }
 
+        /**
+         * Aktualisiert die Key-ID im Unlock-Cache ohne das Passwort zu ändern.
+         * Nützlich wenn der Benutzer zwischen Schlüsseln wechselt.
+         * 
+         * @param {string} keyId - Die neue Key-ID
+         */
         function updateUnlockCacheKeyId(keyId) {
             if (!keyId) return;
 
@@ -637,6 +869,94 @@
             }
         }
 
+        // ===== Keyring-Verwaltung (Speicherung und Abruf) =====
+        
+        /**
+         * Generiert eine eindeutige ID für einen neuen Keyring-Eintrag.
+         * Format: key_<timestamp36>_<randomhex>
+         * 
+         * @returns {string} Die neue eindeutige Key-ID
+         */
+        function generateKeyId() {
+            return `key_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+        }
+
+        /**
+         * Lädt das gesamte Keyring aus dem localStorage.
+         * Das Keyring ist ein Array von verschlüsselten Schlüssel-Einträgen.
+         * 
+         * Format:
+         * {
+         *   v: 1,
+         *   keys: [
+         *     { id: "key_...", name: "...", createdAt: timestamp, payload: {...encrypted...} },
+         *     ...
+         *   ]
+         * }
+         * 
+         * @returns {object|null} Das Keyring-Objekt oder null wenn nicht vorhanden/ungültig
+         */
+        function loadKeyring() {
+            try {
+                const raw = localStorage.getItem(KEYRING_STORAGE_KEY);
+                if (!raw) return null;
+                const parsed = JSON.parse(raw);
+                if (!parsed || parsed.v !== 1 || !Array.isArray(parsed.keys)) return null;
+                const keys = parsed.keys
+                    .filter((entry) => entry && typeof entry.id === "string" && entry.id && entry.payload && typeof entry.payload === "object")
+                    .map((entry) => ({
+                        id: entry.id,
+                        name: normalizeKeyName(entry.name),
+                        createdAt: typeof entry.createdAt === "number" ? entry.createdAt : Date.now(),
+                        payload: entry.payload
+                    }));
+                if (keys.length === 0) return null;
+                return { v: 1, keys };
+            } catch (_err) {
+                return null;
+            }
+        }
+
+        /**
+         * Speichert das gesamte Keyring im localStorage.
+         * Das Keyring ist jetzt ein Array - jeder Schlüssel ist separat verschlüsselt.
+         * 
+         * @param {object} keyring - Das zu speichernde Keyring-Objekt mit keys-Array
+         */
+        function saveKeyring(keyring) {
+            localStorage.setItem(KEYRING_STORAGE_KEY, JSON.stringify(keyring));
+        }
+
+        /**
+         * Lädt die ID des aktuell aktiven Schlüssels aus dem Storage.
+         * Diese ID wird verwendet um nach dem Reload den richtigen Schlüssel zu aktivieren.
+         * 
+         * @returns {string|null} Die aktive Key-ID oder null
+         */
+        function activeKeyIdFromStorage() {
+            return localStorage.getItem(ACTIVE_KEY_ID_STORAGE_KEY);
+        }
+
+        /**
+         * Speichert die ID des aktuell aktiven Schlüssels.
+         * 
+         * @param {string} id - Die zu speichernde Key-ID
+         */
+        function setActiveKeyId(id) {
+            localStorage.setItem(ACTIVE_KEY_ID_STORAGE_KEY, id);
+        }
+
+        /**
+         * Findet und gibt einen Keyring-Eintrag zurück, basierend auf bevorzugter oder Standard-Auswahl.
+         * 
+         * Priorität:
+         * 1. Wenn preferredId vorhanden: Suche diesen Eintrag
+         * 2. Fallback: Nutze den ersten (index 0) Eintrag
+         * 
+         * @param {object} keyring - Das Keyring-Objekt mit keys-Array
+         * @param {string} preferredId - Bevorzugte Key-ID (optional)
+         * @returns {object} { entry: Eintrag, index: Array-Index }
+         */
         function resolveActiveKeyEntry(keyring, preferredId = null) {
             const wanted = preferredId || activeKeyIdFromStorage();
             if (wanted) {
@@ -646,6 +966,14 @@
             return { entry: keyring.keys[0], index: 0 };
         }
 
+        /**
+         * Erstellt einen neuen Keyring-Eintrag durch Verschlüsselung des nsec.
+         * 
+         * @param {string} nsec - Der nsec zum Verschlüsseln
+         * @param {string} password - Das Passwort zum Verschlüsseln
+         * @param {string} name - Optionaler Name für diesen Schlüssel
+         * @returns {Promise<object>} Ein neuer Keyring-Eintrag { id, name, createdAt, payload }
+         */
         async function createKeyringEntry(nsec, password, name = "") {
             return {
                 id: generateKeyId(),
@@ -1289,6 +1617,21 @@
             });
         }
 
+        // ===== Bridge-Kommunikation (PostMessage Protocol mit Parent) =====
+        // Der Bridge Layer ermöglicht sichere Kommunikation zwischen parent window und signer iframe
+        // über PostMessage, mit Validierung von Origin und Source
+        
+        /**
+         * Ermittelt die erwartete Origin des Parent-Frames.
+         * Dies wird zur Validierung von PostMessage-Events verwendet.
+         * 
+         * Priorität:
+         * 1. Query-Parameter ?parentOrigin=... (explizit gesetzt)
+         * 2. document.referrer (Browser liest automatisch)
+         * 3. null (unbekannt/nicht gesetzt)
+         * 
+         * @returns {string|null} Die Origin des Parent-Frames (z.B. "https://example.com") oder null
+         */
         function expectedParentOrigin() {
             const params = new URLSearchParams(window.location.search);
             const fromQuery = params.get("parentOrigin");
@@ -1305,6 +1648,22 @@
             return null;
         }
 
+        /**
+         * Sendet eine Nachricht an den Parent-Frame über PostMessage Bridge mit Origin-Check.
+         * 
+         * Nachrichten-Format:
+         * { source: "nip46-signer-bridge", type: string, payload: object }
+         * 
+         * Verwendete Message-Types:
+         * - "ready": Signer hat erfolgreich initialisiert (payload: connectionInfo)
+         * - "locked": Signer benötigt Entsperrrung (payload: { reason: string })
+         * - "connection-info": Response auf connection-info Anfrage
+         * - "frame-size": Meldet aktuelle iframe Höhe (payload: { height: number })
+         * - "wp-user-key-result": Response auf wp-ensure-user-key Anfrage
+         * 
+         * @param {string} type - Der Nachrichtentyp
+         * @param {object} payload - Die Nachricht-Daten
+         */
         function postBridgeMessage(type, payload) {
             if (window.parent === window) return;
 
@@ -1324,6 +1683,18 @@
             }
         }
 
+        /**
+         * Verarbeitet eingehende PostMessage-Events vom Parent-Frame.
+         * Validiert Origin und Source vor der Verarbeitung.
+         * 
+         * Unterstützte Anfragen:
+         * - "ping": Prüfe ob Signer ready ist → antworte mit connectionInfo oder "locked"
+         * - "get-connection-info": Wie ping
+         * - "request-frame-size": Parent fragt nach neuer Höhe → antworte mit frame-size
+         * - "wp-ensure-user-key": {userId} → erstelle/lade WP User Key → antworte mit wp-user-key-result
+         * 
+         * @param {MessageEvent} event - Das PostMessage-Event vom Parent-Frame
+         */
         function bridgeMessageHandler(event) {
             const targetOrigin = expectedParentOrigin();
             if (!targetOrigin || event.origin !== targetOrigin) return;
@@ -1367,6 +1738,16 @@
             }
         }
 
+        // ===== Permissions-System (Genehmigung für NIP-46 Methoden) =====
+        // Kontrolliert welche Remote-Signaturen durch welche Clients genehmigt sind
+        // Unterstützt sowohl Single-Use (einmalig) als auch TTL-basierte (zeitlich begrenzt) Genehmigungen
+        
+        /**
+         * Lädt die Genehmigungen aus dem localStorage.
+         * Format: { "pubkey:method": expiryTimestamp | PERMISSION_FOREVER, ... }
+         * 
+         * @returns {object} Die geladenen Genehmigungen (oder {} wenn keine vorhanden)
+         */
         function loadPermissions() {
             try {
                 const raw = localStorage.getItem(PERMISSION_STORAGE_KEY);
@@ -1376,14 +1757,33 @@
             }
         }
 
+        /**
+         * Speichert die Genehmigungen im localStorage.
+         * 
+         * @param {object} permissions - Die zu speichernden Genehmigungen
+         */
         function savePermissions(permissions) {
             localStorage.setItem(PERMISSION_STORAGE_KEY, JSON.stringify(permissions));
         }
 
+        /**
+         * Erzeugt einen eindeutigen Key für eine Genehmigung.
+         * Format: "<pubkey>:<method>" (z.B. "abc123....:sign_event")
+         * 
+         * @param {string} pubkey - Der öffentliche Schlüssel des Clients
+         * @param {string} method - Die NIP-46 Methodenname
+         * @returns {string} Der Genehmigungskey
+         */
         function permissionKey(pubkey, method) {
             return `${pubkey}:${method}`;
         }
 
+        /**
+         * Entfernt abgelaufene Genehmigungen aus dem Storage.
+         * Behält nur Genehmigungen die noch nicht expired sind oder ewig gültig (PERMISSION_FOREVER).
+         * 
+         * @returns {object} Die bereinigten Genehmigungen
+         */
         function clearExpiredPermissions() {
             const now = Date.now();
             const permissions = loadPermissions();
@@ -1401,6 +1801,14 @@
             return permissions;
         }
 
+        /**
+         * Prüft ob eine Genehmigung für eine Client-Methode-Kombination aktiv ist.
+         * Entfernt zuerst abgelaufene Genehmigungen.
+         * 
+         * @param {string} pubkey - Der Client-Pubkey
+         * @param {string} method - Die Methodenname
+         * @returns {boolean} true wenn aktiv genehmigt, sonst false
+         */
         function hasActivePermission(pubkey, method) {
             const permissions = clearExpiredPermissions();
             const key = permissionKey(pubkey, method);
@@ -1408,18 +1816,37 @@
             return value === PERMISSION_FOREVER || (typeof value === "number" && value > Date.now());
         }
 
+        /**
+         * Gewährt eine zeitlich begrenzte Genehmigung (TTL - Time To Live).
+         * Diese läuft nach ttlMs Millisekunden ab.
+         * 
+         * @param {string} pubkey - Der Client-Pubkey
+         * @param {string} method - Die Methodenname
+         * @param {number} ttlMs - Millisekunden bis zur Ablauf
+         */
         function grantPermission(pubkey, method, ttlMs) {
             const permissions = clearExpiredPermissions();
             permissions[permissionKey(pubkey, method)] = Date.now() + ttlMs;
             savePermissions(permissions);
         }
 
+        /**
+         * Gewährt eine unbegrenzte Genehmigung (läuft nie ab).
+         * Diese Genehmigung ist permanent bis manuell gelöscht.
+         * 
+         * @param {string} pubkey - Der Client-Pubkey
+         * @param {string} method - Die Methodenname
+         */
         function grantPermissionForever(pubkey, method) {
             const permissions = clearExpiredPermissions();
             permissions[permissionKey(pubkey, method)] = PERMISSION_FOREVER;
             savePermissions(permissions);
         }
 
+        /**
+         * Verarbeitet die Warteschlange ausstehender Genehmigungsanfragen sequenziell.
+         * Zeigt Modal für jede Anfrage an und wartet auf Benutzer-Entscheidung.
+         */
         function processPermissionQueue() {
             if (activePermissionRequest || pendingPermissionRequests.length === 0) return;
 
@@ -1454,6 +1881,13 @@
             );
         }
 
+        /**
+         * Fügt eine Genehmigungsanfrage zur Warteschlange hinzu.
+         * Die Anfrage wird asynchron verarbeitet und wartet auf Benutzer-Entscheidung.
+         * 
+         * @param {object} request - Die NIP-46 request mit {method, pubkey, params}
+         * @returns {Promise<boolean>} true wenn genehmigt, false wenn abgelehnt
+         */
         function requestPermission(request) {
             return new Promise((resolve) => {
                 pendingPermissionRequests.push({ request, resolve });
@@ -1461,12 +1895,32 @@
             });
         }
 
+        // ===== NIP-46 Backend RPC Relay Management =====
+        // Verwaltet die Verbindung zu Relays für NIP-46 RPC-Kommunikation mit Clients
+        // Sichert sicher, dass mindestens ein Relay verbunden ist
+        
+        /**
+         * Zählt die Anzahl der verbundenen RPC-Relays im NIP-46 Backend.
+         * Ein Relay ist verbunden wenn sein Status === 5 (CONNECTED in NDK).
+         * 
+         * @param {NDKNip46Backend} nip46Backend - Das NIP-46 Backend Objekt
+         * @returns {number} Anzahl der verbundenen Relays (0 wenn keine vorhanden)
+         */
         function connectedBackendRpcRelayCount(nip46Backend) {
             const relaysMap = nip46Backend?.rpc?.pool?.relays;
             if (!relaysMap || typeof relaysMap.values !== "function") return 0;
             return Array.from(relaysMap.values()).filter((relay) => relay?.status === 5).length;
         }
 
+        /**
+         * Stellt sicher dass mindestens minConnected Relays verbunden sind.
+         * Wartet bis zum Timeout auf Relay-Verbindungen.
+         * 
+         * @param {NDKNip46Backend} nip46Backend - Das NIP-46 Backend Objekt
+         * @param {number} timeoutMs - Timeout in Millisekunden (default: 7000)
+         * @param {number} minConnected - Minimum erforderliche verbundene Relays (default: 1)
+         * @throws {Error} Wenn Timeout auftritt oder zu wenige Relays verbunden sind
+         */
         async function ensureBackendRpcRelaysConnected(nip46Backend, timeoutMs = 7000, minConnected = 1) {
             const rpcPool = nip46Backend?.rpc?.pool;
             if (!rpcPool || typeof rpcPool.connect !== "function") return;
@@ -1482,6 +1936,16 @@
             }
         }
 
+        /**
+         * Patcht den NIP-46 RPC um Relay-Verbindungen vor Requests zu checksieren.
+         * Dies verhindert dass Requests auf Offline-Relays fehlschlagen.
+         * 
+         * Patcht folgende Methoden:
+         * - sendResponse: Stellt sicher dass mindestens 1 Relay connected ist vor Response
+         * - sendRequest: Stellt sicher dass mindestens 1 Relay connected ist vor Request
+         * 
+         * @param {NDKNip46Backend} nip46Backend - Das NIP-46 Backend Objekt zu patchen
+         */
         function patchBackendRpcReliability(nip46Backend) {
             const rpc = nip46Backend?.rpc;
             if (!rpc || rpc.__reliabilityPatched) return;
@@ -1505,6 +1969,14 @@
             rpc.__reliabilityPatched = true;
         }
 
+        /**
+         * Prüft ob ein Unlock-Fehler wiederholbar ist (sollte erneut versucht werden).
+         * Nicht-wiederholbare Fehler sind definitiv falsch (z.B. ungültiger nsec Format).
+         * Wiederholbare Fehler sind Validierungsfehler die durch Benutzereingabe korrigiert werden können.
+         * 
+         * @param {Error} err - Der zu prüfende Error
+         * @returns {boolean} true wenn der Fehler wiederholbar ist
+         */
         function isRetryableUnlockError(err) {
             const msg = err?.message || "";
             return msg === "Kein Passwort angegeben." ||
@@ -1516,6 +1988,14 @@
                 msg.startsWith("Ungültiger nsec");
         }
 
+        /**
+         * Ruft getOrAskActiveKey auf und wiederholt bei wiederholbaren Fehlern.
+         * Zeigt Benutzern die Möglichkeit Fehler zu korrigieren (z.B. Passwort erneut eingeben).
+         * Nicht-wiederholbare Fehler werden geworfen.
+         * 
+         * @returns {Promise<object>} Das entsperrte Schlüsselobjekt
+         * @throws {Error} Bei nicht-wiederholbarem Fehler
+         */
         async function getOrAskActiveKeyWithRetry() {
             while (true) {
                 try {
@@ -1528,6 +2008,10 @@
             }
         }
 
+        // ===== NIP-46 Signer Startup und Initialisierung =====
+        // Haupteinstiegspunkt: Initialisiert NDK, entsperrt Schlüssel, startete NIP-46 RPC-Backend
+        
+        /**\n         * KRITISCHE FUNKTION: Initialisiert und startet den kompletten NIP-46 Signer.\n         * Dies ist der Einstiegspunkt am Ende des Skriptes.\n         * \n         * Prozess (in Reihenfolge):\n         * 1. NDK mit RELAYS initialisieren\n         * 2. Benutzer-Entsperrrung (mit Retry bei Validierungsfehlern)\n         * 3. Aktiven Schlüssel laden und NDKUser erstellen\n         * 4. Bunker/Nostrconnect URIs generieren\n         * 5. Verbindungsinformationen für Parent bereitstellen\n         * 6. UI aktualisieren (Status, User-Info, ConnectionInfo)\n         * 7. NIP-46 NDKNip46Backend initialisieren mit Permission-Callback\n         * 8. RPC-Relay-Zuverlässigkeit patchen\n         * 9. Relay-Verbindungen gewährleisten\n         * 10. \"ready\" Message an Parent senden\n         * \n         * Permission-Callback logik:\n         * - switch_relays: BLOCKIERT (feste Allowlist)\n         * - AUTO_ALLOW_METHODS: Auto erlaubt (connect, ping, get_public_key)\n         * - Nicht-sensible Methoden: Auto erlaubt\n         * - SENSITIVE_METHODS mit TTL-Genehmigung: Erlaubt wenn noch nicht abgelaufen\n         * - SENSITIVE_METHODEN ohne TTL: Frage Benutzer via Modal\n         * \n         * @throws {Error} Bei Entsperrrung fehlgeschlagen, NDK/Relay Fehler, oder NIP-46 Backend Start Fehler\n         */
         async function startSigner() {
             const ndk = new NDK({ explicitRelayUrls: RELAYS });
             await ndk.connect();
@@ -1615,6 +2099,15 @@
             console.log("Nostrconnect URI:", nostrconnectUri);
         }
 
+        // ===== Modal UI Hilfsfunktionen =====
+        
+        /**
+         * Erzeugt einen benutzerfreundlichen Titel für eine NIP-46 Request-Methode.
+         * Wird im Modal als Fragestellung angezeigt.
+         * 
+         * @param {string} method - Die NIP-46 Methodenname
+         * @returns {string} Ein benutzerfreundlicher Titel (z.B. "Signieren und senden?")
+         */
         function humanRequestTitle(method) {
             if (method === "sign_event") return "Signieren und senden?";
             if (method === "connect") return "Verbindung erlauben?";
@@ -1624,6 +2117,15 @@
             return `Anfrage: ${method}`;
         }
 
+        /**
+         * Zeigt ein Modal-Fenster für eine NIP-46 Genehmigungsanfrage.
+         * Der Benutzer kann "einmal erlauben", "immer erlauben" oder "ablehnen" auswählen.
+         * 
+         * @param {object} req - Die NIP-46 Request mit method, pubkey, params
+         * @param {function} onAllowOnce - Callback für "einmal erlauben" (this session only)
+         * @param {function} onAllowAlways - Callback für "immer erlauben" (permanent)
+         * @param {function} onReject - Callback für "ablehnen"
+         */
         function showModal(req, onAllowOnce, onAllowAlways, onReject) {
             document.getElementById("request-title").innerText = humanRequestTitle(req.method);
             document.getElementById("request-details").innerText =
@@ -1649,17 +2151,27 @@
             };
         }
 
+        /**
+         * Versteckt das Modal-Fenster und Overlay.
+         */
         function hideModal() {
             document.getElementById("overlay").style.display = "none";
             document.getElementById("auth-modal").style.display = "none";
             scheduleFrameSizeNotification(true);
         }
 
+        // ===== Initialization und Event Listener Setup =====
+        // Diese Zeilen richten alle Event-Listener auf und starten den Signer
+        
         setupTabNavigation();
         setupKeyManagerHandlers();
         setupFrameAutoResizeBridge();
         window.addEventListener("message", bridgeMessageHandler);
 
+        /**
+         * Startet den kompletten Signer Prozess.
+         * Bei Fehler wird die Fehlermeldung im Status-Display angezeigt.
+         */
         startSigner().catch((err) => {
             console.error(err);
             setCompactConnectedMode(false);
