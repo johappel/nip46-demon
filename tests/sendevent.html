@@ -1,0 +1,228 @@
+﻿<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NIP-46 Send Event Test</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            padding: 20px;
+            background: #121212;
+            color: #fff;
+            max-width: 900px;
+            margin: 0 auto;
+        }
+        .card {
+            background: #1d1d1d;
+            border: 1px solid #333;
+            border-radius: 10px;
+            padding: 16px;
+            margin-bottom: 14px;
+        }
+        .label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+        }
+        input, textarea, button {
+            width: 100%;
+            box-sizing: border-box;
+            border-radius: 8px;
+            border: 1px solid #444;
+            background: #0f0f0f;
+            color: #fff;
+            padding: 10px;
+            margin-bottom: 10px;
+        }
+        textarea {
+            min-height: 110px;
+            resize: vertical;
+        }
+        button {
+            cursor: pointer;
+            border: none;
+            background: #2a7fff;
+            font-weight: 700;
+        }
+        button[disabled] {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        pre {
+            margin: 0;
+            white-space: pre-wrap;
+            word-break: break-word;
+            background: #0f0f0f;
+            border: 1px solid #333;
+            border-radius: 8px;
+            padding: 10px;
+        }
+        .ok { color: #7ee787; }
+        .err { color: #ff7b72; }
+    </style>
+</head>
+<body>
+    <h1>NIP-46 Sender</h1>
+
+    <div class="card">
+        <label class="label" for="conn-uri">Connection URI</label>
+        <input
+            id="conn-uri"
+            value="nostrconnect://5bde8d1b544f39e4f54127590460c72159d2e7dbd6fa88f826e720ad189c7caa?relay=wss%3A%2F%2Frelay.damus.io"
+        />
+        <button id="connect-btn">Mit Signer verbinden</button>
+        <div id="status">Nicht verbunden</div>
+        <pre id="user"></pre>
+    </div>
+
+    <div class="card">
+        <label class="label" for="content">Event-Content (Kind 1)</label>
+        <textarea id="content">Hallo von sendevent.html</textarea>
+        <button id="send-btn" disabled>Event senden</button>
+        <pre id="result"></pre>
+    </div>
+
+    <script type="module">
+        import NDK, { NDKEvent, NDKNip46Signer } from "https://esm.sh/@nostr-dev-kit/ndk@3.0.0";
+
+        const connInput = document.getElementById("conn-uri");
+        const connectBtn = document.getElementById("connect-btn");
+        const sendBtn = document.getElementById("send-btn");
+        const statusEl = document.getElementById("status");
+        const userEl = document.getElementById("user");
+        const resultEl = document.getElementById("result");
+        const contentEl = document.getElementById("content");
+
+        let ndk;
+        let signer;
+
+        function toBunkerUri(uri, relays = []) {
+            const url = new URL(uri);
+
+            if (url.protocol === "bunker:") {
+                const pubkey = url.hostname || url.pathname.replace(/^\/+/, "");
+                const out = new URLSearchParams(url.searchParams);
+                const mergedRelays = new Set([...out.getAll("relay"), ...relays]);
+                out.delete("relay");
+                for (const relay of mergedRelays) out.append("relay", relay);
+                const qs = out.toString();
+                return `bunker://${pubkey}${qs ? `?${qs}` : ""}`;
+            }
+
+            if (url.protocol !== "nostrconnect:") {
+                throw new Error("URI muss mit nostrconnect:// oder bunker:// beginnen.");
+            }
+
+            const pubkey = url.hostname || url.pathname.replace(/^\/+/, "");
+            if (!pubkey) throw new Error("Kein Pubkey in URI gefunden.");
+
+            const out = new URLSearchParams();
+            const mergedRelays = new Set([...url.searchParams.getAll("relay"), ...relays]);
+            for (const relay of mergedRelays) out.append("relay", relay);
+
+            const secret = url.searchParams.get("secret");
+            if (secret) out.set("secret", secret);
+
+            const qs = out.toString();
+            return `bunker://${pubkey}${qs ? `?${qs}` : ""}`;
+        }
+
+        function relayUrlsFromUri(uri) {
+            const url = new URL(uri);
+            const relays = url.searchParams.getAll("relay");
+            const merged = new Set([
+                ...relays,
+                "wss://relay.damus.io",
+                "wss://nos.lol"
+            ]);
+            return Array.from(merged);
+        }
+
+        function setStatus(text, isError = false) {
+            statusEl.textContent = text;
+            statusEl.className = isError ? "err" : "ok";
+        }
+
+        function withTimeout(promise, ms, stepName) {
+            let timer;
+            const timeoutPromise = new Promise((_, reject) => {
+                timer = setTimeout(() => {
+                    reject(new Error(`${stepName} Timeout nach ${ms}ms`));
+                }, ms);
+            });
+
+            return Promise.race([promise, timeoutPromise]).finally(() => {
+                clearTimeout(timer);
+            });
+        }
+
+        async function connectSigner() {
+            try {
+                setStatus("Verbinde...");
+                resultEl.textContent = "";
+
+                const rawUri = connInput.value.trim();
+                const relays = relayUrlsFromUri(rawUri);
+                const bunkerUri = toBunkerUri(rawUri, relays);
+
+                ndk = new NDK({ explicitRelayUrls: relays });
+                setStatus(`Verbinde ueber: ${relays.join(", ")}`);
+                await ndk.connect();
+
+                signer = NDKNip46Signer.bunker(ndk, bunkerUri);
+                const user = await signer.blockUntilReady();
+
+                setStatus("Verbunden");
+                userEl.textContent = `npub: ${user.npub}\npubkey: ${user.pubkey}\nrelay: ${relays.join(", ")}`;
+                sendBtn.disabled = false;
+            } catch (err) {
+                console.error(err);
+                sendBtn.disabled = true;
+                setStatus(`Fehler: ${err.message}`, true);
+            }
+        }
+
+        async function sendEvent() {
+            try {
+                if (!ndk || !signer) throw new Error("Nicht verbunden.");
+                sendBtn.disabled = true;
+                connectBtn.disabled = true;
+                resultEl.textContent = "Starte Senden...";
+
+                const event = new NDKEvent(ndk, {
+                    kind: 1,
+                    created_at: Math.floor(Date.now() / 1000),
+                    content: contentEl.value,
+                    tags: []
+                });
+
+                resultEl.textContent = "Warte auf Signatur-Freigabe im Signer-Tab...";
+                await withTimeout(event.sign(signer), 20000, "sign_event");
+
+                resultEl.textContent = "Signiert, publiziere auf Relays...";
+                const publishedTo = await withTimeout(
+                    event.publish(undefined, 8000, 1),
+                    15000,
+                    "publish"
+                );
+
+                resultEl.textContent =
+                    `Gesendet.\n` +
+                    `id: ${event.id}\n` +
+                    `an Relays: ${Array.from(publishedTo).map((r) => r.url).join(", ") || "(unbekannt)"}`;
+            } catch (err) {
+                console.error(err);
+                resultEl.textContent = `Fehler beim Senden: ${err.message}`;
+            } finally {
+                sendBtn.disabled = false;
+                connectBtn.disabled = false;
+            }
+        }
+
+        connectBtn.addEventListener("click", connectSigner);
+        sendBtn.addEventListener("click", sendEvent);
+    </script>
+</body>
+</html>
+

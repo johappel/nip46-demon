@@ -1,0 +1,171 @@
+﻿<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <title>JS Nostr Signer (No-Popup)</title>
+    <style>
+        body { font-family: sans-serif; padding: 20px; background: #121212; color: white; }
+        #auth-modal {
+            display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            background: #222; padding: 20px; border: 1px solid #444; border-radius: 8px; z-index: 1000;
+        }
+        .overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); }
+        button { cursor: pointer; padding: 10px 20px; margin: 5px; border-radius: 5px; border: none; }
+        .btn-approve { background: #28a745; color: white; }
+        .btn-reject { background: #dc3545; color: white; }
+    </style>
+</head>
+<body>
+
+    <h1>NIP-46 JS Signer</h1>
+    <div id="status">Verbinde mit Relay...</div>
+    <div id="user-info"></div>
+    <pre id="request-log"></pre>
+
+    <div id="overlay" class="overlay"></div>
+    <div id="auth-modal">
+        <h3 id="request-title">Signier-Anfrage</h3>
+        <p id="request-details"></p>
+        <button class="btn-approve" id="approve-btn">Erlauben</button>
+        <button class="btn-reject" id="reject-btn">Ablehnen</button>
+    </div>
+
+    <script type="module">
+        import NDK, { NDKNip46Backend, NDKPrivateKeySigner } from "https://esm.sh/@nostr-dev-kit/ndk@3.0.0";
+
+        const NSEC_STORAGE_KEY = "nip46_demo_nsec";
+        const RELAYS = ["wss://relay.damus.io", "wss://nos.lol"];
+        const AUTO_APPROVE_SIGN_EVENT = true;
+
+        function getOrAskNsec() {
+            const stored = localStorage.getItem(NSEC_STORAGE_KEY);
+            if (stored && stored.startsWith("nsec1") && stored.length > 20) return stored;
+
+            const input = prompt("Bitte gib deinen nsec ein (nsec1...):", "");
+            if (!input) throw new Error("Kein nsec angegeben.");
+
+            const nsec = input.trim();
+            if (!nsec.startsWith("nsec1") || nsec.length <= 20) {
+                throw new Error("Ungültiger nsec. Erwartet wird ein kompletter nsec1...-Wert.");
+            }
+
+            localStorage.setItem(NSEC_STORAGE_KEY, nsec);
+            return nsec;
+        }
+
+        function formatRequestParams(request) {
+            const params = request?.params;
+            if (!params) return "(keine)";
+
+            try {
+                if (request.method === "sign_event" && typeof params.rawEvent === "function") {
+                    return JSON.stringify(params.rawEvent(), null, 2);
+                }
+
+                if (typeof params === "string") return params;
+                return JSON.stringify(params, null, 2);
+            } catch (_err) {
+                return "[Parameter konnten nicht serialisiert werden]";
+            }
+        }
+
+        function requestPermission(request) {
+            return new Promise((resolve) => {
+                showModal(
+                    request,
+                    () => resolve(true),
+                    () => resolve(false)
+                );
+            });
+        }
+
+        function appendRequestLog(line) {
+            const logEl = document.getElementById("request-log");
+            const now = new Date().toLocaleTimeString();
+            logEl.innerText = `[${now}] ${line}\n${logEl.innerText}`.trim();
+        }
+
+        async function startSigner() {
+            const ndk = new NDK({ explicitRelayUrls: RELAYS });
+            await ndk.connect();
+
+            const nsec = getOrAskNsec();
+            const localSigner = new NDKPrivateKeySigner(nsec);
+            const user = await localSigner.user();
+
+            const relay = encodeURIComponent(RELAYS[0]);
+            const bunkerUri = `bunker://${user.pubkey}?relay=${relay}`;
+            const nostrconnectUri = `nostrconnect://${user.pubkey}?relay=${relay}`;
+
+            document.getElementById("status").innerText = "Bereit für Anfragen";
+            document.getElementById("user-info").innerText =
+                `Aktiv als: ${user.npub.substring(0, 12)}...\n` +
+                `Bunker URI: ${bunkerUri}\n` +
+                `Nostrconnect URI: ${nostrconnectUri}`;
+
+            const nip46Backend = new NDKNip46Backend(
+                ndk,
+                localSigner,
+                async (request) => {
+                    console.log("NIP-46 Anfrage:", request);
+                    const method = request?.method;
+                    appendRequestLog(`Methode: ${method} von ${request?.pubkey?.slice(0, 12) || "?"}...`);
+                    const needsUserApproval = new Set([
+                        "sign_event",
+                        "nip04_encrypt",
+                        "nip04_decrypt",
+                        "nip44_encrypt",
+                        "nip44_decrypt"
+                    ]);
+
+                    if (AUTO_APPROVE_SIGN_EVENT && method === "sign_event") {
+                        appendRequestLog("sign_event automatisch erlaubt");
+                        return true;
+                    }
+
+                    if (!needsUserApproval.has(method)) {
+                        // Handshake/Meta-Methoden automatisch erlauben.
+                        return true;
+                    }
+
+                    return requestPermission(request);
+                },
+                RELAYS
+            );
+
+            await nip46Backend.start();
+            console.log("Bunker URI:", bunkerUri);
+            console.log("Nostrconnect URI:", nostrconnectUri);
+        }
+
+        function showModal(req, onApprove, onReject) {
+            document.getElementById("request-title").innerText = `Anfrage: ${req.method}`;
+            document.getElementById("request-details").innerText =
+                `Methode: ${req.method}\nParameter: ${formatRequestParams(req)}`;
+
+            document.getElementById("overlay").style.display = "block";
+            document.getElementById("auth-modal").style.display = "block";
+
+            document.getElementById("approve-btn").onclick = () => {
+                hideModal();
+                onApprove();
+            };
+
+            document.getElementById("reject-btn").onclick = () => {
+                hideModal();
+                onReject();
+            };
+        }
+
+        function hideModal() {
+            document.getElementById("overlay").style.display = "none";
+            document.getElementById("auth-modal").style.display = "none";
+        }
+
+        startSigner().catch((err) => {
+            console.error(err);
+            document.getElementById("status").innerText = `Fehler: ${err.message}`;
+        });
+    </script>
+</body>
+</html>
