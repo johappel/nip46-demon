@@ -255,6 +255,7 @@
         const UNLOCK_CACHE_SESSION_KEY = "nip46_unlock_cache_session_v1";
         const UNLOCK_CACHE_TTL_KEY = "nip46_unlock_cache_ttl_v1";
         const PERMISSION_STORAGE_KEY = "nip46_permissions_v1";
+        const WP_USER_BINDINGS_STORAGE_KEY = "nip46_wp_user_bindings_v1";
         const RELAYS = [
             "wss://relay.damus.io",
             "wss://nos.lol",
@@ -493,6 +494,47 @@
             localStorage.setItem(ACTIVE_KEY_ID_STORAGE_KEY, id);
         }
 
+        function normalizeWpUserId(userId) {
+            const normalized = String(userId ?? "").trim();
+            if (!normalized) throw new Error("userId fehlt.");
+            if (normalized.length > 128) throw new Error("userId ist zu lang (max. 128 Zeichen).");
+            return normalized;
+        }
+
+        function wpBindingLabelForUser(userId) {
+            const compact = String(userId)
+                .toLowerCase()
+                .replace(/[^a-z0-9._-]+/g, "-")
+                .replace(/-+/g, "-")
+                .replace(/^-|-$/g, "");
+            return compact ? `WP ${compact}` : "WP User Key";
+        }
+
+        function loadWpUserBindings() {
+            try {
+                const raw = localStorage.getItem(WP_USER_BINDINGS_STORAGE_KEY);
+                if (!raw) return { v: 1, byUserId: {} };
+                const parsed = JSON.parse(raw);
+                if (!parsed || parsed.v !== 1 || typeof parsed.byUserId !== "object" || parsed.byUserId === null) {
+                    return { v: 1, byUserId: {} };
+                }
+
+                const sanitized = {};
+                for (const [userId, keyId] of Object.entries(parsed.byUserId)) {
+                    if (typeof userId === "string" && userId && typeof keyId === "string" && keyId) {
+                        sanitized[userId] = keyId;
+                    }
+                }
+                return { v: 1, byUserId: sanitized };
+            } catch (_err) {
+                return { v: 1, byUserId: {} };
+            }
+        }
+
+        function saveWpUserBindings(bindings) {
+            localStorage.setItem(WP_USER_BINDINGS_STORAGE_KEY, JSON.stringify(bindings));
+        }
+
         function clearUnlockCache() {
             sessionStorage.removeItem(UNLOCK_CACHE_SESSION_KEY);
             localStorage.removeItem(UNLOCK_CACHE_TTL_KEY);
@@ -610,6 +652,60 @@
                 name: normalizeKeyName(name),
                 createdAt: Date.now(),
                 payload: await encryptNsec(nsec, password)
+            };
+        }
+
+        async function ensureWpUserKey(userIdRaw) {
+            if (!currentKeyring || !sessionPassword) {
+                throw new Error("Signer ist gesperrt. Bitte zuerst entsperren.");
+            }
+
+            const userId = normalizeWpUserId(userIdRaw);
+            const bindings = loadWpUserBindings();
+            const boundKeyId = bindings.byUserId[userId];
+
+            if (boundKeyId) {
+                const existingIndex = currentKeyring.keys.findIndex((entry) => entry.id === boundKeyId);
+                if (existingIndex >= 0) {
+                    const existingEntry = currentKeyring.keys[existingIndex];
+                    const existingNsec = await decryptNsec(existingEntry.payload, sessionPassword);
+                    if (!isValidNsec(existingNsec)) {
+                        throw new Error("Gebundener Schlüssel ist ungültig.");
+                    }
+                    const existingUser = await new NDKPrivateKeySigner(existingNsec).user();
+                    appendRequestLog(`WP-Binding gefunden: ${userId} -> ${keyDisplayName(existingEntry, existingIndex)}`);
+                    return {
+                        userId,
+                        keyId: existingEntry.id,
+                        keyName: keyDisplayName(existingEntry, existingIndex),
+                        pubkey: existingUser.pubkey,
+                        npub: existingUser.npub,
+                        existed: true,
+                        active: existingEntry.id === activeKeyId
+                    };
+                }
+                delete bindings.byUserId[userId];
+            }
+
+            const nsec = generateRandomNsec();
+            const newEntry = await createKeyringEntry(nsec, sessionPassword, wpBindingLabelForUser(userId));
+            currentKeyring.keys.push(newEntry);
+            saveKeyring(currentKeyring);
+
+            bindings.byUserId[userId] = newEntry.id;
+            saveWpUserBindings(bindings);
+
+            const createdUser = await new NDKPrivateKeySigner(nsec).user();
+            appendRequestLog(`WP-Binding erstellt: ${userId} -> ${keyDisplayName(newEntry, currentKeyring.keys.length - 1)}`);
+            renderKeyManager();
+            return {
+                userId,
+                keyId: newEntry.id,
+                keyName: keyDisplayName(newEntry, currentKeyring.keys.length - 1),
+                pubkey: createdUser.pubkey,
+                npub: createdUser.npub,
+                existed: false,
+                active: newEntry.id === activeKeyId
             };
         }
 
@@ -1246,6 +1342,28 @@
                 } else {
                     postBridgeMessage("locked", { reason: "Signer ist noch gesperrt." });
                 }
+                return;
+            }
+
+            if (data.type === "wp-ensure-user-key") {
+                const requestId = typeof data?.payload?.requestId === "string" ? data.payload.requestId : "";
+                const userId = data?.payload?.userId;
+                (async () => {
+                    try {
+                        const ensured = await ensureWpUserKey(userId);
+                        postBridgeMessage("wp-user-key-result", {
+                            requestId,
+                            ok: true,
+                            ...ensured
+                        });
+                    } catch (err) {
+                        postBridgeMessage("wp-user-key-result", {
+                            requestId,
+                            ok: false,
+                            error: err?.message || "WP-Key konnte nicht bereitgestellt werden."
+                        });
+                    }
+                })();
             }
         }
 
