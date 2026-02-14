@@ -84,7 +84,7 @@
         <label class="label" for="conn-uri">Connection URI</label>
         <input
             id="conn-uri"
-            value="nostrconnect://5bde8d1b544f39e4f54127590460c72159d2e7dbd6fa88f826e720ad189c7caa?relay=wss%3A%2F%2Frelay.damus.io"
+            value="nostrconnect://5bde8d1b544f39e4f54127590460c72159d2e7dbd6fa88f826e720ad189c7caa?relay=wss%3A%2F%2Frelay.damus.io&relay=wss%3A%2F%2Fnos.lol&relay=wss%3A%2F%2Frelay.primal.net&relay=wss%3A%2F%2Frelay.snort.social"
         />
         <button id="connect-btn">Mit Signer verbinden</button>
         <div id="status">Nicht verbunden</div>
@@ -99,10 +99,16 @@
     </div>
 
     <script type="module">
-        import NDK, { NDKEvent, NDKNip46Signer, NDKPrivateKeySigner } from "https://esm.sh/@nostr-dev-kit/ndk@3.0.0";
+        import NDK, { NDKEvent, NDKNip46Signer, NDKPrivateKeySigner, NDKRelaySet } from "https://esm.sh/@nostr-dev-kit/ndk@3.0.0?bundle&target=es2022";
 
         const NSEC_STORAGE_KEY = "nip46_demo_nsec";
         const BRIDGE_SOURCE = "nip46-signer-bridge";
+        const DEFAULT_RELAYS = [
+            "wss://relay.damus.io",
+            "wss://nos.lol",
+            "wss://relay.primal.net",
+            "wss://relay.snort.social"
+        ];
         const connInput = document.getElementById("conn-uri");
         const signerUrlInput = document.getElementById("signer-url");
         const embedSignerInput = document.getElementById("embed-signer");
@@ -118,6 +124,8 @@
         let ndk;
         let signer;
         let signerFrameOrigin = null;
+        let lastBridgeConnectionInfo = null;
+        let activeRelayUrls = [];
 
         function toBunkerUri(uri, relays = []) {
             const url = new URL(uri);
@@ -155,10 +163,27 @@
             const relays = url.searchParams.getAll("relay");
             const merged = new Set([
                 ...relays,
-                "wss://relay.damus.io",
-                "wss://nos.lol"
+                ...DEFAULT_RELAYS
             ]);
             return Array.from(merged);
+        }
+
+        function canonicalRelayUrl(url) {
+            try {
+                return new URL(url).toString().replace(/\/$/, "");
+            } catch (_err) {
+                return String(url || "");
+            }
+        }
+
+        function uniqueRelayUrls(relays) {
+            const map = new Map();
+            for (const relay of relays || []) {
+                const key = canonicalRelayUrl(relay);
+                if (!key) continue;
+                if (!map.has(key)) map.set(key, relay);
+            }
+            return Array.from(map.values());
         }
 
         async function hydrateUriFromLocalSigner() {
@@ -169,8 +194,7 @@
                 const localSigner = new NDKPrivateKeySigner(nsec);
                 const user = await localSigner.user();
                 const relayQuery = [
-                    "relay=" + encodeURIComponent("wss://relay.damus.io"),
-                    "relay=" + encodeURIComponent("wss://nos.lol")
+                    ...DEFAULT_RELAYS.map((relay) => "relay=" + encodeURIComponent(relay))
                 ].join("&");
                 connInput.value = `nostrconnect://${user.pubkey}?${relayQuery}`;
             } catch (_err) {
@@ -206,6 +230,7 @@
             if (typeof info.nostrconnectUri === "string" && info.nostrconnectUri.startsWith("nostrconnect://")) {
                 connInput.value = info.nostrconnectUri;
             }
+            lastBridgeConnectionInfo = info;
         }
 
         function requestConnectionInfoFromIframe(timeoutMs = 3000) {
@@ -228,10 +253,14 @@
                     if (event.origin !== signerFrameOrigin) return;
                     const data = event.data;
                     if (!data || data.source !== BRIDGE_SOURCE) return;
-                    if (data.type !== "ready" && data.type !== "connection-info") return;
+                    if (data.type !== "ready" && data.type !== "connection-info" && data.type !== "locked") return;
 
                     clearTimeout(timeout);
                     window.removeEventListener("message", onMessage);
+                    if (data.type === "locked") {
+                        reject(new Error(data.payload?.reason || "Signer ist gesperrt."));
+                        return;
+                    }
                     resolve(data.payload);
                 }
 
@@ -247,9 +276,15 @@
             if (!signerFrameOrigin || event.origin !== signerFrameOrigin) return;
             const data = event.data;
             if (!data || data.source !== BRIDGE_SOURCE) return;
-            if (data.type !== "ready" && data.type !== "connection-info") return;
+            if (data.type !== "ready" && data.type !== "connection-info" && data.type !== "locked") return;
+
+            if (data.type === "locked") {
+                setStatus(`Signer gesperrt: ${data.payload?.reason || "Bitte entsperren."}`, true);
+                return;
+            }
 
             applyConnectionInfo(data.payload);
+            setStatus("Signer bereit (Bridge).");
         }
 
         function withTimeout(promise, ms, stepName) {
@@ -265,30 +300,155 @@
             });
         }
 
+        function patchRpcSubscribeNoEose(nip46Signer) {
+            const rpc = nip46Signer?.rpc;
+            if (!rpc || rpc.__noEosePatched) return;
+
+            const originalSubscribe = rpc.subscribe?.bind(rpc);
+            if (typeof originalSubscribe !== "function") return;
+
+            rpc.subscribe = function subscribeNoEose(filter) {
+                return new Promise((resolve) => {
+                    const sub = this.ndk.subscribe(filter, {
+                        closeOnEose: false,
+                        groupable: false,
+                        cacheUsage: "ONLY_RELAY",
+                        pool: this.pool,
+                        relaySet: this.relaySet,
+                        onEvent: async (event) => {
+                            try {
+                                const parsedEvent = await this.parseEvent(event);
+                                if (parsedEvent.method) {
+                                    this.emit("request", parsedEvent);
+                                } else {
+                                    this.emit(`response-${parsedEvent.id}`, parsedEvent);
+                                    this.emit("response", parsedEvent);
+                                }
+                            } catch (e) {
+                                this.debug?.("error parsing event", e, event.rawEvent?.());
+                            }
+                        }
+                    });
+                    resolve(sub);
+                });
+            };
+
+            rpc.__noEosePatched = true;
+            rpc.__originalSubscribe = originalSubscribe;
+        }
+
+        function connectedRpcRelayCount(nip46Signer) {
+            const relaysMap = nip46Signer?.rpc?.pool?.relays;
+            if (!relaysMap || typeof relaysMap.values !== "function") return 0;
+            return Array.from(relaysMap.values()).filter((relay) => relay?.status === 5).length;
+        }
+
+        async function ensureRpcRelaysConnected(nip46Signer, timeoutMs = 8000, minConnected = 1) {
+            const rpcPool = nip46Signer?.rpc?.pool;
+            if (!rpcPool || typeof rpcPool.connect !== "function") return;
+
+            await withTimeout(rpcPool.connect(timeoutMs), timeoutMs + 1500, "rpc pool connect");
+
+            const connected = connectedRpcRelayCount(nip46Signer);
+            if (connected < minConnected) {
+                throw new Error(`Keine RPC-Relay-Verbindung (${connected}/${minConnected})`);
+            }
+        }
+
+        function enforceRelayAllowlist(nip46Signer, allowedRelays) {
+            const allowed = new Set(uniqueRelayUrls(allowedRelays).map(canonicalRelayUrl));
+
+            if (typeof nip46Signer.switchRelays === "function") {
+                nip46Signer.switchRelays = async () => {};
+            }
+
+            const rpc = nip46Signer?.rpc;
+            if (!rpc) return;
+
+            if (typeof rpc.updateRelays === "function") {
+                const originalUpdateRelays = rpc.updateRelays.bind(rpc);
+                rpc.updateRelays = (urls) => {
+                    const filtered = uniqueRelayUrls((urls || []).filter((u) => allowed.has(canonicalRelayUrl(u))));
+                    if (filtered.length === 0) return;
+                    originalUpdateRelays(filtered);
+                };
+            }
+        }
+
+        function buildFixedRelaySet(ndkInstance, relays) {
+            const relayObjs = uniqueRelayUrls(relays)
+                .map((url) => ndkInstance.pool.getRelay(url, true, false))
+                .filter(Boolean);
+            return new NDKRelaySet(new Set(relayObjs), ndkInstance, ndkInstance.pool);
+        }
+
         async function connectSigner() {
             try {
                 setStatus("Verbinde...");
                 resultEl.textContent = "";
 
+                let bridgeInfo = null;
                 if (embedSignerInput.checked) {
                     try {
-                        const info = await requestConnectionInfoFromIframe();
-                        applyConnectionInfo(info);
+                        bridgeInfo = await requestConnectionInfoFromIframe();
+                        applyConnectionInfo(bridgeInfo);
                     } catch (err) {
-                        console.warn("Bridge sync fehlgeschlagen:", err);
+                        setStatus(`Signer nicht bereit: ${err.message}`, true);
+                        return;
                     }
                 }
 
-                const rawUri = connInput.value.trim();
-                const relays = relayUrlsFromUri(rawUri);
-                const bunkerUri = toBunkerUri(rawUri, relays);
+                let relays;
+                let bunkerUri;
+
+                if (bridgeInfo?.bunkerUri && Array.isArray(bridgeInfo?.relays) && bridgeInfo.relays.length > 0) {
+                    relays = uniqueRelayUrls(bridgeInfo.relays);
+                    bunkerUri = bridgeInfo.bunkerUri;
+                    resultEl.textContent = "Bridge-Connection-Info wird verwendet.";
+                } else if (lastBridgeConnectionInfo?.bunkerUri && Array.isArray(lastBridgeConnectionInfo?.relays) && lastBridgeConnectionInfo.relays.length > 0) {
+                    relays = uniqueRelayUrls(lastBridgeConnectionInfo.relays);
+                    bunkerUri = lastBridgeConnectionInfo.bunkerUri;
+                    resultEl.textContent = "Zuletzt bekannte Bridge-Connection-Info wird verwendet.";
+                } else {
+                    const rawUri = connInput.value.trim();
+                    relays = uniqueRelayUrls(relayUrlsFromUri(rawUri));
+                    bunkerUri = toBunkerUri(rawUri, relays);
+                    resultEl.textContent = "URI aus Eingabefeld wird verwendet.";
+                }
+                activeRelayUrls = relays;
 
                 ndk = new NDK({ explicitRelayUrls: relays });
                 setStatus(`Verbinde ueber: ${relays.join(", ")}`);
-                await ndk.connect();
+                await withTimeout(ndk.connect(), 10000, "relay connect");
 
                 signer = NDKNip46Signer.bunker(ndk, bunkerUri);
-                const user = await signer.blockUntilReady();
+                patchRpcSubscribeNoEose(signer);
+                enforceRelayAllowlist(signer, relays);
+                setStatus("Verbinde RPC-Relays...");
+                await ensureRpcRelaysConnected(signer, 8000, 1);
+                let user;
+                try {
+                    setStatus("NIP-46 Handshake läuft...");
+                    user = await withTimeout(signer.blockUntilReady(), 12000, "nip46 connect");
+                } catch (handshakeErr) {
+                    console.warn("Handshake fehlgeschlagen, fallback aktiv:", handshakeErr);
+                    resultEl.textContent = `Handshake fehlgeschlagen (${handshakeErr.message}), nutze Fallback...`;
+                    setStatus("Fallback: Direktmodus...");
+
+                    if (typeof signer.startListening === "function") {
+                        await withTimeout(signer.startListening(), 5000, "startListening");
+                    }
+
+                    let pubkey = bridgeInfo?.pubkey || lastBridgeConnectionInfo?.pubkey;
+                    if (!pubkey && typeof signer.getPublicKey === "function") {
+                        pubkey = await withTimeout(signer.getPublicKey(), 8000, "get_public_key");
+                    }
+                    if (!pubkey) throw handshakeErr;
+
+                    if ("userPubkey" in signer) signer.userPubkey = pubkey;
+                    if ("_user" in signer) signer._user = ndk.getUser({ pubkey });
+                    user = ndk.getUser({ pubkey });
+                }
 
                 setStatus("Verbunden");
                 userEl.textContent = `npub: ${user.npub}\npubkey: ${user.pubkey}\nrelay: ${relays.join(", ")}`;
@@ -296,6 +456,7 @@
             } catch (err) {
                 console.error(err);
                 sendBtn.disabled = true;
+                resultEl.textContent = `Connect fehlgeschlagen: ${err.message}`;
                 setStatus(`Fehler: ${err.message}`, true);
             }
         }
@@ -306,6 +467,9 @@
                 sendBtn.disabled = true;
                 connectBtn.disabled = true;
                 resultEl.textContent = "Starte Senden...";
+
+                setStatus("Prüfe RPC-Relays...");
+                await ensureRpcRelaysConnected(signer, 6000, 1);
 
                 const event = new NDKEvent(ndk, {
                     kind: 1,
@@ -318,8 +482,9 @@
                 await withTimeout(event.sign(signer), 20000, "sign_event");
 
                 resultEl.textContent = "Signiert, publiziere auf Relays...";
+                const relaySet = buildFixedRelaySet(ndk, activeRelayUrls);
                 const publishedTo = await withTimeout(
-                    event.publish(undefined, 8000, 1),
+                    event.publish(relaySet, 8000, 1),
                     15000,
                     "publish"
                 );
@@ -374,4 +539,3 @@
     </script>
 </body>
 </html>
-

@@ -6,6 +6,26 @@
     <title>JS Nostr Signer (No-Popup)</title>
     <style>
         body { font-family: sans-serif; padding: 20px; background: #121212; color: white; }
+        #unlock-panel {
+            margin-top: 12px;
+            padding: 12px;
+            background: #171717;
+            border: 1px solid #333;
+            border-radius: 8px;
+            display: none;
+        }
+        #unlock-panel input {
+            width: 100%;
+            box-sizing: border-box;
+            margin-top: 6px;
+            margin-bottom: 10px;
+            padding: 8px 10px;
+            border-radius: 6px;
+            border: 1px solid #444;
+            background: #0f0f0f;
+            color: #fff;
+        }
+        #unlock-panel p { margin: 0 0 10px 0; color: #bbb; }
         #request-log {
             margin-top: 12px;
             padding: 10px;
@@ -35,6 +55,26 @@
     <h1>NIP-46 JS Signer</h1>
     <div id="status">Verbinde mit Relay...</div>
     <div id="user-info"></div>
+    <div id="unlock-panel">
+        <h3 id="unlock-title">Signer entsperren</h3>
+        <p id="unlock-hint"></p>
+        <div id="unlock-nsec-row">
+            <label for="unlock-nsec-input">nsec</label>
+            <input id="unlock-nsec-input" placeholder="nsec1..." />
+        </div>
+        <div id="unlock-password-row">
+            <label for="unlock-password-input">Passwort</label>
+            <input id="unlock-password-input" type="password" placeholder="Passwort" />
+        </div>
+        <div id="unlock-password-confirm-row">
+            <label for="unlock-password-confirm-input">Passwort wiederholen</label>
+            <input id="unlock-password-confirm-input" type="password" placeholder="Passwort wiederholen" />
+        </div>
+        <div class="button-row">
+            <button class="btn-approve" id="unlock-submit-btn">Weiter</button>
+            <button class="btn-reject" id="unlock-cancel-btn">Abbrechen</button>
+        </div>
+    </div>
     <pre id="request-log"></pre>
 
     <div id="overlay" class="overlay"></div>
@@ -50,13 +90,20 @@
     </div>
 
     <script type="module">
-        import NDK, { NDKNip46Backend, NDKPrivateKeySigner } from "https://esm.sh/@nostr-dev-kit/ndk@3.0.0";
+        import NDK, { NDKNip46Backend, NDKPrivateKeySigner } from "https://esm.sh/@nostr-dev-kit/ndk@3.0.0?bundle&target=es2022";
 
-        const NSEC_STORAGE_KEY = "nip46_demo_nsec";
+        const LEGACY_NSEC_STORAGE_KEY = "nip46_demo_nsec";
+        const ENCRYPTED_NSEC_STORAGE_KEY = "nip46_demo_nsec_enc_v1";
         const PERMISSION_STORAGE_KEY = "nip46_permissions_v1";
-        const RELAYS = ["wss://relay.damus.io", "wss://nos.lol"];
+        const RELAYS = [
+            "wss://relay.damus.io",
+            "wss://nos.lol",
+            "wss://relay.primal.net",
+            "wss://relay.snort.social"
+        ];
         const BRIDGE_SOURCE = "nip46-signer-bridge";
-        const AUTO_ALLOW_METHODS = new Set(["connect", "ping", "get_public_key", "switch_relays"]);
+        const PBKDF2_ITERATIONS = 210000;
+        const AUTO_ALLOW_METHODS = new Set(["connect", "ping", "get_public_key"]);
         const SENSITIVE_METHODS = new Set([
             "sign_event",
             "nip04_encrypt",
@@ -69,19 +116,156 @@
         let activePermissionRequest = null;
         let connectionInfo = null;
 
-        function getOrAskNsec() {
-            const stored = localStorage.getItem(NSEC_STORAGE_KEY);
-            if (stored && stored.startsWith("nsec1") && stored.length > 20) return stored;
+        function isValidNsec(nsec) {
+            return typeof nsec === "string" && nsec.startsWith("nsec1") && nsec.length > 20;
+        }
 
-            const input = prompt("Bitte gib deinen nsec ein (nsec1...):", "");
-            if (!input) throw new Error("Kein nsec angegeben.");
+        function bytesToBase64(bytes) {
+            let binary = "";
+            for (const b of bytes) binary += String.fromCharCode(b);
+            return btoa(binary);
+        }
 
-            const nsec = input.trim();
-            if (!nsec.startsWith("nsec1") || nsec.length <= 20) {
-                throw new Error("Ungültiger nsec. Erwartet wird ein kompletter nsec1...-Wert.");
+        function base64ToBytes(base64) {
+            const binary = atob(base64);
+            const bytes = new Uint8Array(binary.length);
+            for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+            return bytes;
+        }
+
+        async function deriveAesKeyFromPassword(password, saltBytes, iterations = PBKDF2_ITERATIONS) {
+            const enc = new TextEncoder();
+            const passwordKey = await crypto.subtle.importKey(
+                "raw",
+                enc.encode(password),
+                "PBKDF2",
+                false,
+                ["deriveKey"]
+            );
+
+            return crypto.subtle.deriveKey(
+                {
+                    name: "PBKDF2",
+                    salt: saltBytes,
+                    iterations,
+                    hash: "SHA-256"
+                },
+                passwordKey,
+                { name: "AES-GCM", length: 256 },
+                false,
+                ["encrypt", "decrypt"]
+            );
+        }
+
+        async function encryptNsec(nsec, password) {
+            const enc = new TextEncoder();
+            const salt = crypto.getRandomValues(new Uint8Array(16));
+            const iv = crypto.getRandomValues(new Uint8Array(12));
+            const key = await deriveAesKeyFromPassword(password, salt);
+            const ciphertext = new Uint8Array(
+                await crypto.subtle.encrypt(
+                    { name: "AES-GCM", iv },
+                    key,
+                    enc.encode(nsec)
+                )
+            );
+
+            return {
+                v: 1,
+                kdf: "PBKDF2-SHA256",
+                alg: "AES-GCM",
+                iter: PBKDF2_ITERATIONS,
+                salt: bytesToBase64(salt),
+                iv: bytesToBase64(iv),
+                ct: bytesToBase64(ciphertext)
+            };
+        }
+
+        async function decryptNsec(payload, password) {
+            if (!payload || payload.v !== 1 || !payload.salt || !payload.iv || !payload.ct) {
+                throw new Error("Ungültiges verschlüsseltes Format.");
             }
 
-            localStorage.setItem(NSEC_STORAGE_KEY, nsec);
+            const dec = new TextDecoder();
+            const salt = base64ToBytes(payload.salt);
+            const iv = base64ToBytes(payload.iv);
+            const ciphertext = base64ToBytes(payload.ct);
+            const key = await deriveAesKeyFromPassword(password, salt, payload.iter || PBKDF2_ITERATIONS);
+            const clear = await crypto.subtle.decrypt(
+                { name: "AES-GCM", iv },
+                key,
+                ciphertext
+            );
+
+            return dec.decode(clear);
+        }
+
+        async function getOrAskNsec() {
+            if (!crypto?.subtle) {
+                throw new Error("WebCrypto nicht verfügbar. Nutze HTTPS oder localhost.");
+            }
+
+            const encryptedRaw = localStorage.getItem(ENCRYPTED_NSEC_STORAGE_KEY);
+            if (encryptedRaw) {
+                postBridgeMessage("locked", { reason: "Passwort benötigt." });
+                const { password } = await showUnlockPanel({
+                    title: "Signer entsperren",
+                    hint: "Bitte Passwort eingeben, um den Signer zu entsperren.",
+                    askNsec: false,
+                    askConfirm: false,
+                    submitLabel: "Entsperren"
+                });
+                if (!password) throw new Error("Kein Passwort angegeben.");
+
+                try {
+                    const payload = JSON.parse(encryptedRaw);
+                    const nsec = await decryptNsec(payload, password);
+                    if (!isValidNsec(nsec)) throw new Error("Ungültiger nsec nach Entschlüsselung.");
+                    return nsec;
+                } catch (_err) {
+                    throw new Error("Entsperren fehlgeschlagen. Passwort oder Daten sind ungültig.");
+                }
+            }
+
+            const legacy = localStorage.getItem(LEGACY_NSEC_STORAGE_KEY);
+            if (isValidNsec(legacy)) {
+                postBridgeMessage("locked", { reason: "Migration auf verschlüsselten Storage." });
+                const { password, passwordConfirm } = await showUnlockPanel({
+                    title: "Signer absichern",
+                    hint: "Klartext-nsec gefunden. Bitte neues Passwort setzen.",
+                    askNsec: false,
+                    askConfirm: true,
+                    submitLabel: "Verschlüsseln"
+                });
+                if (!password) throw new Error("Kein Passwort angegeben.");
+                if (password.length < 8) throw new Error("Passwort muss mindestens 8 Zeichen haben.");
+                if (password !== passwordConfirm) throw new Error("Passwörter stimmen nicht überein.");
+                const encrypted = await encryptNsec(legacy, password);
+                localStorage.setItem(ENCRYPTED_NSEC_STORAGE_KEY, JSON.stringify(encrypted));
+                localStorage.removeItem(LEGACY_NSEC_STORAGE_KEY);
+                appendRequestLog("Klartext-nsec wurde in verschlüsselten Storage migriert.");
+                return legacy;
+            }
+
+            postBridgeMessage("locked", { reason: "Ersteinrichtung erforderlich." });
+            const { nsec, password, passwordConfirm } = await showUnlockPanel({
+                title: "Signer einrichten",
+                hint: "Bitte nsec und neues Passwort eingeben.",
+                askNsec: true,
+                askConfirm: true,
+                submitLabel: "Speichern & entsperren"
+            });
+            if (!nsec) throw new Error("Kein nsec angegeben.");
+            if (!isValidNsec(nsec)) {
+                throw new Error("Ungültiger nsec. Erwartet wird ein kompletter nsec1...-Wert.");
+            }
+            if (!password) throw new Error("Kein Passwort angegeben.");
+            if (password.length < 8) throw new Error("Passwort muss mindestens 8 Zeichen haben.");
+            if (password !== passwordConfirm) throw new Error("Passwörter stimmen nicht überein.");
+            const encrypted = await encryptNsec(nsec, password);
+            localStorage.setItem(ENCRYPTED_NSEC_STORAGE_KEY, JSON.stringify(encrypted));
+            localStorage.removeItem(LEGACY_NSEC_STORAGE_KEY);
+            appendRequestLog("nsec verschlüsselt gespeichert.");
             return nsec;
         }
 
@@ -107,6 +291,56 @@
             const previous = logEl.innerText ? `${logEl.innerText}\n` : "";
             const combined = `[${now}] ${line}\n${previous}`.split("\n").slice(0, 60).join("\n");
             logEl.innerText = combined.trimEnd();
+        }
+
+        function showUnlockPanel(options) {
+            const panel = document.getElementById("unlock-panel");
+            const titleEl = document.getElementById("unlock-title");
+            const hintEl = document.getElementById("unlock-hint");
+            const nsecRow = document.getElementById("unlock-nsec-row");
+            const confirmRow = document.getElementById("unlock-password-confirm-row");
+            const nsecInput = document.getElementById("unlock-nsec-input");
+            const passwordInput = document.getElementById("unlock-password-input");
+            const confirmInput = document.getElementById("unlock-password-confirm-input");
+            const submitBtn = document.getElementById("unlock-submit-btn");
+            const cancelBtn = document.getElementById("unlock-cancel-btn");
+
+            titleEl.innerText = options.title;
+            hintEl.innerText = options.hint || "";
+            submitBtn.innerText = options.submitLabel || "Weiter";
+
+            nsecRow.style.display = options.askNsec ? "block" : "none";
+            confirmRow.style.display = options.askConfirm ? "block" : "none";
+
+            nsecInput.value = options.defaultNsec || "";
+            nsecInput.readOnly = Boolean(options.readonlyNsec);
+            passwordInput.value = "";
+            confirmInput.value = "";
+
+            panel.style.display = "block";
+
+            return new Promise((resolve, reject) => {
+                const cleanup = () => {
+                    submitBtn.onclick = null;
+                    cancelBtn.onclick = null;
+                    panel.style.display = "none";
+                };
+
+                submitBtn.onclick = () => {
+                    const value = {
+                        nsec: nsecInput.value.trim(),
+                        password: passwordInput.value,
+                        passwordConfirm: confirmInput.value
+                    };
+                    cleanup();
+                    resolve(value);
+                };
+
+                cancelBtn.onclick = () => {
+                    cleanup();
+                    reject(new Error("Entsperren abgebrochen."));
+                };
+            });
         }
 
         function expectedParentOrigin() {
@@ -152,7 +386,11 @@
             if (!data || data.source !== BRIDGE_SOURCE) return;
 
             if (data.type === "ping" || data.type === "get-connection-info") {
-                postBridgeMessage("connection-info", connectionInfo);
+                if (connectionInfo) {
+                    postBridgeMessage("connection-info", connectionInfo);
+                } else {
+                    postBridgeMessage("locked", { reason: "Signer ist noch gesperrt." });
+                }
             }
         }
 
@@ -251,11 +489,55 @@
             });
         }
 
+        function connectedBackendRpcRelayCount(nip46Backend) {
+            const relaysMap = nip46Backend?.rpc?.pool?.relays;
+            if (!relaysMap || typeof relaysMap.values !== "function") return 0;
+            return Array.from(relaysMap.values()).filter((relay) => relay?.status === 5).length;
+        }
+
+        async function ensureBackendRpcRelaysConnected(nip46Backend, timeoutMs = 7000, minConnected = 1) {
+            const rpcPool = nip46Backend?.rpc?.pool;
+            if (!rpcPool || typeof rpcPool.connect !== "function") return;
+
+            await Promise.race([
+                rpcPool.connect(timeoutMs),
+                new Promise((_, reject) => setTimeout(() => reject(new Error("rpc pool connect timeout")), timeoutMs + 1000))
+            ]);
+
+            const connected = connectedBackendRpcRelayCount(nip46Backend);
+            if (connected < minConnected) {
+                throw new Error(`Signer RPC relays offline (${connected}/${minConnected})`);
+            }
+        }
+
+        function patchBackendRpcReliability(nip46Backend) {
+            const rpc = nip46Backend?.rpc;
+            if (!rpc || rpc.__reliabilityPatched) return;
+
+            const originalSendResponse = rpc.sendResponse?.bind(rpc);
+            if (typeof originalSendResponse === "function") {
+                rpc.sendResponse = async (...args) => {
+                    await ensureBackendRpcRelaysConnected(nip46Backend, 7000, 1);
+                    return originalSendResponse(...args);
+                };
+            }
+
+            const originalSendRequest = rpc.sendRequest?.bind(rpc);
+            if (typeof originalSendRequest === "function") {
+                rpc.sendRequest = async (...args) => {
+                    await ensureBackendRpcRelaysConnected(nip46Backend, 7000, 1);
+                    return originalSendRequest(...args);
+                };
+            }
+
+            rpc.__reliabilityPatched = true;
+        }
+
         async function startSigner() {
             const ndk = new NDK({ explicitRelayUrls: RELAYS });
             await ndk.connect();
 
-            const nsec = getOrAskNsec();
+            const nsec = await getOrAskNsec();
             const localSigner = new NDKPrivateKeySigner(nsec);
             const user = await localSigner.user();
 
@@ -285,6 +567,11 @@
                     const pubkey = request?.pubkey ?? "";
                     appendRequestLog(`Methode: ${method} von ${pubkey.slice(0, 12) || "?"}...`);
 
+                    if (method === "switch_relays") {
+                        appendRequestLog("Blockiert: switch_relays (feste Relay-Allowlist)");
+                        return false;
+                    }
+
                     if (AUTO_ALLOW_METHODS.has(method)) {
                         appendRequestLog(`Auto erlaubt: ${method}`);
                         return true;
@@ -305,7 +592,10 @@
                 RELAYS
             );
 
+            patchBackendRpcReliability(nip46Backend);
             await nip46Backend.start();
+            await ensureBackendRpcRelaysConnected(nip46Backend, 9000, 1);
+            appendRequestLog("Signer RPC verbunden.");
             postBridgeMessage("ready", connectionInfo);
             appendRequestLog("Bridge: ready an Parent gesendet");
             console.log("Bunker URI:", bunkerUri);
