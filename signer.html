@@ -1,0 +1,1553 @@
+﻿<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JS Nostr Signer (No-Popup)</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            margin: 0;
+            padding: 10px;
+            background: #121212;
+            color: white;
+            font-size: 14px;
+        }
+        #app-title {
+            margin: 0 0 8px 0;
+            font-size: 16px;
+            font-weight: 700;
+        }
+        #status {
+            margin: 0 0 4px 0;
+            font-weight: 700;
+        }
+        #user-info {
+            margin: 0;
+            color: #9ad1ff;
+            white-space: pre-wrap;
+        }
+        #tab-nav {
+            display: flex;
+            gap: 6px;
+            margin: 10px 0;
+        }
+        .tab-btn {
+            margin: 0;
+            padding: 8px 10px;
+            background: #242424;
+            color: #fff;
+            border: 1px solid #343434;
+        }
+        .tab-btn.active {
+            background: #2f7cfe;
+            border-color: #2f7cfe;
+        }
+        .tab-panel {
+            display: none;
+        }
+        .tab-panel.active {
+            display: block;
+        }
+        #tab-signer {
+            padding: 10px;
+            background: #171717;
+            border: 1px solid #333;
+            border-radius: 8px;
+        }
+        #connection-info {
+            margin-top: 0;
+            padding: 12px;
+            background: #171717;
+            border: 1px solid #333;
+            border-radius: 8px;
+            white-space: pre-wrap;
+            overflow: auto;
+            max-height: 180px;
+        }
+        #unlock-panel, #key-manager {
+            margin-top: 10px;
+            padding: 12px;
+            background: #171717;
+            border: 1px solid #333;
+            border-radius: 8px;
+            display: none;
+        }
+        #unlock-panel input, #unlock-panel select, #key-manager input, #key-manager select {
+            width: 100%;
+            box-sizing: border-box;
+            margin-top: 6px;
+            margin-bottom: 10px;
+            padding: 8px 10px;
+            border-radius: 6px;
+            border: 1px solid #444;
+            background: #0f0f0f;
+            color: #fff;
+        }
+        #unlock-panel p, #key-manager p { margin: 0 0 10px 0; color: #bbb; }
+        #active-key-info { margin-bottom: 10px; color: #9ad1ff; white-space: pre-wrap; }
+        #request-log {
+            margin-top: 10px;
+            padding: 10px;
+            min-height: 100px;
+            max-height: 220px;
+            overflow: auto;
+            background: #171717;
+            border: 1px solid #333;
+            border-radius: 8px;
+            white-space: pre-wrap;
+        }
+        #auth-modal {
+            display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            background: #222; padding: 20px; border: 1px solid #444; border-radius: 8px; z-index: 1000; max-width: 680px; width: 95%;
+        }
+        .overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); }
+        button { cursor: pointer; padding: 10px 14px; margin: 5px; border-radius: 5px; border: none; }
+        .btn-approve { background: #28a745; color: white; }
+        .btn-allow-temporary { background: #2f7cfe; color: white; }
+        .btn-reject { background: #dc3545; color: white; }
+        .button-row { display: flex; flex-wrap: wrap; margin-top: 10px; }
+        #request-details { white-space: pre-wrap; max-height: 280px; overflow: auto; background: #171717; border: 1px solid #333; border-radius: 8px; padding: 10px; }
+        body.compact-connected {
+            padding: 6px;
+        }
+        body.compact-connected #app-title {
+            font-size: 13px;
+            margin-bottom: 2px;
+        }
+        body.compact-connected #tab-nav,
+        body.compact-connected #tab-info,
+        body.compact-connected #tab-management {
+            display: none !important;
+        }
+        body.compact-connected #tab-signer {
+            padding: 6px 0 0 0;
+            border: none;
+            background: transparent;
+        }
+        body.compact-connected #status {
+            margin-bottom: 2px;
+            font-size: 12px;
+        }
+        body.compact-connected #user-info {
+            font-size: 12px;
+            color: #bbb;
+        }
+        body.compact-connected #auth-modal {
+            max-width: 420px;
+            width: calc(100% - 12px);
+            padding: 12px;
+        }
+        body.compact-connected #request-details {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="app-title">NIP-46 Signer</div>
+    <div id="status">Verbinde mit Relay...</div>
+
+    <div id="tab-nav">
+        <button class="tab-btn active" id="tab-btn-signer" type="button">Signer</button>
+        <button class="tab-btn" id="tab-btn-info" type="button">Info/Log</button>
+        <button class="tab-btn" id="tab-btn-management" type="button">Verwaltung</button>
+    </div>
+
+    <section class="tab-panel active" id="tab-signer">
+        <div id="user-info">Starte Signer...</div>
+    </section>
+
+    <section class="tab-panel" id="tab-info">
+        <pre id="connection-info">Verbindungsinformationen folgen nach Entsperrung.</pre>
+        <pre id="request-log"></pre>
+    </section>
+
+    <section class="tab-panel" id="tab-management">
+        <div id="unlock-panel">
+            <h3 id="unlock-title">Signer entsperren</h3>
+            <p id="unlock-hint"></p>
+            <div id="unlock-key-row">
+                <label for="unlock-key-select">Gespeicherter Schlüssel</label>
+                <select id="unlock-key-select"></select>
+            </div>
+            <div id="unlock-name-row">
+                <label for="unlock-name-input">Schlüsselname (optional)</label>
+                <input id="unlock-name-input" placeholder="z.B. Laptop, Test, Main" />
+            </div>
+            <div id="unlock-nsec-row">
+                <label for="unlock-nsec-input">nsec</label>
+                <input id="unlock-nsec-input" placeholder="nsec1..." />
+            </div>
+            <div id="unlock-generate-row" class="button-row">
+                <button class="btn-allow-temporary" id="unlock-generate-btn" type="button">Neuen nsec generieren</button>
+            </div>
+            <div id="unlock-password-row">
+                <label for="unlock-password-input">Passwort</label>
+                <input id="unlock-password-input" type="password" placeholder="Passwort" />
+            </div>
+            <div id="unlock-password-confirm-row">
+                <label for="unlock-password-confirm-input">Passwort wiederholen</label>
+                <input id="unlock-password-confirm-input" type="password" placeholder="Passwort wiederholen" />
+            </div>
+            <div id="unlock-remember-row">
+                <label for="unlock-remember-select">Entsperrt bleiben (optional)</label>
+                <select id="unlock-remember-select">
+                    <option value="none">Nein (bei Reload wieder sperren)</option>
+                    <option value="session">Während dieser Browser-Session</option>
+                    <option value="15m">15 Minuten</option>
+                    <option value="1h">1 Stunde</option>
+                </select>
+            </div>
+            <div class="button-row">
+                <button class="btn-approve" id="unlock-submit-btn">Weiter</button>
+                <button class="btn-reject" id="unlock-cancel-btn">Abbrechen</button>
+            </div>
+        </div>
+
+        <div id="key-manager">
+            <h3>Schlüsselverwaltung</h3>
+            <div id="active-key-info"></div>
+            <label for="saved-keys-select">Gespeicherte Schlüssel</label>
+            <select id="saved-keys-select"></select>
+            <div class="button-row">
+                <button class="btn-allow-temporary" id="switch-key-btn">Zu Auswahl wechseln</button>
+                <button class="btn-approve" id="download-key-btn">Aktiven Schlüssel herunterladen</button>
+            </div>
+            <label for="new-key-name-input">Neuer Schlüsselname (optional)</label>
+            <input id="new-key-name-input" placeholder="z.B. Phone Backup" />
+            <label for="new-key-nsec-input">nsec importieren oder generieren</label>
+            <input id="new-key-nsec-input" placeholder="nsec1..." />
+            <div class="button-row">
+                <button class="btn-allow-temporary" id="generate-key-btn">Neuen Schlüssel generieren</button>
+                <button class="btn-approve" id="save-key-btn">Schlüssel speichern</button>
+            </div>
+            <label for="change-password-current-input">Aktuelles Passwort</label>
+            <input id="change-password-current-input" type="password" placeholder="Aktuelles Passwort" />
+            <label for="change-password-new-input">Neues Passwort</label>
+            <input id="change-password-new-input" type="password" placeholder="Neues Passwort (mind. 8 Zeichen)" />
+            <label for="change-password-confirm-input">Neues Passwort wiederholen</label>
+            <input id="change-password-confirm-input" type="password" placeholder="Neues Passwort wiederholen" />
+            <div class="button-row">
+                <button class="btn-approve" id="change-password-btn">Passwort ändern</button>
+            </div>
+        </div>
+    </section>
+
+    <div id="overlay" class="overlay"></div>
+    <div id="auth-modal">
+        <h3 id="request-title">Signier-Anfrage</h3>
+        <p id="request-details"></p>
+        <div class="button-row">
+            <button class="btn-approve" id="allow-once-btn">Einmal erlauben</button>
+            <button class="btn-allow-temporary" id="allow-always-btn">Immer erlauben</button>
+            <button class="btn-reject" id="reject-btn">Ablehnen</button>
+        </div>
+    </div>
+
+    <script type="module">
+        import NDK, { NDKNip46Backend, NDKPrivateKeySigner } from "https://esm.sh/@nostr-dev-kit/ndk@3.0.0?bundle&target=es2022";
+
+        const LEGACY_NSEC_STORAGE_KEY = "nip46_demo_nsec";
+        const ENCRYPTED_NSEC_STORAGE_KEY = "nip46_demo_nsec_enc_v1";
+        const KEYRING_STORAGE_KEY = "nip46_demo_keyring_enc_v2";
+        const ACTIVE_KEY_ID_STORAGE_KEY = "nip46_demo_active_key_id_v1";
+        const UNLOCK_CACHE_SESSION_KEY = "nip46_unlock_cache_session_v1";
+        const UNLOCK_CACHE_TTL_KEY = "nip46_unlock_cache_ttl_v1";
+        const PERMISSION_STORAGE_KEY = "nip46_permissions_v1";
+        const RELAYS = [
+            "wss://relay.damus.io",
+            "wss://nos.lol",
+            "wss://relay.primal.net",
+            "wss://relay.snort.social"
+        ];
+        const BRIDGE_SOURCE = "nip46-signer-bridge";
+        const PBKDF2_ITERATIONS = 210000;
+        const AUTO_ALLOW_METHODS = new Set(["connect", "ping", "get_public_key"]);
+        const SENSITIVE_METHODS = new Set([
+            "sign_event",
+            "nip04_encrypt",
+            "nip04_decrypt",
+            "nip44_encrypt",
+            "nip44_decrypt"
+        ]);
+        const PERMISSION_FOREVER = -1;
+        const BECH32_CHARSET = "qpzry9x8gf2tvdw0s3jn54khce6mua7l";
+        const BECH32_GENERATORS = [0x3b6a57b2, 0x26508e6d, 0x1ea119fa, 0x3d4233dd, 0x2a1462b3];
+
+        const pendingPermissionRequests = [];
+        let activePermissionRequest = null;
+        let connectionInfo = null;
+        const isEmbeddedContext = window.parent !== window;
+
+        let sessionPassword = "";
+        let currentKeyring = null;
+        let activeKeyId = null;
+        let activeNsec = null;
+        let activeUser = null;
+        let lastPostedFrameHeight = 0;
+        let frameSizeNotifyScheduled = false;
+
+        function isValidNsec(nsec) {
+            return typeof nsec === "string" && nsec.startsWith("nsec1") && nsec.length > 20;
+        }
+
+        function normalizeKeyName(name) {
+            return typeof name === "string" ? name.trim() : "";
+        }
+
+        function keyDisplayName(entry, index = 0) {
+            const custom = normalizeKeyName(entry?.name);
+            return custom || `Schlüssel ${index + 1}`;
+        }
+
+        function safeFilename(input) {
+            const raw = String(input || "").toLowerCase();
+            const slug = raw.replace(/[^a-z0-9_-]+/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "");
+            return slug || "nostr-key";
+        }
+
+        function bytesToBase64(bytes) {
+            let binary = "";
+            for (const b of bytes) binary += String.fromCharCode(b);
+            return btoa(binary);
+        }
+
+        function base64ToBytes(base64) {
+            const binary = atob(base64);
+            const bytes = new Uint8Array(binary.length);
+            for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+            return bytes;
+        }
+
+        async function deriveAesKeyFromPassword(password, saltBytes, iterations = PBKDF2_ITERATIONS) {
+            const enc = new TextEncoder();
+            const passwordKey = await crypto.subtle.importKey(
+                "raw",
+                enc.encode(password),
+                "PBKDF2",
+                false,
+                ["deriveKey"]
+            );
+
+            return crypto.subtle.deriveKey(
+                {
+                    name: "PBKDF2",
+                    salt: saltBytes,
+                    iterations,
+                    hash: "SHA-256"
+                },
+                passwordKey,
+                { name: "AES-GCM", length: 256 },
+                false,
+                ["encrypt", "decrypt"]
+            );
+        }
+
+        async function encryptNsec(nsec, password) {
+            const enc = new TextEncoder();
+            const salt = crypto.getRandomValues(new Uint8Array(16));
+            const iv = crypto.getRandomValues(new Uint8Array(12));
+            const key = await deriveAesKeyFromPassword(password, salt);
+            const ciphertext = new Uint8Array(
+                await crypto.subtle.encrypt(
+                    { name: "AES-GCM", iv },
+                    key,
+                    enc.encode(nsec)
+                )
+            );
+
+            return {
+                v: 1,
+                kdf: "PBKDF2-SHA256",
+                alg: "AES-GCM",
+                iter: PBKDF2_ITERATIONS,
+                salt: bytesToBase64(salt),
+                iv: bytesToBase64(iv),
+                ct: bytesToBase64(ciphertext)
+            };
+        }
+
+        async function decryptNsec(payload, password) {
+            if (!payload || payload.v !== 1 || !payload.salt || !payload.iv || !payload.ct) {
+                throw new Error("Ungültiges verschlüsseltes Format.");
+            }
+
+            const dec = new TextDecoder();
+            const salt = base64ToBytes(payload.salt);
+            const iv = base64ToBytes(payload.iv);
+            const ciphertext = base64ToBytes(payload.ct);
+            const key = await deriveAesKeyFromPassword(password, salt, payload.iter || PBKDF2_ITERATIONS);
+            const clear = await crypto.subtle.decrypt(
+                { name: "AES-GCM", iv },
+                key,
+                ciphertext
+            );
+
+            return dec.decode(clear);
+        }
+
+        function bech32Polymod(values) {
+            let chk = 1;
+            for (const v of values) {
+                const top = chk >> 25;
+                chk = ((chk & 0x1ffffff) << 5) ^ v;
+                for (let i = 0; i < 5; i++) {
+                    if ((top >> i) & 1) chk ^= BECH32_GENERATORS[i];
+                }
+            }
+            return chk;
+        }
+
+        function bech32HrpExpand(hrp) {
+            const out = [];
+            for (let i = 0; i < hrp.length; i++) out.push(hrp.charCodeAt(i) >> 5);
+            out.push(0);
+            for (let i = 0; i < hrp.length; i++) out.push(hrp.charCodeAt(i) & 31);
+            return out;
+        }
+
+        function bech32CreateChecksum(hrp, data) {
+            const values = [...bech32HrpExpand(hrp), ...data, 0, 0, 0, 0, 0, 0];
+            const polymod = bech32Polymod(values) ^ 1;
+            const out = [];
+            for (let p = 0; p < 6; p++) {
+                out.push((polymod >> (5 * (5 - p))) & 31);
+            }
+            return out;
+        }
+
+        function bech32Encode(hrp, data) {
+            const combined = [...data, ...bech32CreateChecksum(hrp, data)];
+            let encoded = `${hrp}1`;
+            for (const d of combined) encoded += BECH32_CHARSET[d];
+            return encoded;
+        }
+
+        function convertBits(data, fromBits, toBits, pad = true) {
+            let acc = 0;
+            let bits = 0;
+            const out = [];
+            const maxv = (1 << toBits) - 1;
+            const maxAcc = (1 << (fromBits + toBits - 1)) - 1;
+
+            for (const value of data) {
+                if (value < 0 || (value >> fromBits) !== 0) throw new Error("Ungültige Bit-Konvertierung.");
+                acc = ((acc << fromBits) | value) & maxAcc;
+                bits += fromBits;
+                while (bits >= toBits) {
+                    bits -= toBits;
+                    out.push((acc >> bits) & maxv);
+                }
+            }
+
+            if (pad) {
+                if (bits > 0) out.push((acc << (toBits - bits)) & maxv);
+            } else if (bits >= fromBits || ((acc << (toBits - bits)) & maxv) !== 0) {
+                throw new Error("Ungültiges Padding in Bit-Konvertierung.");
+            }
+
+            return out;
+        }
+
+        function generateRandomNsec() {
+            const secret = crypto.getRandomValues(new Uint8Array(32));
+            const words = convertBits(secret, 8, 5, true);
+            return bech32Encode("nsec", words);
+        }
+
+        function generateKeyId() {
+            return `key_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+        }
+
+        function loadKeyring() {
+            try {
+                const raw = localStorage.getItem(KEYRING_STORAGE_KEY);
+                if (!raw) return null;
+                const parsed = JSON.parse(raw);
+                if (!parsed || parsed.v !== 1 || !Array.isArray(parsed.keys)) return null;
+                const keys = parsed.keys
+                    .filter((entry) => entry && typeof entry.id === "string" && entry.id && entry.payload && typeof entry.payload === "object")
+                    .map((entry) => ({
+                        id: entry.id,
+                        name: normalizeKeyName(entry.name),
+                        createdAt: typeof entry.createdAt === "number" ? entry.createdAt : Date.now(),
+                        payload: entry.payload
+                    }));
+                if (keys.length === 0) return null;
+                return { v: 1, keys };
+            } catch (_err) {
+                return null;
+            }
+        }
+
+        function saveKeyring(keyring) {
+            localStorage.setItem(KEYRING_STORAGE_KEY, JSON.stringify(keyring));
+        }
+
+        function activeKeyIdFromStorage() {
+            return localStorage.getItem(ACTIVE_KEY_ID_STORAGE_KEY);
+        }
+
+        function setActiveKeyId(id) {
+            localStorage.setItem(ACTIVE_KEY_ID_STORAGE_KEY, id);
+        }
+
+        function clearUnlockCache() {
+            sessionStorage.removeItem(UNLOCK_CACHE_SESSION_KEY);
+            localStorage.removeItem(UNLOCK_CACHE_TTL_KEY);
+        }
+
+        function loadUnlockCache() {
+            try {
+                const sessionRaw = sessionStorage.getItem(UNLOCK_CACHE_SESSION_KEY);
+                if (sessionRaw) {
+                    const sessionParsed = JSON.parse(sessionRaw);
+                    if (sessionParsed && typeof sessionParsed.password === "string") {
+                        return {
+                            mode: "session",
+                            password: sessionParsed.password,
+                            keyId: typeof sessionParsed.keyId === "string" ? sessionParsed.keyId : null
+                        };
+                    }
+                    sessionStorage.removeItem(UNLOCK_CACHE_SESSION_KEY);
+                }
+            } catch (_err) {
+                sessionStorage.removeItem(UNLOCK_CACHE_SESSION_KEY);
+            }
+
+            try {
+                const ttlRaw = localStorage.getItem(UNLOCK_CACHE_TTL_KEY);
+                if (!ttlRaw) return null;
+                const ttlParsed = JSON.parse(ttlRaw);
+                const now = Date.now();
+                if (!ttlParsed || typeof ttlParsed.password !== "string" || typeof ttlParsed.expiresAt !== "number" || ttlParsed.expiresAt <= now) {
+                    localStorage.removeItem(UNLOCK_CACHE_TTL_KEY);
+                    return null;
+                }
+                return {
+                    mode: "ttl",
+                    password: ttlParsed.password,
+                    keyId: typeof ttlParsed.keyId === "string" ? ttlParsed.keyId : null
+                };
+            } catch (_err) {
+                localStorage.removeItem(UNLOCK_CACHE_TTL_KEY);
+                return null;
+            }
+        }
+
+        function saveUnlockCache(password, keyId, mode) {
+            clearUnlockCache();
+            if (!password || mode === "none") return;
+
+            if (mode === "session") {
+                sessionStorage.setItem(
+                    UNLOCK_CACHE_SESSION_KEY,
+                    JSON.stringify({ v: 1, keyId: keyId || null, password, savedAt: Date.now() })
+                );
+                return;
+            }
+
+            let ttlMs = 0;
+            if (mode === "15m") ttlMs = 15 * 60 * 1000;
+            if (mode === "1h") ttlMs = 60 * 60 * 1000;
+            if (ttlMs <= 0) return;
+
+            localStorage.setItem(
+                UNLOCK_CACHE_TTL_KEY,
+                JSON.stringify({
+                    v: 1,
+                    keyId: keyId || null,
+                    password,
+                    savedAt: Date.now(),
+                    expiresAt: Date.now() + ttlMs
+                })
+            );
+        }
+
+        function updateUnlockCacheKeyId(keyId) {
+            if (!keyId) return;
+
+            try {
+                const sessionRaw = sessionStorage.getItem(UNLOCK_CACHE_SESSION_KEY);
+                if (sessionRaw) {
+                    const parsed = JSON.parse(sessionRaw);
+                    if (parsed && typeof parsed.password === "string") {
+                        parsed.keyId = keyId;
+                        sessionStorage.setItem(UNLOCK_CACHE_SESSION_KEY, JSON.stringify(parsed));
+                    }
+                }
+            } catch (_err) {
+                sessionStorage.removeItem(UNLOCK_CACHE_SESSION_KEY);
+            }
+
+            try {
+                const ttlRaw = localStorage.getItem(UNLOCK_CACHE_TTL_KEY);
+                if (ttlRaw) {
+                    const parsed = JSON.parse(ttlRaw);
+                    if (parsed && typeof parsed.password === "string" && typeof parsed.expiresAt === "number" && parsed.expiresAt > Date.now()) {
+                        parsed.keyId = keyId;
+                        localStorage.setItem(UNLOCK_CACHE_TTL_KEY, JSON.stringify(parsed));
+                    }
+                }
+            } catch (_err) {
+                localStorage.removeItem(UNLOCK_CACHE_TTL_KEY);
+            }
+        }
+
+        function resolveActiveKeyEntry(keyring, preferredId = null) {
+            const wanted = preferredId || activeKeyIdFromStorage();
+            if (wanted) {
+                const idx = keyring.keys.findIndex((entry) => entry.id === wanted);
+                if (idx >= 0) return { entry: keyring.keys[idx], index: idx };
+            }
+            return { entry: keyring.keys[0], index: 0 };
+        }
+
+        async function createKeyringEntry(nsec, password, name = "") {
+            return {
+                id: generateKeyId(),
+                name: normalizeKeyName(name),
+                createdAt: Date.now(),
+                payload: await encryptNsec(nsec, password)
+            };
+        }
+
+        async function getOrAskActiveKey() {
+            if (!crypto?.subtle) {
+                throw new Error("WebCrypto nicht verfügbar. Nutze HTTPS oder localhost.");
+            }
+
+            const keyring = loadKeyring();
+            if (keyring) {
+                const { entry: defaultEntry } = resolveActiveKeyEntry(keyring);
+                const cachedUnlock = loadUnlockCache();
+                if (cachedUnlock?.password) {
+                    const { entry: cachedEntry, index: cachedIndex } = resolveActiveKeyEntry(keyring, cachedUnlock.keyId || defaultEntry.id);
+                    try {
+                        const cachedNsec = await decryptNsec(cachedEntry.payload, cachedUnlock.password);
+                        if (!isValidNsec(cachedNsec)) throw new Error("invalid cached nsec");
+                        setActiveKeyId(cachedEntry.id);
+                        appendRequestLog(`Auto-Entsperrt (${cachedUnlock.mode === "session" ? "Session" : "TTL"}): ${keyDisplayName(cachedEntry, cachedIndex)}`);
+                        return {
+                            nsec: cachedNsec,
+                            password: cachedUnlock.password,
+                            keyId: cachedEntry.id,
+                            keyName: keyDisplayName(cachedEntry, cachedIndex),
+                            keyring
+                        };
+                    } catch (_err) {
+                        clearUnlockCache();
+                        appendRequestLog("Gespeicherte Entsperrung war ungueltig und wurde entfernt.");
+                    }
+                }
+                postBridgeMessage("locked", { reason: "Passwort benötigt." });
+                const unlock = await showUnlockPanel({
+                    title: "Signer entsperren",
+                    hint: "Bitte Passwort eingeben und optional gespeicherten Schlüssel wählen.",
+                    askNsec: false,
+                    askConfirm: false,
+                    askName: false,
+                    askKey: true,
+                    askRemember: true,
+                    defaultRememberMode: "none",
+                    keyOptions: keyring.keys.map((entry, index) => ({
+                        id: entry.id,
+                        label: keyDisplayName(entry, index)
+                    })),
+                    defaultKeyId: defaultEntry.id,
+                    submitLabel: "Entsperren"
+                });
+                if (!unlock.password) throw new Error("Kein Passwort angegeben.");
+
+                const { entry: selectedEntry, index: selectedIndex } = resolveActiveKeyEntry(keyring, unlock.keyId || defaultEntry.id);
+                try {
+                    const nsec = await decryptNsec(selectedEntry.payload, unlock.password);
+                    if (!isValidNsec(nsec)) throw new Error("Ungültiger nsec nach Entschlüsselung.");
+                    setActiveKeyId(selectedEntry.id);
+                    saveUnlockCache(unlock.password, selectedEntry.id, unlock.rememberMode || "none");
+                    return {
+                        nsec,
+                        password: unlock.password,
+                        keyId: selectedEntry.id,
+                        keyName: keyDisplayName(selectedEntry, selectedIndex),
+                        keyring
+                    };
+                } catch (_err) {
+                    throw new Error("Entsperren fehlgeschlagen. Passwort oder Daten sind ungültig.");
+                }
+            }
+
+            const encryptedRaw = localStorage.getItem(ENCRYPTED_NSEC_STORAGE_KEY);
+            if (encryptedRaw) {
+                postBridgeMessage("locked", { reason: "Migration auf Keyring." });
+                const unlock = await showUnlockPanel({
+                    title: "Signer entsperren (Migration)",
+                    hint: "Bitte Passwort eingeben, um den bisherigen Schlüssel ins neue Keyring-Format zu migrieren.",
+                    askNsec: false,
+                    askConfirm: false,
+                    askName: false,
+                    askKey: false,
+                    askRemember: true,
+                    defaultRememberMode: "none",
+                    submitLabel: "Entsperren & migrieren"
+                });
+                if (!unlock.password) throw new Error("Kein Passwort angegeben.");
+
+                try {
+                    const payload = JSON.parse(encryptedRaw);
+                    const nsec = await decryptNsec(payload, unlock.password);
+                    if (!isValidNsec(nsec)) throw new Error("Ungültiger nsec nach Entschlüsselung.");
+                    const firstEntry = await createKeyringEntry(nsec, unlock.password, "Migrated Key");
+                    const migratedKeyring = { v: 1, keys: [firstEntry] };
+                    saveKeyring(migratedKeyring);
+                    setActiveKeyId(firstEntry.id);
+                    saveUnlockCache(unlock.password, firstEntry.id, unlock.rememberMode || "none");
+                    localStorage.removeItem(ENCRYPTED_NSEC_STORAGE_KEY);
+                    localStorage.removeItem(LEGACY_NSEC_STORAGE_KEY);
+                    appendRequestLog("Migration: alter verschlüsselter Storage wurde ins Keyring-Format übernommen.");
+                    return {
+                        nsec,
+                        password: unlock.password,
+                        keyId: firstEntry.id,
+                        keyName: keyDisplayName(firstEntry, 0),
+                        keyring: migratedKeyring
+                    };
+                } catch (_err) {
+                    throw new Error("Migration fehlgeschlagen. Passwort oder Alt-Daten sind ungültig.");
+                }
+            }
+
+            const legacy = localStorage.getItem(LEGACY_NSEC_STORAGE_KEY);
+            if (isValidNsec(legacy)) {
+                postBridgeMessage("locked", { reason: "Migration von Klartext-nsec auf verschlüsselten Keyring." });
+                const unlock = await showUnlockPanel({
+                    title: "Signer absichern",
+                    hint: "Klartext-nsec gefunden. Bitte Passwort setzen und optional Schlüssel benennen.",
+                    askNsec: false,
+                    askConfirm: true,
+                    askName: true,
+                    askKey: false,
+                    askRemember: true,
+                    defaultRememberMode: "none",
+                    submitLabel: "Migrieren"
+                });
+                if (!unlock.password) throw new Error("Kein Passwort angegeben.");
+                if (unlock.password.length < 8) throw new Error("Passwort muss mindestens 8 Zeichen haben.");
+                if (unlock.password !== unlock.passwordConfirm) throw new Error("Passwörter stimmen nicht überein.");
+
+                const firstEntry = await createKeyringEntry(legacy, unlock.password, unlock.keyName);
+                const migratedKeyring = { v: 1, keys: [firstEntry] };
+                saveKeyring(migratedKeyring);
+                setActiveKeyId(firstEntry.id);
+                saveUnlockCache(unlock.password, firstEntry.id, unlock.rememberMode || "none");
+                localStorage.removeItem(ENCRYPTED_NSEC_STORAGE_KEY);
+                localStorage.removeItem(LEGACY_NSEC_STORAGE_KEY);
+                appendRequestLog("Klartext-nsec wurde in verschlüsselten Keyring migriert.");
+                return {
+                    nsec: legacy,
+                    password: unlock.password,
+                    keyId: firstEntry.id,
+                    keyName: keyDisplayName(firstEntry, 0),
+                    keyring: migratedKeyring
+                };
+            }
+
+            postBridgeMessage("locked", { reason: "Ersteinrichtung erforderlich." });
+            const setup = await showUnlockPanel({
+                title: "Signer einrichten",
+                hint: "Bitte nsec eingeben oder generieren, Passwort setzen und optional einen Namen vergeben.",
+                askNsec: true,
+                askConfirm: true,
+                askName: true,
+                askKey: false,
+                askRemember: true,
+                defaultRememberMode: "none",
+                allowGenerate: true,
+                submitLabel: "Speichern & entsperren"
+            });
+            if (!setup.nsec) throw new Error("Kein nsec angegeben.");
+            if (!isValidNsec(setup.nsec)) {
+                throw new Error("Ungültiger nsec. Erwartet wird ein kompletter nsec1...-Wert.");
+            }
+            if (!setup.password) throw new Error("Kein Passwort angegeben.");
+            if (setup.password.length < 8) throw new Error("Passwort muss mindestens 8 Zeichen haben.");
+            if (setup.password !== setup.passwordConfirm) throw new Error("Passwörter stimmen nicht überein.");
+
+            const firstEntry = await createKeyringEntry(setup.nsec, setup.password, setup.keyName);
+            const newKeyring = { v: 1, keys: [firstEntry] };
+            saveKeyring(newKeyring);
+            setActiveKeyId(firstEntry.id);
+            saveUnlockCache(setup.password, firstEntry.id, setup.rememberMode || "none");
+            localStorage.removeItem(ENCRYPTED_NSEC_STORAGE_KEY);
+            localStorage.removeItem(LEGACY_NSEC_STORAGE_KEY);
+            appendRequestLog("nsec verschlüsselt im Keyring gespeichert.");
+            return {
+                nsec: setup.nsec,
+                password: setup.password,
+                keyId: firstEntry.id,
+                keyName: keyDisplayName(firstEntry, 0),
+                keyring: newKeyring
+            };
+        }
+
+        function formatRequestParams(request) {
+            const params = request?.params;
+            if (!params) return "(keine)";
+
+            try {
+                if (request.method === "sign_event" && typeof params.rawEvent === "function") {
+                    return JSON.stringify(params.rawEvent(), null, 2);
+                }
+
+                if (typeof params === "string") return params;
+                return JSON.stringify(params, null, 2);
+            } catch (_err) {
+                return "[Parameter konnten nicht serialisiert werden]";
+            }
+        }
+
+        function appendRequestLog(line) {
+            const logEl = document.getElementById("request-log");
+            const now = new Date().toLocaleTimeString();
+            const previous = logEl.innerText ? `${logEl.innerText}\n` : "";
+            const combined = `[${now}] ${line}\n${previous}`.split("\n").slice(0, 60).join("\n");
+            logEl.innerText = combined.trimEnd();
+            scheduleFrameSizeNotification();
+        }
+
+        function intrinsicBodyContentHeight() {
+            const body = document.body;
+            if (!body) return 0;
+
+            const bodyTop = body.getBoundingClientRect().top;
+            let maxBottom = 0;
+            for (const child of body.children) {
+                const style = window.getComputedStyle(child);
+                if (style.display === "none") continue;
+                if (style.position === "fixed") continue;
+                const rect = child.getBoundingClientRect();
+                if (!Number.isFinite(rect.bottom) || !Number.isFinite(rect.top)) continue;
+                const bottom = rect.bottom - bodyTop;
+                maxBottom = Math.max(maxBottom, bottom);
+            }
+            return Math.max(0, Math.ceil(maxBottom));
+        }
+
+        function computeDocumentHeight() {
+            const body = document.body;
+            const intrinsic = intrinsicBodyContentHeight();
+
+            if (intrinsic > 0) return intrinsic + 2;
+
+            return Math.max(
+                body?.scrollHeight || 0,
+                body?.offsetHeight || 0
+            );
+        }
+
+        function notifyParentFrameSize(force = false) {
+            const height = Math.max(110, computeDocumentHeight());
+            if (!force && Math.abs(height - lastPostedFrameHeight) < 4) return;
+            lastPostedFrameHeight = height;
+            postBridgeMessage("frame-size", { height });
+        }
+
+        function scheduleFrameSizeNotification(force = false) {
+            if (force) {
+                frameSizeNotifyScheduled = false;
+                notifyParentFrameSize(true);
+                return;
+            }
+            if (frameSizeNotifyScheduled) return;
+            frameSizeNotifyScheduled = true;
+            requestAnimationFrame(() => {
+                frameSizeNotifyScheduled = false;
+                notifyParentFrameSize(false);
+            });
+        }
+
+        function setupFrameAutoResizeBridge() {
+            const resizeTarget = document.documentElement;
+
+            if (typeof ResizeObserver === "function") {
+                const ro = new ResizeObserver(() => scheduleFrameSizeNotification(false));
+                ro.observe(resizeTarget);
+                if (document.body) ro.observe(document.body);
+            }
+
+            window.addEventListener("resize", () => scheduleFrameSizeNotification(false));
+            scheduleFrameSizeNotification(true);
+        }
+
+        function setActiveTab(tabName) {
+            const tabs = ["signer", "info", "management"];
+            for (const tab of tabs) {
+                const panel = document.getElementById(`tab-${tab}`);
+                const btn = document.getElementById(`tab-btn-${tab}`);
+                if (panel) panel.classList.toggle("active", tab === tabName);
+                if (btn) btn.classList.toggle("active", tab === tabName);
+            }
+            scheduleFrameSizeNotification(false);
+        }
+
+        function setupTabNavigation() {
+            const signerBtn = document.getElementById("tab-btn-signer");
+            const infoBtn = document.getElementById("tab-btn-info");
+            const managementBtn = document.getElementById("tab-btn-management");
+
+            signerBtn.addEventListener("click", () => setActiveTab("signer"));
+            infoBtn.addEventListener("click", () => setActiveTab("info"));
+            managementBtn.addEventListener("click", () => setActiveTab("management"));
+        }
+
+        function setCompactConnectedMode(enabled) {
+            document.body.classList.toggle("compact-connected", Boolean(enabled));
+            scheduleFrameSizeNotification(true);
+        }
+
+        function showUnlockPanel(options) {
+            const panel = document.getElementById("unlock-panel");
+            const titleEl = document.getElementById("unlock-title");
+            const hintEl = document.getElementById("unlock-hint");
+            const keyRow = document.getElementById("unlock-key-row");
+            const nameRow = document.getElementById("unlock-name-row");
+            const nsecRow = document.getElementById("unlock-nsec-row");
+            const generateRow = document.getElementById("unlock-generate-row");
+            const confirmRow = document.getElementById("unlock-password-confirm-row");
+            const rememberRow = document.getElementById("unlock-remember-row");
+            const keySelect = document.getElementById("unlock-key-select");
+            const nameInput = document.getElementById("unlock-name-input");
+            const nsecInput = document.getElementById("unlock-nsec-input");
+            const passwordInput = document.getElementById("unlock-password-input");
+            const confirmInput = document.getElementById("unlock-password-confirm-input");
+            const rememberSelect = document.getElementById("unlock-remember-select");
+            const generateBtn = document.getElementById("unlock-generate-btn");
+            const submitBtn = document.getElementById("unlock-submit-btn");
+            const cancelBtn = document.getElementById("unlock-cancel-btn");
+
+            titleEl.innerText = options.title;
+            hintEl.innerText = options.hint || "";
+            submitBtn.innerText = options.submitLabel || "Weiter";
+
+            keyRow.style.display = options.askKey ? "block" : "none";
+            nameRow.style.display = options.askName ? "block" : "none";
+            nsecRow.style.display = options.askNsec ? "block" : "none";
+            generateRow.style.display = options.askNsec && options.allowGenerate ? "flex" : "none";
+            confirmRow.style.display = options.askConfirm ? "block" : "none";
+            rememberRow.style.display = options.askRemember ? "block" : "none";
+
+            keySelect.innerHTML = "";
+            if (Array.isArray(options.keyOptions)) {
+                for (const option of options.keyOptions) {
+                    const opt = document.createElement("option");
+                    opt.value = option.id;
+                    opt.textContent = option.label;
+                    keySelect.appendChild(opt);
+                }
+            }
+            if (options.defaultKeyId) keySelect.value = options.defaultKeyId;
+
+            nameInput.value = options.defaultName || "";
+            nsecInput.value = options.defaultNsec || "";
+            nsecInput.readOnly = Boolean(options.readonlyNsec);
+            passwordInput.value = "";
+            confirmInput.value = "";
+            rememberSelect.value = options.defaultRememberMode || "none";
+
+            setActiveTab("management");
+            panel.style.display = "block";
+            scheduleFrameSizeNotification(true);
+
+            return new Promise((resolve, reject) => {
+                const cleanup = () => {
+                    submitBtn.onclick = null;
+                    cancelBtn.onclick = null;
+                    generateBtn.onclick = null;
+                    panel.style.display = "none";
+                    scheduleFrameSizeNotification(true);
+                };
+
+                submitBtn.onclick = () => {
+                    const value = {
+                        keyId: keySelect.value,
+                        keyName: nameInput.value.trim(),
+                        nsec: nsecInput.value.trim(),
+                        password: passwordInput.value,
+                        passwordConfirm: confirmInput.value,
+                        rememberMode: rememberSelect.value || "none"
+                    };
+                    cleanup();
+                    resolve(value);
+                };
+
+                cancelBtn.onclick = () => {
+                    cleanup();
+                    reject(new Error("Entsperren abgebrochen."));
+                };
+
+                generateBtn.onclick = () => {
+                    try {
+                        nsecInput.value = generateRandomNsec();
+                    } catch (err) {
+                        appendRequestLog(`Generieren fehlgeschlagen: ${err.message}`);
+                    }
+                };
+            });
+        }
+
+        function renderKeyManager() {
+            const panel = document.getElementById("key-manager");
+            if (!currentKeyring || !Array.isArray(currentKeyring.keys) || currentKeyring.keys.length === 0) {
+                panel.style.display = "none";
+                scheduleFrameSizeNotification(false);
+                return;
+            }
+
+            const select = document.getElementById("saved-keys-select");
+            const activeInfoEl = document.getElementById("active-key-info");
+            select.innerHTML = "";
+
+            currentKeyring.keys.forEach((entry, index) => {
+                const option = document.createElement("option");
+                option.value = entry.id;
+                option.textContent = keyDisplayName(entry, index);
+                if (entry.id === activeKeyId) option.selected = true;
+                select.appendChild(option);
+            });
+
+            const { entry: activeEntry, index: activeIndex } = resolveActiveKeyEntry(currentKeyring, activeKeyId);
+            const currentName = keyDisplayName(activeEntry, activeIndex);
+            const npubShort = activeUser?.npub ? `${activeUser.npub.slice(0, 16)}...` : "(noch nicht geladen)";
+            activeInfoEl.innerText = `Aktiv: ${currentName}\nnpub: ${npubShort}`;
+
+            panel.style.display = "block";
+            scheduleFrameSizeNotification(false);
+        }
+
+        async function switchToSelectedKey() {
+            if (!currentKeyring || !Array.isArray(currentKeyring.keys) || currentKeyring.keys.length === 0) {
+                throw new Error("Kein Keyring geladen.");
+            }
+            const selectedId = document.getElementById("saved-keys-select").value;
+            if (!selectedId) throw new Error("Kein Schlüssel ausgewählt.");
+            if (selectedId === activeKeyId) {
+                appendRequestLog("Ausgewählter Schlüssel ist bereits aktiv.");
+                return;
+            }
+
+            setActiveKeyId(selectedId);
+            updateUnlockCacheKeyId(selectedId);
+            appendRequestLog("Aktiver Schlüssel gewechselt. Seite wird neu geladen.");
+            window.location.reload();
+        }
+
+        async function downloadActiveKeyPair() {
+            if (!currentKeyring || !sessionPassword) throw new Error("Keyring ist nicht entsperrt.");
+            const { entry: activeEntry, index: activeIndex } = resolveActiveKeyEntry(currentKeyring, activeKeyId);
+            if (!activeEntry) throw new Error("Kein aktiver Schlüssel gefunden.");
+
+            const nsec = await decryptNsec(activeEntry.payload, sessionPassword);
+            const signer = new NDKPrivateKeySigner(nsec);
+            const user = await signer.user();
+            const displayName = keyDisplayName(activeEntry, activeIndex);
+            const exportPayload = {
+                label: displayName,
+                createdAt: new Date(activeEntry.createdAt || Date.now()).toISOString(),
+                nsec,
+                pubkey: user.pubkey,
+                npub: user.npub
+            };
+
+            const blob = new Blob([JSON.stringify(exportPayload, null, 2)], { type: "application/json" });
+            const fileName = `${safeFilename(displayName)}-${safeFilename(user.npub.slice(0, 12))}.json`;
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.href = url;
+            link.download = fileName;
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            URL.revokeObjectURL(url);
+            appendRequestLog(`Schlüsselpaar exportiert: ${fileName}`);
+        }
+
+        async function saveAdditionalKey() {
+            if (!currentKeyring || !sessionPassword) throw new Error("Keyring ist nicht entsperrt.");
+
+            const nameInput = document.getElementById("new-key-name-input");
+            const nsecInput = document.getElementById("new-key-nsec-input");
+            const nsec = nsecInput.value.trim();
+            const name = normalizeKeyName(nameInput.value);
+
+            if (!nsec) throw new Error("Bitte nsec eingeben oder generieren.");
+            if (!isValidNsec(nsec)) throw new Error("Ungültiger nsec. Erwartet nsec1...");
+
+            const newSigner = new NDKPrivateKeySigner(nsec);
+            const newUser = await newSigner.user();
+
+            for (const entry of currentKeyring.keys) {
+                try {
+                    const existingNsec = await decryptNsec(entry.payload, sessionPassword);
+                    const existingUser = await new NDKPrivateKeySigner(existingNsec).user();
+                    if (existingUser.pubkey === newUser.pubkey) {
+                        throw new Error("Dieser Schlüssel ist bereits gespeichert.");
+                    }
+                } catch (err) {
+                    if (err.message === "Dieser Schlüssel ist bereits gespeichert.") throw err;
+                }
+            }
+
+            const entry = await createKeyringEntry(nsec, sessionPassword, name);
+            currentKeyring.keys.push(entry);
+            saveKeyring(currentKeyring);
+            appendRequestLog(`Neuer Schlüssel gespeichert: ${keyDisplayName(entry, currentKeyring.keys.length - 1)}`);
+            nsecInput.value = "";
+            renderKeyManager();
+        }
+
+        async function changeKeyringPassword() {
+            if (!currentKeyring || !sessionPassword) throw new Error("Keyring ist nicht entsperrt.");
+
+            const currentInput = document.getElementById("change-password-current-input");
+            const newInput = document.getElementById("change-password-new-input");
+            const confirmInput = document.getElementById("change-password-confirm-input");
+
+            const currentPassword = currentInput.value;
+            const newPassword = newInput.value;
+            const newPasswordConfirm = confirmInput.value;
+
+            if (!currentPassword) throw new Error("Bitte aktuelles Passwort eingeben.");
+            if (currentPassword !== sessionPassword) throw new Error("Aktuelles Passwort ist falsch.");
+            if (!newPassword) throw new Error("Bitte neues Passwort eingeben.");
+            if (newPassword.length < 8) throw new Error("Neues Passwort muss mindestens 8 Zeichen haben.");
+            if (newPassword !== newPasswordConfirm) throw new Error("Neue Passwörter stimmen nicht überein.");
+            if (newPassword === sessionPassword) throw new Error("Neues Passwort muss sich vom aktuellen unterscheiden.");
+
+            const reencryptedKeys = [];
+            for (const entry of currentKeyring.keys) {
+                const nsec = await decryptNsec(entry.payload, sessionPassword);
+                const reencryptedPayload = await encryptNsec(nsec, newPassword);
+                reencryptedKeys.push({
+                    ...entry,
+                    payload: reencryptedPayload
+                });
+            }
+
+            currentKeyring = {
+                ...currentKeyring,
+                keys: reencryptedKeys
+            };
+            saveKeyring(currentKeyring);
+
+            sessionPassword = newPassword;
+            saveUnlockCache(newPassword, activeKeyId, "session");
+
+            currentInput.value = "";
+            newInput.value = "";
+            confirmInput.value = "";
+            appendRequestLog("Passwort geändert. Alle gespeicherten Schlüssel wurden neu verschlüsselt.");
+        }
+
+        function setupKeyManagerHandlers() {
+            document.getElementById("switch-key-btn").addEventListener("click", async () => {
+                try {
+                    await switchToSelectedKey();
+                } catch (err) {
+                    appendRequestLog(`Switch fehlgeschlagen: ${err.message}`);
+                }
+            });
+
+            document.getElementById("download-key-btn").addEventListener("click", async () => {
+                try {
+                    await downloadActiveKeyPair();
+                } catch (err) {
+                    appendRequestLog(`Download fehlgeschlagen: ${err.message}`);
+                }
+            });
+
+            document.getElementById("generate-key-btn").addEventListener("click", () => {
+                try {
+                    const generated = generateRandomNsec();
+                    document.getElementById("new-key-nsec-input").value = generated;
+                    appendRequestLog("Neuer nsec wurde generiert.");
+                } catch (err) {
+                    appendRequestLog(`Generieren fehlgeschlagen: ${err.message}`);
+                }
+            });
+
+            document.getElementById("save-key-btn").addEventListener("click", async () => {
+                try {
+                    await saveAdditionalKey();
+                } catch (err) {
+                    appendRequestLog(`Speichern fehlgeschlagen: ${err.message}`);
+                }
+            });
+
+            document.getElementById("change-password-btn").addEventListener("click", async () => {
+                try {
+                    await changeKeyringPassword();
+                } catch (err) {
+                    appendRequestLog(`Passwort ändern fehlgeschlagen: ${err.message}`);
+                }
+            });
+        }
+
+        function expectedParentOrigin() {
+            const params = new URLSearchParams(window.location.search);
+            const fromQuery = params.get("parentOrigin");
+            if (fromQuery) return fromQuery;
+
+            if (document.referrer) {
+                try {
+                    return new URL(document.referrer).origin;
+                } catch (_err) {
+                    return null;
+                }
+            }
+
+            return null;
+        }
+
+        function postBridgeMessage(type, payload) {
+            if (window.parent === window) return;
+
+            const targetOrigin = expectedParentOrigin();
+            if (!targetOrigin) {
+                appendRequestLog(`Bridge blockiert: unbekannter parentOrigin (${type})`);
+                return;
+            }
+
+            try {
+                window.parent.postMessage(
+                    { source: BRIDGE_SOURCE, type, payload },
+                    targetOrigin
+                );
+            } catch (err) {
+                appendRequestLog(`Bridge-Post fehlgeschlagen: ${err.message}`);
+            }
+        }
+
+        function bridgeMessageHandler(event) {
+            const targetOrigin = expectedParentOrigin();
+            if (!targetOrigin || event.origin !== targetOrigin) return;
+
+            const data = event.data;
+            if (!data || data.source !== BRIDGE_SOURCE) return;
+
+            if (data.type === "request-frame-size") {
+                scheduleFrameSizeNotification(true);
+                return;
+            }
+
+            if (data.type === "ping" || data.type === "get-connection-info") {
+                if (connectionInfo) {
+                    postBridgeMessage("connection-info", connectionInfo);
+                } else {
+                    postBridgeMessage("locked", { reason: "Signer ist noch gesperrt." });
+                }
+            }
+        }
+
+        function loadPermissions() {
+            try {
+                const raw = localStorage.getItem(PERMISSION_STORAGE_KEY);
+                return raw ? JSON.parse(raw) : {};
+            } catch (_err) {
+                return {};
+            }
+        }
+
+        function savePermissions(permissions) {
+            localStorage.setItem(PERMISSION_STORAGE_KEY, JSON.stringify(permissions));
+        }
+
+        function permissionKey(pubkey, method) {
+            return `${pubkey}:${method}`;
+        }
+
+        function clearExpiredPermissions() {
+            const now = Date.now();
+            const permissions = loadPermissions();
+            let changed = false;
+
+            for (const [key, value] of Object.entries(permissions)) {
+                if (value === PERMISSION_FOREVER) continue;
+                if (typeof value !== "number" || value <= now) {
+                    delete permissions[key];
+                    changed = true;
+                }
+            }
+
+            if (changed) savePermissions(permissions);
+            return permissions;
+        }
+
+        function hasActivePermission(pubkey, method) {
+            const permissions = clearExpiredPermissions();
+            const key = permissionKey(pubkey, method);
+            const value = permissions[key];
+            return value === PERMISSION_FOREVER || (typeof value === "number" && value > Date.now());
+        }
+
+        function grantPermission(pubkey, method, ttlMs) {
+            const permissions = clearExpiredPermissions();
+            permissions[permissionKey(pubkey, method)] = Date.now() + ttlMs;
+            savePermissions(permissions);
+        }
+
+        function grantPermissionForever(pubkey, method) {
+            const permissions = clearExpiredPermissions();
+            permissions[permissionKey(pubkey, method)] = PERMISSION_FOREVER;
+            savePermissions(permissions);
+        }
+
+        function processPermissionQueue() {
+            if (activePermissionRequest || pendingPermissionRequests.length === 0) return;
+
+            activePermissionRequest = pendingPermissionRequests.shift();
+            const { request, resolve } = activePermissionRequest;
+            const method = request?.method;
+            const pubkey = request?.pubkey;
+
+            showModal(
+                request,
+                () => {
+                    appendRequestLog(`Erlaubt (einmal): ${method}`);
+                    resolve(true);
+                    activePermissionRequest = null;
+                    processPermissionQueue();
+                },
+                () => {
+                    if (pubkey && method) {
+                        grantPermissionForever(pubkey, method);
+                    }
+                    appendRequestLog(`Erlaubt (immer): ${method}`);
+                    resolve(true);
+                    activePermissionRequest = null;
+                    processPermissionQueue();
+                },
+                () => {
+                    appendRequestLog(`Abgelehnt: ${method}`);
+                    resolve(false);
+                    activePermissionRequest = null;
+                    processPermissionQueue();
+                }
+            );
+        }
+
+        function requestPermission(request) {
+            return new Promise((resolve) => {
+                pendingPermissionRequests.push({ request, resolve });
+                processPermissionQueue();
+            });
+        }
+
+        function connectedBackendRpcRelayCount(nip46Backend) {
+            const relaysMap = nip46Backend?.rpc?.pool?.relays;
+            if (!relaysMap || typeof relaysMap.values !== "function") return 0;
+            return Array.from(relaysMap.values()).filter((relay) => relay?.status === 5).length;
+        }
+
+        async function ensureBackendRpcRelaysConnected(nip46Backend, timeoutMs = 7000, minConnected = 1) {
+            const rpcPool = nip46Backend?.rpc?.pool;
+            if (!rpcPool || typeof rpcPool.connect !== "function") return;
+
+            await Promise.race([
+                rpcPool.connect(timeoutMs),
+                new Promise((_, reject) => setTimeout(() => reject(new Error("rpc pool connect timeout")), timeoutMs + 1000))
+            ]);
+
+            const connected = connectedBackendRpcRelayCount(nip46Backend);
+            if (connected < minConnected) {
+                throw new Error(`Signer RPC relays offline (${connected}/${minConnected})`);
+            }
+        }
+
+        function patchBackendRpcReliability(nip46Backend) {
+            const rpc = nip46Backend?.rpc;
+            if (!rpc || rpc.__reliabilityPatched) return;
+
+            const originalSendResponse = rpc.sendResponse?.bind(rpc);
+            if (typeof originalSendResponse === "function") {
+                rpc.sendResponse = async (...args) => {
+                    await ensureBackendRpcRelaysConnected(nip46Backend, 7000, 1);
+                    return originalSendResponse(...args);
+                };
+            }
+
+            const originalSendRequest = rpc.sendRequest?.bind(rpc);
+            if (typeof originalSendRequest === "function") {
+                rpc.sendRequest = async (...args) => {
+                    await ensureBackendRpcRelaysConnected(nip46Backend, 7000, 1);
+                    return originalSendRequest(...args);
+                };
+            }
+
+            rpc.__reliabilityPatched = true;
+        }
+
+        function isRetryableUnlockError(err) {
+            const msg = err?.message || "";
+            return msg === "Kein Passwort angegeben." ||
+                msg === "Kein nsec angegeben." ||
+                msg === "Passwörter stimmen nicht überein." ||
+                msg === "Entsperren fehlgeschlagen. Passwort oder Daten sind ungültig." ||
+                msg === "Migration fehlgeschlagen. Passwort oder Alt-Daten sind ungültig." ||
+                msg.startsWith("Passwort muss mindestens ") ||
+                msg.startsWith("Ungültiger nsec");
+        }
+
+        async function getOrAskActiveKeyWithRetry() {
+            while (true) {
+                try {
+                    return await getOrAskActiveKey();
+                } catch (err) {
+                    if (err?.message === "Entsperren abgebrochen.") throw err;
+                    if (!isRetryableUnlockError(err)) throw err;
+                    appendRequestLog(`${err.message} Bitte erneut versuchen.`);
+                }
+            }
+        }
+
+        async function startSigner() {
+            const ndk = new NDK({ explicitRelayUrls: RELAYS });
+            await ndk.connect();
+
+            const unlocked = await getOrAskActiveKeyWithRetry();
+            sessionPassword = unlocked.password;
+            currentKeyring = unlocked.keyring;
+            activeKeyId = unlocked.keyId;
+            activeNsec = unlocked.nsec;
+
+            const localSigner = new NDKPrivateKeySigner(activeNsec);
+            const user = await localSigner.user();
+            activeUser = user;
+
+            const relayQuery = RELAYS.map((relayUrl) => `relay=${encodeURIComponent(relayUrl)}`).join("&");
+            const bunkerUri = `bunker://${user.pubkey}?${relayQuery}`;
+            const nostrconnectUri = `nostrconnect://${user.pubkey}?${relayQuery}`;
+            connectionInfo = {
+                pubkey: user.pubkey,
+                npub: user.npub,
+                keyName: unlocked.keyName,
+                relays: RELAYS,
+                bunkerUri,
+                nostrconnectUri
+            };
+
+            document.getElementById("status").innerText = "Signer bereit";
+            document.getElementById("user-info").innerText =
+                `Aktiver Schlüssel: ${unlocked.keyName}\n` +
+                `npub: ${user.npub.substring(0, 16)}...\n` +
+                "Warte auf NostrConnect-Anfragen.";
+            document.getElementById("connection-info").innerText =
+                `Aktiver Schlüssel: ${unlocked.keyName}\n` +
+                `pubkey: ${user.pubkey}\n` +
+                `npub: ${user.npub}\n` +
+                `Relays: ${RELAYS.join(", ")}\n` +
+                `Bunker URI: ${bunkerUri}\n` +
+                `Nostrconnect URI: ${nostrconnectUri}`;
+
+            renderKeyManager();
+            setActiveTab("signer");
+            setCompactConnectedMode(isEmbeddedContext);
+
+            const nip46Backend = new NDKNip46Backend(
+                ndk,
+                localSigner,
+                async (request) => {
+                    console.log("NIP-46 Anfrage:", request);
+                    const method = request?.method;
+                    const pubkey = request?.pubkey ?? "";
+                    appendRequestLog(`Methode: ${method} von ${pubkey.slice(0, 12) || "?"}...`);
+
+                    if (method === "switch_relays") {
+                        appendRequestLog("Blockiert: switch_relays (feste Relay-Allowlist)");
+                        return false;
+                    }
+
+                    if (AUTO_ALLOW_METHODS.has(method)) {
+                        appendRequestLog(`Auto erlaubt: ${method}`);
+                        return true;
+                    }
+
+                    if (!SENSITIVE_METHODS.has(method)) {
+                        appendRequestLog(`Nicht sensitiv, erlaubt: ${method}`);
+                        return true;
+                    }
+
+                    if (pubkey && hasActivePermission(pubkey, method)) {
+                        appendRequestLog(`TTL erlaubt: ${method}`);
+                        return true;
+                    }
+
+                    return requestPermission(request);
+                },
+                RELAYS
+            );
+
+            patchBackendRpcReliability(nip46Backend);
+            await nip46Backend.start();
+            await ensureBackendRpcRelaysConnected(nip46Backend, 9000, 1);
+            appendRequestLog("Signer RPC verbunden.");
+            postBridgeMessage("ready", connectionInfo);
+            appendRequestLog("Bridge: ready an Parent gesendet");
+            console.log("Bunker URI:", bunkerUri);
+            console.log("Nostrconnect URI:", nostrconnectUri);
+        }
+
+        function humanRequestTitle(method) {
+            if (method === "sign_event") return "Signieren und senden?";
+            if (method === "connect") return "Verbindung erlauben?";
+            if (method === "get_public_key") return "Öffentlichen Schlüssel teilen?";
+            if (method === "nip04_encrypt" || method === "nip44_encrypt") return "Verschlüsseln erlauben?";
+            if (method === "nip04_decrypt" || method === "nip44_decrypt") return "Entschlüsseln erlauben?";
+            return `Anfrage: ${method}`;
+        }
+
+        function showModal(req, onAllowOnce, onAllowAlways, onReject) {
+            document.getElementById("request-title").innerText = humanRequestTitle(req.method);
+            document.getElementById("request-details").innerText =
+                `Methode: ${req.method}\nParameter: ${formatRequestParams(req)}`;
+
+            document.getElementById("overlay").style.display = "block";
+            document.getElementById("auth-modal").style.display = "block";
+            scheduleFrameSizeNotification(true);
+
+            document.getElementById("allow-once-btn").onclick = () => {
+                hideModal();
+                onAllowOnce();
+            };
+
+            document.getElementById("allow-always-btn").onclick = () => {
+                hideModal();
+                onAllowAlways();
+            };
+
+            document.getElementById("reject-btn").onclick = () => {
+                hideModal();
+                onReject();
+            };
+        }
+
+        function hideModal() {
+            document.getElementById("overlay").style.display = "none";
+            document.getElementById("auth-modal").style.display = "none";
+            scheduleFrameSizeNotification(true);
+        }
+
+        setupTabNavigation();
+        setupKeyManagerHandlers();
+        setupFrameAutoResizeBridge();
+        window.addEventListener("message", bridgeMessageHandler);
+
+        startSigner().catch((err) => {
+            console.error(err);
+            setCompactConnectedMode(false);
+            document.getElementById("status").innerText = `Fehler: ${err.message}`;
+        });
+    </script>
+</body>
+</html>
+
