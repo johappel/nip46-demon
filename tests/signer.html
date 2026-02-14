@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="de">
 <head>
     <meta charset="UTF-8">
@@ -82,6 +82,15 @@
             <label for="unlock-password-confirm-input">Passwort wiederholen</label>
             <input id="unlock-password-confirm-input" type="password" placeholder="Passwort wiederholen" />
         </div>
+        <div id="unlock-remember-row">
+            <label for="unlock-remember-select">Entsperrt bleiben (optional)</label>
+            <select id="unlock-remember-select">
+                <option value="none">Nein (bei Reload wieder sperren)</option>
+                <option value="session">Während dieser Browser-Session</option>
+                <option value="15m">15 Minuten</option>
+                <option value="1h">1 Stunde</option>
+            </select>
+        </div>
         <div class="button-row">
             <button class="btn-approve" id="unlock-submit-btn">Weiter</button>
             <button class="btn-reject" id="unlock-cancel-btn">Abbrechen</button>
@@ -128,6 +137,8 @@
         const ENCRYPTED_NSEC_STORAGE_KEY = "nip46_demo_nsec_enc_v1";
         const KEYRING_STORAGE_KEY = "nip46_demo_keyring_enc_v2";
         const ACTIVE_KEY_ID_STORAGE_KEY = "nip46_demo_active_key_id_v1";
+        const UNLOCK_CACHE_SESSION_KEY = "nip46_unlock_cache_session_v1";
+        const UNLOCK_CACHE_TTL_KEY = "nip46_unlock_cache_ttl_v1";
         const PERMISSION_STORAGE_KEY = "nip46_permissions_v1";
         const RELAYS = [
             "wss://relay.damus.io",
@@ -363,6 +374,108 @@
             localStorage.setItem(ACTIVE_KEY_ID_STORAGE_KEY, id);
         }
 
+        function clearUnlockCache() {
+            sessionStorage.removeItem(UNLOCK_CACHE_SESSION_KEY);
+            localStorage.removeItem(UNLOCK_CACHE_TTL_KEY);
+        }
+
+        function loadUnlockCache() {
+            try {
+                const sessionRaw = sessionStorage.getItem(UNLOCK_CACHE_SESSION_KEY);
+                if (sessionRaw) {
+                    const sessionParsed = JSON.parse(sessionRaw);
+                    if (sessionParsed && typeof sessionParsed.password === "string") {
+                        return {
+                            mode: "session",
+                            password: sessionParsed.password,
+                            keyId: typeof sessionParsed.keyId === "string" ? sessionParsed.keyId : null
+                        };
+                    }
+                    sessionStorage.removeItem(UNLOCK_CACHE_SESSION_KEY);
+                }
+            } catch (_err) {
+                sessionStorage.removeItem(UNLOCK_CACHE_SESSION_KEY);
+            }
+
+            try {
+                const ttlRaw = localStorage.getItem(UNLOCK_CACHE_TTL_KEY);
+                if (!ttlRaw) return null;
+                const ttlParsed = JSON.parse(ttlRaw);
+                const now = Date.now();
+                if (!ttlParsed || typeof ttlParsed.password !== "string" || typeof ttlParsed.expiresAt !== "number" || ttlParsed.expiresAt <= now) {
+                    localStorage.removeItem(UNLOCK_CACHE_TTL_KEY);
+                    return null;
+                }
+                return {
+                    mode: "ttl",
+                    password: ttlParsed.password,
+                    keyId: typeof ttlParsed.keyId === "string" ? ttlParsed.keyId : null
+                };
+            } catch (_err) {
+                localStorage.removeItem(UNLOCK_CACHE_TTL_KEY);
+                return null;
+            }
+        }
+
+        function saveUnlockCache(password, keyId, mode) {
+            clearUnlockCache();
+            if (!password || mode === "none") return;
+
+            if (mode === "session") {
+                sessionStorage.setItem(
+                    UNLOCK_CACHE_SESSION_KEY,
+                    JSON.stringify({ v: 1, keyId: keyId || null, password, savedAt: Date.now() })
+                );
+                return;
+            }
+
+            let ttlMs = 0;
+            if (mode === "15m") ttlMs = 15 * 60 * 1000;
+            if (mode === "1h") ttlMs = 60 * 60 * 1000;
+            if (ttlMs <= 0) return;
+
+            localStorage.setItem(
+                UNLOCK_CACHE_TTL_KEY,
+                JSON.stringify({
+                    v: 1,
+                    keyId: keyId || null,
+                    password,
+                    savedAt: Date.now(),
+                    expiresAt: Date.now() + ttlMs
+                })
+            );
+        }
+
+        function updateUnlockCacheKeyId(keyId) {
+            if (!keyId) return;
+
+            try {
+                const sessionRaw = sessionStorage.getItem(UNLOCK_CACHE_SESSION_KEY);
+                if (sessionRaw) {
+                    const parsed = JSON.parse(sessionRaw);
+                    if (parsed && typeof parsed.password === "string") {
+                        parsed.keyId = keyId;
+                        sessionStorage.setItem(UNLOCK_CACHE_SESSION_KEY, JSON.stringify(parsed));
+                    }
+                }
+            } catch (_err) {
+                sessionStorage.removeItem(UNLOCK_CACHE_SESSION_KEY);
+            }
+
+            try {
+                const ttlRaw = localStorage.getItem(UNLOCK_CACHE_TTL_KEY);
+                if (ttlRaw) {
+                    const parsed = JSON.parse(ttlRaw);
+                    if (parsed && typeof parsed.password === "string" && typeof parsed.expiresAt === "number" && parsed.expiresAt > Date.now()) {
+                        parsed.keyId = keyId;
+                        localStorage.setItem(UNLOCK_CACHE_TTL_KEY, JSON.stringify(parsed));
+                    }
+                }
+            } catch (_err) {
+                localStorage.removeItem(UNLOCK_CACHE_TTL_KEY);
+            }
+        }
+
         function resolveActiveKeyEntry(keyring, preferredId = null) {
             const wanted = preferredId || activeKeyIdFromStorage();
             if (wanted) {
@@ -389,6 +502,26 @@
             const keyring = loadKeyring();
             if (keyring) {
                 const { entry: defaultEntry } = resolveActiveKeyEntry(keyring);
+                const cachedUnlock = loadUnlockCache();
+                if (cachedUnlock?.password) {
+                    const { entry: cachedEntry, index: cachedIndex } = resolveActiveKeyEntry(keyring, cachedUnlock.keyId || defaultEntry.id);
+                    try {
+                        const cachedNsec = await decryptNsec(cachedEntry.payload, cachedUnlock.password);
+                        if (!isValidNsec(cachedNsec)) throw new Error("invalid cached nsec");
+                        setActiveKeyId(cachedEntry.id);
+                        appendRequestLog(`Auto-Entsperrt (${cachedUnlock.mode === "session" ? "Session" : "TTL"}): ${keyDisplayName(cachedEntry, cachedIndex)}`);
+                        return {
+                            nsec: cachedNsec,
+                            password: cachedUnlock.password,
+                            keyId: cachedEntry.id,
+                            keyName: keyDisplayName(cachedEntry, cachedIndex),
+                            keyring
+                        };
+                    } catch (_err) {
+                        clearUnlockCache();
+                        appendRequestLog("Gespeicherte Entsperrung war ungueltig und wurde entfernt.");
+                    }
+                }
                 postBridgeMessage("locked", { reason: "Passwort benötigt." });
                 const unlock = await showUnlockPanel({
                     title: "Signer entsperren",
@@ -397,6 +530,8 @@
                     askConfirm: false,
                     askName: false,
                     askKey: true,
+                    askRemember: true,
+                    defaultRememberMode: "none",
                     keyOptions: keyring.keys.map((entry, index) => ({
                         id: entry.id,
                         label: keyDisplayName(entry, index)
@@ -411,6 +546,7 @@
                     const nsec = await decryptNsec(selectedEntry.payload, unlock.password);
                     if (!isValidNsec(nsec)) throw new Error("Ungültiger nsec nach Entschlüsselung.");
                     setActiveKeyId(selectedEntry.id);
+                    saveUnlockCache(unlock.password, selectedEntry.id, unlock.rememberMode || "none");
                     return {
                         nsec,
                         password: unlock.password,
@@ -433,6 +569,8 @@
                     askConfirm: false,
                     askName: false,
                     askKey: false,
+                    askRemember: true,
+                    defaultRememberMode: "none",
                     submitLabel: "Entsperren & migrieren"
                 });
                 if (!unlock.password) throw new Error("Kein Passwort angegeben.");
@@ -445,6 +583,7 @@
                     const migratedKeyring = { v: 1, keys: [firstEntry] };
                     saveKeyring(migratedKeyring);
                     setActiveKeyId(firstEntry.id);
+                    saveUnlockCache(unlock.password, firstEntry.id, unlock.rememberMode || "none");
                     localStorage.removeItem(ENCRYPTED_NSEC_STORAGE_KEY);
                     localStorage.removeItem(LEGACY_NSEC_STORAGE_KEY);
                     appendRequestLog("Migration: alter verschlüsselter Storage wurde ins Keyring-Format übernommen.");
@@ -470,6 +609,8 @@
                     askConfirm: true,
                     askName: true,
                     askKey: false,
+                    askRemember: true,
+                    defaultRememberMode: "none",
                     submitLabel: "Migrieren"
                 });
                 if (!unlock.password) throw new Error("Kein Passwort angegeben.");
@@ -480,6 +621,7 @@
                 const migratedKeyring = { v: 1, keys: [firstEntry] };
                 saveKeyring(migratedKeyring);
                 setActiveKeyId(firstEntry.id);
+                saveUnlockCache(unlock.password, firstEntry.id, unlock.rememberMode || "none");
                 localStorage.removeItem(ENCRYPTED_NSEC_STORAGE_KEY);
                 localStorage.removeItem(LEGACY_NSEC_STORAGE_KEY);
                 appendRequestLog("Klartext-nsec wurde in verschlüsselten Keyring migriert.");
@@ -500,6 +642,8 @@
                 askConfirm: true,
                 askName: true,
                 askKey: false,
+                askRemember: true,
+                defaultRememberMode: "none",
                 allowGenerate: true,
                 submitLabel: "Speichern & entsperren"
             });
@@ -515,6 +659,7 @@
             const newKeyring = { v: 1, keys: [firstEntry] };
             saveKeyring(newKeyring);
             setActiveKeyId(firstEntry.id);
+            saveUnlockCache(setup.password, firstEntry.id, setup.rememberMode || "none");
             localStorage.removeItem(ENCRYPTED_NSEC_STORAGE_KEY);
             localStorage.removeItem(LEGACY_NSEC_STORAGE_KEY);
             appendRequestLog("nsec verschlüsselt im Keyring gespeichert.");
@@ -560,11 +705,13 @@
             const nsecRow = document.getElementById("unlock-nsec-row");
             const generateRow = document.getElementById("unlock-generate-row");
             const confirmRow = document.getElementById("unlock-password-confirm-row");
+            const rememberRow = document.getElementById("unlock-remember-row");
             const keySelect = document.getElementById("unlock-key-select");
             const nameInput = document.getElementById("unlock-name-input");
             const nsecInput = document.getElementById("unlock-nsec-input");
             const passwordInput = document.getElementById("unlock-password-input");
             const confirmInput = document.getElementById("unlock-password-confirm-input");
+            const rememberSelect = document.getElementById("unlock-remember-select");
             const generateBtn = document.getElementById("unlock-generate-btn");
             const submitBtn = document.getElementById("unlock-submit-btn");
             const cancelBtn = document.getElementById("unlock-cancel-btn");
@@ -578,6 +725,7 @@
             nsecRow.style.display = options.askNsec ? "block" : "none";
             generateRow.style.display = options.askNsec && options.allowGenerate ? "flex" : "none";
             confirmRow.style.display = options.askConfirm ? "block" : "none";
+            rememberRow.style.display = options.askRemember ? "block" : "none";
 
             keySelect.innerHTML = "";
             if (Array.isArray(options.keyOptions)) {
@@ -595,6 +743,7 @@
             nsecInput.readOnly = Boolean(options.readonlyNsec);
             passwordInput.value = "";
             confirmInput.value = "";
+            rememberSelect.value = options.defaultRememberMode || "none";
 
             panel.style.display = "block";
 
@@ -612,7 +761,8 @@
                         keyName: nameInput.value.trim(),
                         nsec: nsecInput.value.trim(),
                         password: passwordInput.value,
-                        passwordConfirm: confirmInput.value
+                        passwordConfirm: confirmInput.value,
+                        rememberMode: rememberSelect.value || "none"
                     };
                     cleanup();
                     resolve(value);
@@ -672,6 +822,7 @@
             }
 
             setActiveKeyId(selectedId);
+            updateUnlockCacheKeyId(selectedId);
             appendRequestLog("Aktiver Schlüssel gewechselt. Seite wird neu geladen.");
             window.location.reload();
         }
@@ -1089,3 +1240,4 @@
     </script>
 </body>
 </html>
+
