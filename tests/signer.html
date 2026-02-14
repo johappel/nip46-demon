@@ -54,6 +54,7 @@
         const NSEC_STORAGE_KEY = "nip46_demo_nsec";
         const PERMISSION_STORAGE_KEY = "nip46_permissions_v1";
         const RELAYS = ["wss://relay.damus.io", "wss://nos.lol"];
+        const BRIDGE_SOURCE = "nip46-signer-bridge";
         const AUTO_ALLOW_METHODS = new Set(["connect", "ping", "get_public_key", "switch_relays"]);
         const SENSITIVE_METHODS = new Set([
             "sign_event",
@@ -65,6 +66,7 @@
 
         const pendingPermissionRequests = [];
         let activePermissionRequest = null;
+        let connectionInfo = null;
 
         function getOrAskNsec() {
             const stored = localStorage.getItem(NSEC_STORAGE_KEY);
@@ -104,6 +106,53 @@
             const previous = logEl.innerText ? `${logEl.innerText}\n` : "";
             const combined = `[${now}] ${line}\n${previous}`.split("\n").slice(0, 60).join("\n");
             logEl.innerText = combined.trimEnd();
+        }
+
+        function expectedParentOrigin() {
+            const params = new URLSearchParams(window.location.search);
+            const fromQuery = params.get("parentOrigin");
+            if (fromQuery) return fromQuery;
+
+            if (document.referrer) {
+                try {
+                    return new URL(document.referrer).origin;
+                } catch (_err) {
+                    return null;
+                }
+            }
+
+            return null;
+        }
+
+        function postBridgeMessage(type, payload) {
+            if (window.parent === window) return;
+
+            const targetOrigin = expectedParentOrigin();
+            if (!targetOrigin) {
+                appendRequestLog(`Bridge blockiert: unbekannter parentOrigin (${type})`);
+                return;
+            }
+
+            try {
+                window.parent.postMessage(
+                    { source: BRIDGE_SOURCE, type, payload },
+                    targetOrigin
+                );
+            } catch (err) {
+                appendRequestLog(`Bridge-Post fehlgeschlagen: ${err.message}`);
+            }
+        }
+
+        function bridgeMessageHandler(event) {
+            const targetOrigin = expectedParentOrigin();
+            if (!targetOrigin || event.origin !== targetOrigin) return;
+
+            const data = event.data;
+            if (!data || data.source !== BRIDGE_SOURCE) return;
+
+            if (data.type === "ping" || data.type === "get-connection-info") {
+                postBridgeMessage("connection-info", connectionInfo);
+            }
         }
 
         function loadPermissions() {
@@ -212,6 +261,13 @@
             const relayQuery = RELAYS.map((relayUrl) => `relay=${encodeURIComponent(relayUrl)}`).join("&");
             const bunkerUri = `bunker://${user.pubkey}?${relayQuery}`;
             const nostrconnectUri = `nostrconnect://${user.pubkey}?${relayQuery}`;
+            connectionInfo = {
+                pubkey: user.pubkey,
+                npub: user.npub,
+                relays: RELAYS,
+                bunkerUri,
+                nostrconnectUri
+            };
 
             document.getElementById("status").innerText = "Bereit für Anfragen";
             document.getElementById("user-info").innerText =
@@ -249,6 +305,8 @@
             );
 
             await nip46Backend.start();
+            postBridgeMessage("ready", connectionInfo);
+            appendRequestLog("Bridge: ready an Parent gesendet");
             console.log("Bunker URI:", bunkerUri);
             console.log("Nostrconnect URI:", nostrconnectUri);
         }
@@ -286,6 +344,8 @@
             document.getElementById("overlay").style.display = "none";
             document.getElementById("auth-modal").style.display = "none";
         }
+
+        window.addEventListener("message", bridgeMessageHandler);
 
         startSigner().catch((err) => {
             console.error(err);

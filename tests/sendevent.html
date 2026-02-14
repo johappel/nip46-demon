@@ -66,10 +66,13 @@
     <h1>NIP-46 Sender</h1>
 
     <div class="card">
+        <label class="label" for="signer-url">Signer URL (iframe)</label>
+        <input id="signer-url" value="./signer.html" />
         <label>
             <input type="checkbox" id="embed-signer" checked style="width:auto; margin-right:8px;">
             Signer eingebettet starten (empfohlen)
         </label>
+        <button id="sync-iframe-btn">Connection URI aus iframe holen</button>
         <iframe id="signer-frame" title="Signer" src="./signer.html" style="width:100%; height:300px; border:1px solid #333; border-radius:8px; margin-top:10px;"></iframe>
     </div>
 
@@ -95,8 +98,11 @@
         import NDK, { NDKEvent, NDKNip46Signer, NDKPrivateKeySigner } from "https://esm.sh/@nostr-dev-kit/ndk@3.0.0";
 
         const NSEC_STORAGE_KEY = "nip46_demo_nsec";
+        const BRIDGE_SOURCE = "nip46-signer-bridge";
         const connInput = document.getElementById("conn-uri");
+        const signerUrlInput = document.getElementById("signer-url");
         const embedSignerInput = document.getElementById("embed-signer");
+        const syncIframeBtn = document.getElementById("sync-iframe-btn");
         const signerFrame = document.getElementById("signer-frame");
         const connectBtn = document.getElementById("connect-btn");
         const sendBtn = document.getElementById("send-btn");
@@ -107,6 +113,7 @@
 
         let ndk;
         let signer;
+        let signerFrameOrigin = null;
 
         function toBunkerUri(uri, relays = []) {
             const url = new URL(uri);
@@ -172,6 +179,75 @@
             statusEl.className = isError ? "err" : "ok";
         }
 
+        function buildSignerFrameSrc(rawUrl) {
+            const signerUrl = new URL(rawUrl, window.location.href);
+            signerUrl.searchParams.set("parentOrigin", window.location.origin);
+            return signerUrl;
+        }
+
+        function refreshSignerFrame() {
+            try {
+                const signerUrl = buildSignerFrameSrc(signerUrlInput.value.trim() || "./signer.html");
+                signerFrameOrigin = signerUrl.origin;
+                signerFrame.src = signerUrl.toString();
+                signerFrame.style.display = embedSignerInput.checked ? "block" : "none";
+            } catch (err) {
+                console.error(err);
+                setStatus(`Ungültige Signer-URL: ${err.message}`, true);
+            }
+        }
+
+        function applyConnectionInfo(info) {
+            if (!info) return;
+            if (typeof info.nostrconnectUri === "string" && info.nostrconnectUri.startsWith("nostrconnect://")) {
+                connInput.value = info.nostrconnectUri;
+            }
+        }
+
+        function requestConnectionInfoFromIframe(timeoutMs = 3000) {
+            return new Promise((resolve, reject) => {
+                if (!embedSignerInput.checked || !signerFrame.contentWindow) {
+                    reject(new Error("Signer-iframe nicht aktiv."));
+                    return;
+                }
+                if (!signerFrameOrigin) {
+                    reject(new Error("Signer-Origin unbekannt."));
+                    return;
+                }
+
+                const timeout = setTimeout(() => {
+                    window.removeEventListener("message", onMessage);
+                    reject(new Error("Keine Bridge-Antwort vom Signer-iframe."));
+                }, timeoutMs);
+
+                function onMessage(event) {
+                    if (event.origin !== signerFrameOrigin) return;
+                    const data = event.data;
+                    if (!data || data.source !== BRIDGE_SOURCE) return;
+                    if (data.type !== "ready" && data.type !== "connection-info") return;
+
+                    clearTimeout(timeout);
+                    window.removeEventListener("message", onMessage);
+                    resolve(data.payload);
+                }
+
+                window.addEventListener("message", onMessage);
+                signerFrame.contentWindow.postMessage(
+                    { source: BRIDGE_SOURCE, type: "get-connection-info" },
+                    signerFrameOrigin
+                );
+            });
+        }
+
+        function bridgeMessageHandler(event) {
+            if (!signerFrameOrigin || event.origin !== signerFrameOrigin) return;
+            const data = event.data;
+            if (!data || data.source !== BRIDGE_SOURCE) return;
+            if (data.type !== "ready" && data.type !== "connection-info") return;
+
+            applyConnectionInfo(data.payload);
+        }
+
         function withTimeout(promise, ms, stepName) {
             let timer;
             const timeoutPromise = new Promise((_, reject) => {
@@ -189,6 +265,15 @@
             try {
                 setStatus("Verbinde...");
                 resultEl.textContent = "";
+
+                if (embedSignerInput.checked) {
+                    try {
+                        const info = await requestConnectionInfoFromIframe();
+                        applyConnectionInfo(info);
+                    } catch (err) {
+                        console.warn("Bridge sync fehlgeschlagen:", err);
+                    }
+                }
 
                 const rawUri = connInput.value.trim();
                 const relays = relayUrlsFromUri(rawUri);
@@ -250,16 +335,37 @@
 
         connectBtn.addEventListener("click", connectSigner);
         sendBtn.addEventListener("click", sendEvent);
+        signerUrlInput.addEventListener("change", refreshSignerFrame);
+        syncIframeBtn.addEventListener("click", async () => {
+            try {
+                const info = await requestConnectionInfoFromIframe();
+                applyConnectionInfo(info);
+                setStatus("Connection URI aus iframe übernommen.");
+            } catch (err) {
+                setStatus(`Bridge-Fehler: ${err.message}`, true);
+            }
+        });
         embedSignerInput.addEventListener("change", () => {
             if (embedSignerInput.checked) {
-                signerFrame.src = "./signer.html";
+                refreshSignerFrame();
                 signerFrame.style.display = "block";
             } else {
                 signerFrame.src = "about:blank";
                 signerFrame.style.display = "none";
             }
         });
+        signerFrame.addEventListener("load", async () => {
+            if (!embedSignerInput.checked) return;
+            try {
+                const info = await requestConnectionInfoFromIframe(1500);
+                applyConnectionInfo(info);
+            } catch (_err) {
+                // optional sync; ignore if iframe not ready yet
+            }
+        });
 
+        window.addEventListener("message", bridgeMessageHandler);
+        refreshSignerFrame();
         hydrateUriFromLocalSigner();
     </script>
 </body>
