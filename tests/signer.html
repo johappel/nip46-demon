@@ -108,6 +108,39 @@
         .btn-reject { background: #dc3545; color: white; }
         .button-row { display: flex; flex-wrap: wrap; margin-top: 10px; }
         #request-details { white-space: pre-wrap; max-height: 280px; overflow: auto; background: #171717; border: 1px solid #333; border-radius: 8px; padding: 10px; }
+        body.compact-connected {
+            padding: 6px;
+        }
+        body.compact-connected #app-title {
+            font-size: 13px;
+            margin-bottom: 2px;
+        }
+        body.compact-connected #tab-nav,
+        body.compact-connected #tab-info,
+        body.compact-connected #tab-management {
+            display: none !important;
+        }
+        body.compact-connected #tab-signer {
+            padding: 6px 0 0 0;
+            border: none;
+            background: transparent;
+        }
+        body.compact-connected #status {
+            margin-bottom: 2px;
+            font-size: 12px;
+        }
+        body.compact-connected #user-info {
+            font-size: 12px;
+            color: #bbb;
+        }
+        body.compact-connected #auth-modal {
+            max-width: 420px;
+            width: calc(100% - 12px);
+            padding: 12px;
+        }
+        body.compact-connected #request-details {
+            display: none;
+        }
     </style>
 </head>
 <body>
@@ -207,8 +240,7 @@
         <p id="request-details"></p>
         <div class="button-row">
             <button class="btn-approve" id="allow-once-btn">Einmal erlauben</button>
-            <button class="btn-allow-temporary" id="allow-15m-btn">15m erlauben</button>
-            <button class="btn-allow-temporary" id="allow-1h-btn">1h erlauben</button>
+            <button class="btn-allow-temporary" id="allow-always-btn">Immer erlauben</button>
             <button class="btn-reject" id="reject-btn">Ablehnen</button>
         </div>
     </div>
@@ -239,12 +271,14 @@
             "nip44_encrypt",
             "nip44_decrypt"
         ]);
+        const PERMISSION_FOREVER = -1;
         const BECH32_CHARSET = "qpzry9x8gf2tvdw0s3jn54khce6mua7l";
         const BECH32_GENERATORS = [0x3b6a57b2, 0x26508e6d, 0x1ea119fa, 0x3d4233dd, 0x2a1462b3];
 
         const pendingPermissionRequests = [];
         let activePermissionRequest = null;
         let connectionInfo = null;
+        const isEmbeddedContext = window.parent !== window;
 
         let sessionPassword = "";
         let currentKeyring = null;
@@ -782,22 +816,38 @@
             scheduleFrameSizeNotification();
         }
 
+        function intrinsicBodyContentHeight() {
+            const body = document.body;
+            if (!body) return 0;
+
+            const bodyTop = body.getBoundingClientRect().top;
+            let maxBottom = 0;
+            for (const child of body.children) {
+                const style = window.getComputedStyle(child);
+                if (style.display === "none") continue;
+                if (style.position === "fixed") continue;
+                const rect = child.getBoundingClientRect();
+                if (!Number.isFinite(rect.bottom) || !Number.isFinite(rect.top)) continue;
+                const bottom = rect.bottom - bodyTop;
+                maxBottom = Math.max(maxBottom, bottom);
+            }
+            return Math.max(0, Math.ceil(maxBottom));
+        }
+
         function computeDocumentHeight() {
             const body = document.body;
-            const html = document.documentElement;
-            if (!body || !html) return 0;
+            const intrinsic = intrinsicBodyContentHeight();
+
+            if (intrinsic > 0) return intrinsic + 2;
 
             return Math.max(
-                body.scrollHeight,
-                body.offsetHeight,
-                html.clientHeight,
-                html.scrollHeight,
-                html.offsetHeight
+                body?.scrollHeight || 0,
+                body?.offsetHeight || 0
             );
         }
 
         function notifyParentFrameSize(force = false) {
-            const height = Math.max(160, computeDocumentHeight());
+            const height = Math.max(110, computeDocumentHeight());
             if (!force && Math.abs(height - lastPostedFrameHeight) < 4) return;
             lastPostedFrameHeight = height;
             postBridgeMessage("frame-size", { height });
@@ -849,6 +899,11 @@
             signerBtn.addEventListener("click", () => setActiveTab("signer"));
             infoBtn.addEventListener("click", () => setActiveTab("info"));
             managementBtn.addEventListener("click", () => setActiveTab("management"));
+        }
+
+        function setCompactConnectedMode(enabled) {
+            document.body.classList.toggle("compact-connected", Boolean(enabled));
+            scheduleFrameSizeNotification(true);
         }
 
         function showUnlockPanel(options) {
@@ -1216,8 +1271,9 @@
             const permissions = loadPermissions();
             let changed = false;
 
-            for (const [key, expiresAt] of Object.entries(permissions)) {
-                if (typeof expiresAt !== "number" || expiresAt <= now) {
+            for (const [key, value] of Object.entries(permissions)) {
+                if (value === PERMISSION_FOREVER) continue;
+                if (typeof value !== "number" || value <= now) {
                     delete permissions[key];
                     changed = true;
                 }
@@ -1230,12 +1286,19 @@
         function hasActivePermission(pubkey, method) {
             const permissions = clearExpiredPermissions();
             const key = permissionKey(pubkey, method);
-            return typeof permissions[key] === "number" && permissions[key] > Date.now();
+            const value = permissions[key];
+            return value === PERMISSION_FOREVER || (typeof value === "number" && value > Date.now());
         }
 
         function grantPermission(pubkey, method, ttlMs) {
             const permissions = clearExpiredPermissions();
             permissions[permissionKey(pubkey, method)] = Date.now() + ttlMs;
+            savePermissions(permissions);
+        }
+
+        function grantPermissionForever(pubkey, method) {
+            const permissions = clearExpiredPermissions();
+            permissions[permissionKey(pubkey, method)] = PERMISSION_FOREVER;
             savePermissions(permissions);
         }
 
@@ -1257,18 +1320,9 @@
                 },
                 () => {
                     if (pubkey && method) {
-                        grantPermission(pubkey, method, 15 * 60 * 1000);
+                        grantPermissionForever(pubkey, method);
                     }
-                    appendRequestLog(`Erlaubt (15m): ${method}`);
-                    resolve(true);
-                    activePermissionRequest = null;
-                    processPermissionQueue();
-                },
-                () => {
-                    if (pubkey && method) {
-                        grantPermission(pubkey, method, 60 * 60 * 1000);
-                    }
-                    appendRequestLog(`Erlaubt (1h): ${method}`);
+                    appendRequestLog(`Erlaubt (immer): ${method}`);
                     resolve(true);
                     activePermissionRequest = null;
                     processPermissionQueue();
@@ -1397,6 +1451,7 @@
 
             renderKeyManager();
             setActiveTab("signer");
+            setCompactConnectedMode(isEmbeddedContext);
 
             const nip46Backend = new NDKNip46Backend(
                 ndk,
@@ -1442,27 +1497,32 @@
             console.log("Nostrconnect URI:", nostrconnectUri);
         }
 
-        function showModal(req, onAllowOnce, onAllow15m, onAllow1h, onReject) {
-            document.getElementById("request-title").innerText = `Anfrage: ${req.method}`;
+        function humanRequestTitle(method) {
+            if (method === "sign_event") return "Signieren und senden?";
+            if (method === "connect") return "Verbindung erlauben?";
+            if (method === "get_public_key") return "Öffentlichen Schlüssel teilen?";
+            if (method === "nip04_encrypt" || method === "nip44_encrypt") return "Verschlüsseln erlauben?";
+            if (method === "nip04_decrypt" || method === "nip44_decrypt") return "Entschlüsseln erlauben?";
+            return `Anfrage: ${method}`;
+        }
+
+        function showModal(req, onAllowOnce, onAllowAlways, onReject) {
+            document.getElementById("request-title").innerText = humanRequestTitle(req.method);
             document.getElementById("request-details").innerText =
                 `Methode: ${req.method}\nParameter: ${formatRequestParams(req)}`;
 
             document.getElementById("overlay").style.display = "block";
             document.getElementById("auth-modal").style.display = "block";
+            scheduleFrameSizeNotification(true);
 
             document.getElementById("allow-once-btn").onclick = () => {
                 hideModal();
                 onAllowOnce();
             };
 
-            document.getElementById("allow-15m-btn").onclick = () => {
+            document.getElementById("allow-always-btn").onclick = () => {
                 hideModal();
-                onAllow15m();
-            };
-
-            document.getElementById("allow-1h-btn").onclick = () => {
-                hideModal();
-                onAllow1h();
+                onAllowAlways();
             };
 
             document.getElementById("reject-btn").onclick = () => {
@@ -1474,6 +1534,7 @@
         function hideModal() {
             document.getElementById("overlay").style.display = "none";
             document.getElementById("auth-modal").style.display = "none";
+            scheduleFrameSizeNotification(true);
         }
 
         setupTabNavigation();
@@ -1483,6 +1544,7 @@
 
         startSigner().catch((err) => {
             console.error(err);
+            setCompactConnectedMode(false);
             document.getElementById("status").innerText = `Fehler: ${err.message}`;
         });
     </script>

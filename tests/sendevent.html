@@ -109,7 +109,7 @@
             "wss://relay.primal.net",
             "wss://relay.snort.social"
         ];
-        const MIN_SIGNER_FRAME_HEIGHT = 180;
+        const MIN_SIGNER_FRAME_HEIGHT = 110;
         const MAX_SIGNER_FRAME_HEIGHT = 1200;
         const connInput = document.getElementById("conn-uri");
         const signerUrlInput = document.getElementById("signer-url");
@@ -128,7 +128,7 @@
         let signerFrameOrigin = null;
         let lastBridgeConnectionInfo = null;
         let activeRelayUrls = [];
-        let currentSignerFrameHeight = 300;
+        let currentSignerFrameHeight = MIN_SIGNER_FRAME_HEIGHT;
 
         function toBunkerUri(uri, relays = []) {
             const url = new URL(uri);
