@@ -74,7 +74,14 @@
             border-radius: 8px;
             display: none;
         }
-        #unlock-panel input, #unlock-panel select, #key-manager input, #key-manager select {
+        #password-manager {
+            margin-top: 10px;
+            padding: 12px;
+            background: #171717;
+            border: 1px solid #333;
+            border-radius: 8px;
+        }
+        #unlock-panel input, #unlock-panel select, #key-manager input, #key-manager select, #password-manager input, #password-manager select {
             width: 100%;
             box-sizing: border-box;
             margin-top: 6px;
@@ -85,7 +92,7 @@
             background: #0f0f0f;
             color: #fff;
         }
-        #unlock-panel p, #key-manager p { margin: 0 0 10px 0; color: #bbb; }
+        #unlock-panel p, #key-manager p, #password-manager p { margin: 0 0 10px 0; color: #bbb; }
         .danger-hint {
             color: #ffb4b4 !important;
         }
@@ -127,7 +134,8 @@
         }
         body.compact-connected #tab-nav,
         body.compact-connected #tab-info,
-        body.compact-connected #tab-management {
+        body.compact-connected #tab-management,
+        body.compact-connected #tab-security {
             display: none !important;
         }
         body.compact-connected #tab-signer {
@@ -162,6 +170,7 @@
         <button class="tab-btn active" id="tab-btn-signer" type="button">Signer</button>
         <button class="tab-btn" id="tab-btn-info" type="button">Info/Log</button>
         <button class="tab-btn" id="tab-btn-management" type="button">Verwaltung</button>
+        <button class="tab-btn" id="tab-btn-security" type="button">Passwort</button>
     </div>
 
     <section class="tab-panel active" id="tab-signer">
@@ -249,6 +258,13 @@
                 <button class="btn-allow-temporary" id="generate-key-btn">Neuen Schlüssel generieren</button>
                 <button class="btn-approve" id="save-key-btn">Schlüssel speichern</button>
             </div>
+        </div>
+    </section>
+
+    <section class="tab-panel" id="tab-security">
+        <div id="password-manager">
+            <h3>Keyring-Passwort</h3>
+            <p>Dieses Passwort schützt den gesamten Keyring und gilt für alle gespeicherten Identitäten (IDs), nicht nur für einen einzelnen nsec.</p>
             <label for="change-password-current-input">Aktuelles Passwort</label>
             <input id="change-password-current-input" type="password" placeholder="Aktuelles Passwort" />
             <label for="change-password-new-input">Neues Passwort</label>
@@ -257,7 +273,7 @@
             <input id="change-password-confirm-input" type="password" placeholder="Neues Passwort wiederholen" />
             <p id="change-password-feedback" class="field-feedback"></p>
             <div class="button-row">
-                <button class="btn-approve" id="change-password-btn">Passwort ändern</button>
+                <button class="btn-approve" id="change-password-btn">Passwort für alle IDs ändern</button>
             </div>
         </div>
     </section>
@@ -345,6 +361,8 @@
         // ===== Signer Session State =====
         // Das aktuell gespeicherte Passwort (wird nach Entsperrrung in RAM gehalten)
         let sessionPassword = "";
+        // Entsperrmaterial aus Unlock-Cache (abgeleiteter Key + Salt/Iter für Keyring-Aktionen ohne Klartext-Passwort)
+        let sessionUnlockMaterial = null;
         // Das gesamte Keyring-Objekt mit allen verschlüsselten Schlüsseln
         let currentKeyring = null;
         // Die ID des aktuell aktiven Schlüssels
@@ -601,6 +619,58 @@
                 ciphertext
             );
             return dec.decode(clear);
+        }
+
+        function buildUnlockMaterial(unlockKey, payload) {
+            if (typeof unlockKey !== "string" || !unlockKey || !isValidEncryptedPayload(payload)) {
+                return null;
+            }
+            return {
+                unlockKey,
+                salt: payload.salt,
+                iter: payload.iter || PBKDF2_ITERATIONS
+            };
+        }
+
+        async function deriveUnlockMaterialFromPassword(password, payload) {
+            const unlockKey = await deriveUnlockKeyFromPasswordAndPayload(password, payload);
+            return buildUnlockMaterial(unlockKey, payload);
+        }
+
+        function hasSessionUnlockMaterial() {
+            return !!sessionUnlockMaterial &&
+                typeof sessionUnlockMaterial.unlockKey === "string" &&
+                !!sessionUnlockMaterial.unlockKey &&
+                typeof sessionUnlockMaterial.salt === "string" &&
+                !!sessionUnlockMaterial.salt;
+        }
+
+        async function encryptNsecWithUnlockMaterial(nsec, material) {
+            if (!material || typeof material.unlockKey !== "string" || typeof material.salt !== "string") {
+                throw new Error("Kein gültiges Unlock-Material verfügbar.");
+            }
+
+            const enc = new TextEncoder();
+            const iv = crypto.getRandomValues(new Uint8Array(12));
+            const rawKey = base64ToBytes(material.unlockKey);
+            const key = await importAesKeyFromRaw(rawKey, ["encrypt"]);
+            const ciphertext = new Uint8Array(
+                await crypto.subtle.encrypt(
+                    { name: "AES-GCM", iv },
+                    key,
+                    enc.encode(nsec)
+                )
+            );
+
+            return {
+                v: 1,
+                kdf: "PBKDF2-SHA256",
+                alg: "AES-GCM",
+                iter: material.iter || PBKDF2_ITERATIONS,
+                salt: material.salt,
+                iv: bytesToBase64(iv),
+                ct: bytesToBase64(ciphertext)
+            };
         }
 
         // ===== Bech32-Encoding (für nsec-Generierung) =====
@@ -1067,6 +1137,21 @@
             };
         }
 
+        async function createKeyringEntryWithSessionMaterial(nsec, name = "") {
+            if (sessionPassword) {
+                return createKeyringEntry(nsec, sessionPassword, name);
+            }
+            if (!hasSessionUnlockMaterial()) {
+                throw new Error("Keine Entsperrinformation vorhanden. Bitte Passwort bestätigen.");
+            }
+            return {
+                id: generateKeyId(),
+                name: normalizeKeyName(name),
+                createdAt: Date.now(),
+                payload: await encryptNsecWithUnlockMaterial(nsec, sessionUnlockMaterial)
+            };
+        }
+
         async function ensureSessionPassword() {
             if (sessionPassword) return sessionPassword;
             if (!currentKeyring || !Array.isArray(currentKeyring.keys) || currentKeyring.keys.length === 0) {
@@ -1094,6 +1179,7 @@
             }
 
             sessionPassword = unlock.password;
+            sessionUnlockMaterial = await deriveUnlockMaterialFromPassword(unlock.password, activeEntry.payload);
             return sessionPassword;
         }
 
@@ -1171,6 +1257,7 @@
                         return {
                             nsec: cachedNsec,
                             password: "",
+                            unlockMaterial: buildUnlockMaterial(cachedUnlock.unlockKey, cachedEntry.payload),
                             keyId: cachedEntry.id,
                             keyName: keyDisplayName(cachedEntry, cachedIndex),
                             keyring
@@ -1208,6 +1295,7 @@
                     return {
                         nsec,
                         password: unlock.password,
+                        unlockMaterial: await deriveUnlockMaterialFromPassword(unlock.password, selectedEntry.payload),
                         keyId: selectedEntry.id,
                         keyName: keyDisplayName(selectedEntry, selectedIndex),
                         keyring
@@ -1248,6 +1336,7 @@
                     return {
                         nsec,
                         password: unlock.password,
+                        unlockMaterial: await deriveUnlockMaterialFromPassword(unlock.password, firstEntry.payload),
                         keyId: firstEntry.id,
                         keyName: keyDisplayName(firstEntry, 0),
                         keyring: migratedKeyring
@@ -1286,6 +1375,7 @@
                 return {
                     nsec: legacy,
                     password: unlock.password,
+                    unlockMaterial: await deriveUnlockMaterialFromPassword(unlock.password, firstEntry.payload),
                     keyId: firstEntry.id,
                     keyName: keyDisplayName(firstEntry, 0),
                     keyring: migratedKeyring
@@ -1324,6 +1414,7 @@
             return {
                 nsec: setup.nsec,
                 password: setup.password,
+                unlockMaterial: await deriveUnlockMaterialFromPassword(setup.password, firstEntry.payload),
                 keyId: firstEntry.id,
                 keyName: keyDisplayName(firstEntry, 0),
                 keyring: newKeyring
@@ -1420,7 +1511,7 @@
         }
 
         function setActiveTab(tabName) {
-            const tabs = ["signer", "info", "management"];
+            const tabs = ["signer", "info", "management", "security"];
             for (const tab of tabs) {
                 const panel = document.getElementById(`tab-${tab}`);
                 const btn = document.getElementById(`tab-btn-${tab}`);
@@ -1434,10 +1525,12 @@
             const signerBtn = document.getElementById("tab-btn-signer");
             const infoBtn = document.getElementById("tab-btn-info");
             const managementBtn = document.getElementById("tab-btn-management");
+            const securityBtn = document.getElementById("tab-btn-security");
 
             signerBtn.addEventListener("click", () => setActiveTab("signer"));
             infoBtn.addEventListener("click", () => setActiveTab("info"));
             managementBtn.addEventListener("click", () => setActiveTab("management"));
+            securityBtn.addEventListener("click", () => setActiveTab("security"));
         }
 
         function setCompactConnectedMode(enabled) {
@@ -1614,8 +1707,10 @@
             setActiveKeyId(selectedId);
             if (sessionPassword) {
                 await updateUnlockCacheKeyId(selectedId, sessionPassword, selectedEntry.payload);
+                sessionUnlockMaterial = await deriveUnlockMaterialFromPassword(sessionPassword, selectedEntry.payload);
             } else {
                 clearUnlockCache();
+                sessionUnlockMaterial = null;
             }
             hideRevealedNsec();
             appendRequestLog("Aktiver Schlüssel gewechselt. Seite wird neu geladen.");
@@ -1730,6 +1825,7 @@
                 throw new Error("Passwort ist ungültig.");
             }
             if (!isValidNsec(nsec)) throw new Error("Aktiver Schlüssel konnte nicht als nsec gelesen werden.");
+            sessionUnlockMaterial = await deriveUnlockMaterialFromPassword(password, activeEntry.payload);
 
             const revealBox = document.getElementById("nsec-reveal-box");
             const revealOutput = document.getElementById("nsec-reveal-output");
@@ -1759,29 +1855,51 @@
             appendRequestLog(`nsec einmalig angezeigt (${keyDisplayName(activeEntry, activeIndex)}).`);
         }
 
-        async function addKeyToKeyring(nsec, name, password) {
+        async function addKeyToKeyring(nsec, name, password = "") {
             if (!isValidNsec(nsec)) throw new Error("Ungültiger nsec. Erwartet nsec1...");
             if (!currentKeyring || !Array.isArray(currentKeyring.keys)) throw new Error("Kein Keyring geladen.");
 
             const newSigner = new NDKPrivateKeySigner(nsec);
             const newUser = await newSigner.user();
+            let duplicateCheckLimited = false;
 
-            for (const entry of currentKeyring.keys) {
-                try {
-                    const existingNsec = await decryptNsec(entry.payload, password);
-                    const existingUser = await new NDKPrivateKeySigner(existingNsec).user();
-                    if (existingUser.pubkey === newUser.pubkey) {
-                        throw new Error("Dieser Schlüssel ist bereits gespeichert.");
+            if (password) {
+                for (const entry of currentKeyring.keys) {
+                    try {
+                        const existingNsec = await decryptNsec(entry.payload, password);
+                        const existingUser = await new NDKPrivateKeySigner(existingNsec).user();
+                        if (existingUser.pubkey === newUser.pubkey) {
+                            throw new Error("Dieser Schlüssel ist bereits gespeichert.");
+                        }
+                    } catch (err) {
+                        if (err.message === "Dieser Schlüssel ist bereits gespeichert.") throw err;
                     }
-                } catch (err) {
-                    if (err.message === "Dieser Schlüssel ist bereits gespeichert.") throw err;
+                }
+            } else if (hasSessionUnlockMaterial()) {
+                duplicateCheckLimited = true;
+                for (const entry of currentKeyring.keys) {
+                    if (entry?.payload?.salt !== sessionUnlockMaterial.salt) continue;
+                    try {
+                        const existingNsec = await decryptNsecWithDerivedKey(entry.payload, sessionUnlockMaterial.unlockKey);
+                        const existingUser = await new NDKPrivateKeySigner(existingNsec).user();
+                        if (existingUser.pubkey === newUser.pubkey) {
+                            throw new Error("Dieser Schlüssel ist bereits gespeichert.");
+                        }
+                    } catch (err) {
+                        if (err.message === "Dieser Schlüssel ist bereits gespeichert.") throw err;
+                    }
                 }
             }
 
-            const entry = await createKeyringEntry(nsec, password, name);
+            const entry = password
+                ? await createKeyringEntry(nsec, password, name)
+                : await createKeyringEntryWithSessionMaterial(nsec, name);
             currentKeyring.keys.push(entry);
             saveKeyring(currentKeyring);
             appendRequestLog(`Neuer Schlüssel gespeichert: ${keyDisplayName(entry, currentKeyring.keys.length - 1)}`);
+            if (duplicateCheckLimited) {
+                appendRequestLog("Hinweis: Ohne Passwort war die Duplikatprüfung eingeschränkt.");
+            }
             renderKeyManager();
         }
 
@@ -1830,7 +1948,10 @@
 
         async function saveAdditionalKey() {
             if (!currentKeyring) throw new Error("Keyring ist nicht entsperrt.");
-            const password = await ensureSessionPassword();
+            const password = sessionPassword || "";
+            if (!password && !hasSessionUnlockMaterial()) {
+                await ensureSessionPassword();
+            }
 
             const nameInput = document.getElementById("new-key-name-input");
             const nsecInput = document.getElementById("new-key-nsec-input");
@@ -1838,13 +1959,16 @@
             const name = normalizeKeyName(nameInput.value);
 
             if (!nsec) throw new Error("Bitte nsec eingeben oder generieren.");
-            await addKeyToKeyring(nsec, name, password);
+            await addKeyToKeyring(nsec, name, sessionPassword || "");
             nsecInput.value = "";
         }
 
         async function importKeyFromFile() {
             if (!currentKeyring) throw new Error("Keyring ist nicht entsperrt.");
-            const password = await ensureSessionPassword();
+            const password = sessionPassword || "";
+            if (!password && !hasSessionUnlockMaterial()) {
+                await ensureSessionPassword();
+            }
             const fileInput = document.getElementById("import-key-file-input");
             const nameInput = document.getElementById("new-key-name-input");
             const file = fileInput?.files?.[0];
@@ -1869,7 +1993,7 @@
 
             const fallbackName = parsed.label || file.name.replace(/\.json$/i, "");
             const targetName = normalizeKeyName(nameInput.value) || fallbackName;
-            await addKeyToKeyring(importedNsec, targetName, password);
+            await addKeyToKeyring(importedNsec, targetName, sessionPassword || "");
             fileInput.value = "";
         }
 
@@ -1917,6 +2041,7 @@
 
             sessionPassword = newPassword;
             const { entry: activeEntryAfterPasswordChange } = resolveActiveKeyEntry(currentKeyring, activeKeyId);
+            sessionUnlockMaterial = await deriveUnlockMaterialFromPassword(newPassword, activeEntryAfterPasswordChange.payload);
             await saveUnlockCache(newPassword, activeKeyId, activeEntryAfterPasswordChange?.payload, "session");
 
             currentInput.value = "";
@@ -2406,9 +2531,14 @@
 
             const unlocked = await getOrAskActiveKeyWithRetry();
             sessionPassword = unlocked.password;
+            sessionUnlockMaterial = unlocked.unlockMaterial || null;
             currentKeyring = unlocked.keyring;
             activeKeyId = unlocked.keyId;
             activeNsec = unlocked.nsec;
+            if (!sessionUnlockMaterial && sessionPassword && currentKeyring?.keys?.length) {
+                const { entry: activeEntry } = resolveActiveKeyEntry(currentKeyring, activeKeyId);
+                sessionUnlockMaterial = await deriveUnlockMaterialFromPassword(sessionPassword, activeEntry.payload);
+            }
 
             const localSigner = new NDKPrivateKeySigner(activeNsec);
             const user = await localSigner.user();
