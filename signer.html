@@ -22,6 +22,7 @@
         #status {
             margin: 0 0 4px 0;
             font-weight: 700;
+            font-family: 'Courier New', Courier, monospace;
         }
         #user-info {
             margin: 0;
@@ -93,8 +94,70 @@
             color: #fff;
         }
         #unlock-panel p, #key-manager p, #password-manager p { margin: 0 0 10px 0; color: #bbb; }
+        .secret-input-row {
+            display: flex;
+            gap: 6px;
+            margin-top: 6px;
+            margin-bottom: 10px;
+            align-items: stretch;
+        }
+        .secret-input-row input {
+            margin: 0 !important;
+            flex: 1 1 auto;
+        }
+        .secret-icon-btn {
+            width: 40px;
+            min-width: 40px;
+            margin: 0 !important;
+            padding: 0 !important;
+            border-radius: 6px;
+            border: 1px solid #444;
+            background: #0f0f0f;
+            color: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+            line-height: 1;
+        }
+        .secret-icon-btn.active {
+            border-color: #2f7cfe;
+            background: #1c3f7a;
+        }
         .danger-hint {
             color: #ffb4b4 !important;
+        }
+        .toolset {
+            border: 1px solid #333;
+            border-radius: 8px;
+            padding: 10px;
+            margin: 10px 0 0 0;
+            background: #131313;
+        }
+        .toolset legend {
+            padding: 0 6px;
+            color: #9ad1ff;
+            font-weight: 700;
+        }
+        .toolset-export {
+            border-color: #7b2f36;
+            background: #1d1214;
+        }
+        .toolset-export legend {
+            color: #ffb4b4;
+        }
+        .key-switch-row {
+            display: flex;
+            gap: 8px;
+            align-items: stretch;
+        }
+        .key-switch-row select {
+            flex: 1 1 auto;
+            margin: 0 !important;
+        }
+        .key-switch-row button {
+            margin: 0 !important;
+            white-space: nowrap;
         }
         .field-feedback {
             margin: -4px 0 10px 0 !important;
@@ -164,7 +227,7 @@
 <body>
 
     <div id="app-title">NIP-46 Signer</div>
-    <div id="status">Verbinde mit Relay...</div>
+    <div id="status">🟡 verbinde mit Relay...</div>
 
     <div id="tab-nav">
         <button class="tab-btn active" id="tab-btn-signer" type="button">Signer</button>
@@ -196,11 +259,17 @@
             </div>
             <div id="unlock-nsec-row">
                 <label for="unlock-nsec-input">nsec</label>
-                <input id="unlock-nsec-input" placeholder="nsec1..." />
+                <div class="secret-input-row">
+                    <input id="unlock-nsec-input" type="password" placeholder="nsec1..." autocomplete="off" autocapitalize="off" spellcheck="false" />
+                    <button class="secret-icon-btn" id="unlock-nsec-visibility-btn" type="button" title="Anzeigen/Ausblenden" aria-label="nsec anzeigen oder ausblenden">&#128065;</button>
+                    <button class="secret-icon-btn" id="unlock-nsec-copy-btn" type="button" title="Kopieren" aria-label="nsec kopieren">&#128203;</button>
+                    <button class="secret-icon-btn" id="unlock-generate-btn"  title="Neuen nsec generieren" type="button">🔑</button>
+                </div>
             </div>
             <div id="unlock-generate-row" class="button-row">
-                <button class="btn-allow-temporary" id="unlock-generate-btn" type="button">Neuen nsec generieren</button>
+                <h2>Zugangspasswort festlegen</h2>
             </div>
+            
             <div id="unlock-password-row">
                 <label for="unlock-password-input">Passwort</label>
                 <input id="unlock-password-input" type="password" placeholder="Passwort" />
@@ -225,40 +294,60 @@
             </div>
         </div>
 
-        <div id="key-manager">
+        <section id="key-manager">
             <h3>Schlüsselverwaltung</h3>
             <div id="active-key-info"></div>
-            <label for="saved-keys-select">Gespeicherte Schlüssel</label>
-            <select id="saved-keys-select"></select>
-            <div class="button-row">
-                <button class="btn-allow-temporary" id="switch-key-btn">Zu Auswahl wechseln</button>
-                <button class="btn-approve" id="download-key-btn">Aktiven Schlüssel exportieren (verschlüsselt)</button>
-                <button class="btn-reject" id="reveal-nsec-once-btn">nsec einmal anzeigen (10s)</button>
-            </div>
-            <p>Export-Dateien enthalten keinen Klartext-nsec mehr. Das Export-Passwort wird beim Import wieder benötigt.</p>
-            <p class="danger-hint">Warnung: "nsec einmal anzeigen" ist nur für Notfälle. Der Schlüssel erscheint kurz im Klartext.</p>
-            <div id="nsec-reveal-box" hidden>
-                <label for="nsec-reveal-output">Temporär angezeigter nsec</label>
-                <input id="nsec-reveal-output" readonly />
-                <p id="nsec-reveal-countdown" class="danger-hint"></p>
-                <div class="button-row">
-                    <button class="btn-reject" id="hide-nsec-btn" type="button">Sofort ausblenden</button>
+
+            <fieldset class="toolset">
+                <legend>Aktive Identität</legend>
+                <label for="saved-keys-select">Gespeicherte Schlüssel</label>
+                <div class="key-switch-row">
+                    <select id="saved-keys-select"></select>
+                    <button class="btn-allow-temporary" id="switch-key-btn" type="button">Aktivieren</button>
                 </div>
-            </div>
-            <label for="import-key-file-input">Verschlüsselte Exportdatei (.json) importieren</label>
-            <input id="import-key-file-input" type="file" accept=".json,application/json" />
-            <div class="button-row">
-                <button class="btn-allow-temporary" id="import-key-file-btn">Exportdatei importieren</button>
-            </div>
-            <label for="new-key-name-input">Neuer Schlüsselname (optional)</label>
-            <input id="new-key-name-input" placeholder="z.B. Phone Backup" />
-            <label for="new-key-nsec-input">nsec importieren oder generieren</label>
-            <input id="new-key-nsec-input" placeholder="nsec1..." />
-            <div class="button-row">
-                <button class="btn-allow-temporary" id="generate-key-btn">Neuen Schlüssel generieren</button>
-                <button class="btn-approve" id="save-key-btn">Schlüssel speichern</button>
-            </div>
-        </div>
+            </fieldset>
+
+            <fieldset class="toolset toolset-export">
+                <legend>Schlüssel Export</legend>
+                <p>Export-Dateien enthalten keinen Klartext-nsec. Das Export-Passwort wird beim Import wieder benötigt.</p>
+                <p class="danger-hint">Warnung: "nsec einmal anzeigen" ist nur für Notfälle. Der Schlüssel erscheint kurz im Klartext.</p>
+                <div class="button-row">
+                    <button class="btn-approve" id="download-key-btn" type="button">Aktiven Schlüssel exportieren (verschlüsselt)</button>
+                    <button class="btn-reject" id="reveal-nsec-once-btn" type="button">nsec einmal anzeigen (10s)</button>
+                    <button class="btn-reject" id="delete-key-btn" type="button">Schlüssel löschen</button>
+                </div>
+                <div id="nsec-reveal-box" hidden>
+                    <label for="nsec-reveal-output">Temporär angezeigter nsec</label>
+                    <input id="nsec-reveal-output" readonly />
+                    <p id="nsec-reveal-countdown" class="danger-hint"></p>
+                    <div class="button-row">
+                        <button class="btn-reject" id="hide-nsec-btn" type="button">Sofort ausblenden</button>
+                    </div>
+                </div>
+            </fieldset>
+
+            <fieldset class="toolset">
+                <legend>Neuen Schlüssel hinzufügen</legend>
+                <label for="new-key-name-input">Neuer Schlüsselname (optional)</label>
+                <input id="new-key-name-input" placeholder="z.B. Phone Backup" />
+                <label for="new-key-nsec-input">nsec importieren oder generieren</label>
+                <div class="secret-input-row">
+                    <input id="new-key-nsec-input" type="password" placeholder="nsec1..." autocomplete="off" autocapitalize="off" spellcheck="false" />
+                    <button class="secret-icon-btn" id="new-key-nsec-visibility-btn" type="button" title="Anzeigen/Ausblenden" aria-label="nsec anzeigen oder ausblenden">&#128065;</button>
+                    <button class="secret-icon-btn" id="new-key-nsec-copy-btn" type="button" title="Kopieren" aria-label="nsec kopieren">&#128203;</button>
+                    <button class="btn-allow-temporary secret-icon-btn" id="generate-key-btn" type="button" title="Neuen Schlüssel generieren">🗝️</button>
+                </div>
+                <div class="button-row">
+                    <button class="btn-approve" id="save-key-btn" type="button">Schlüssel speichern</button>
+                </div>
+                <hr style="border-color:#333; margin:12px 0;">
+                <label for="import-key-file-input">Importieren (verschlüsselte Exportdatei .json)</label>
+                <input id="import-key-file-input" type="file" accept=".json,application/json" />
+                <div class="button-row">
+                    <button class="btn-allow-temporary" id="import-key-file-btn" type="button">Exportdatei importieren</button>
+                </div>
+            </fieldset>
+        </section>
     </section>
 
     <section class="tab-panel" id="tab-security">
@@ -438,6 +527,67 @@
             if (!element) return;
             element.innerText = message || "";
             element.style.display = message ? "block" : "none";
+        }
+
+        async function copyTextToClipboard(text) {
+            const value = String(text || "");
+            if (!value) throw new Error("Kein Wert zum Kopieren vorhanden.");
+
+            if (navigator.clipboard && window.isSecureContext) {
+                await navigator.clipboard.writeText(value);
+                return;
+            }
+
+            const helper = document.createElement("textarea");
+            helper.value = value;
+            helper.setAttribute("readonly", "");
+            helper.style.position = "fixed";
+            helper.style.opacity = "0";
+            helper.style.pointerEvents = "none";
+            document.body.appendChild(helper);
+            helper.focus();
+            helper.select();
+            const copied = document.execCommand("copy");
+            helper.remove();
+            if (!copied) throw new Error("Kopieren wurde vom Browser blockiert.");
+        }
+
+        function setSecretInputVisibility(input, toggleBtn, visible) {
+            if (!input || !toggleBtn) return;
+            input.type = visible ? "text" : "password";
+            toggleBtn.classList.toggle("active", Boolean(visible));
+            toggleBtn.title = visible ? "Ausblenden" : "Anzeigen";
+            toggleBtn.setAttribute("aria-label", visible ? "nsec ausblenden" : "nsec anzeigen");
+            toggleBtn.setAttribute("aria-pressed", visible ? "true" : "false");
+        }
+
+        function resetSecretInputVisibility(inputId, toggleBtnId) {
+            const input = document.getElementById(inputId);
+            const toggleBtn = document.getElementById(toggleBtnId);
+            setSecretInputVisibility(input, toggleBtn, false);
+        }
+
+        function setupSecretInputControls(inputId, toggleBtnId, copyBtnId, label) {
+            const input = document.getElementById(inputId);
+            const toggleBtn = document.getElementById(toggleBtnId);
+            const copyBtn = document.getElementById(copyBtnId);
+            if (!input || !toggleBtn || !copyBtn) return;
+
+            setSecretInputVisibility(input, toggleBtn, false);
+
+            toggleBtn.addEventListener("click", () => {
+                const makeVisible = input.type !== "text";
+                setSecretInputVisibility(input, toggleBtn, makeVisible);
+            });
+
+            copyBtn.addEventListener("click", async () => {
+                try {
+                    await copyTextToClipboard(input.value);
+                    appendRequestLog(`${label} in Zwischenablage kopiert.`);
+                } catch (err) {
+                    appendRequestLog(`${label} konnte nicht kopiert werden: ${err.message}`);
+                }
+            });
         }
 
         // ===== Basis-Konvertierungen (Bytes, Base64) =====
@@ -1557,6 +1707,7 @@
             const keySelect = document.getElementById("unlock-key-select");
             const nameInput = document.getElementById("unlock-name-input");
             const nsecInput = document.getElementById("unlock-nsec-input");
+            const nsecVisibilityBtn = document.getElementById("unlock-nsec-visibility-btn");
             const passwordInput = document.getElementById("unlock-password-input");
             const confirmInput = document.getElementById("unlock-password-confirm-input");
             const passwordFeedbackEl = document.getElementById("unlock-password-feedback");
@@ -1590,6 +1741,7 @@
             nameInput.value = options.defaultName || "";
             nsecInput.value = options.defaultNsec || "";
             nsecInput.readOnly = Boolean(options.readonlyNsec);
+            setSecretInputVisibility(nsecInput, nsecVisibilityBtn, false);
             passwordInput.value = "";
             confirmInput.value = "";
             rememberSelect.value = options.defaultRememberMode || "none";
@@ -1633,6 +1785,8 @@
                     generateBtn.onclick = null;
                     passwordInput.oninput = null;
                     confirmInput.oninput = null;
+                    nsecInput.value = "";
+                    setSecretInputVisibility(nsecInput, nsecVisibilityBtn, false);
                     setFieldFeedback(passwordFeedbackEl, "");
                     panel.style.display = "none";
                     scheduleFrameSizeNotification(true);
@@ -1691,7 +1845,7 @@
             const { entry: activeEntry, index: activeIndex } = resolveActiveKeyEntry(currentKeyring, activeKeyId);
             const currentName = keyDisplayName(activeEntry, activeIndex);
             const npubShort = activeUser?.npub ? `${activeUser.npub.slice(0, 16)}...` : "(noch nicht geladen)";
-            activeInfoEl.innerText = `Aktiv: ${currentName}\nnpub: ${npubShort}`;
+            activeInfoEl.innerText = `Aktiv: ${currentName} | ${npubShort}`;
 
             panel.style.display = "block";
             scheduleFrameSizeNotification(false);
@@ -1721,6 +1875,85 @@
             hideRevealedNsec();
             appendRequestLog("Aktiver Schlüssel gewechselt. Seite wird neu geladen.");
             window.location.reload();
+        }
+
+        async function deleteSelectedKey() {
+            if (!currentKeyring || !Array.isArray(currentKeyring.keys) || currentKeyring.keys.length === 0) {
+                throw new Error("Kein Keyring geladen.");
+            }
+
+            const selectedId = document.getElementById("saved-keys-select").value;
+            if (!selectedId) throw new Error("Kein Schlüssel ausgewählt.");
+            const selectedIndex = currentKeyring.keys.findIndex((entry) => entry.id === selectedId);
+            if (selectedIndex < 0) throw new Error("Ausgewählter Schlüssel wurde nicht gefunden.");
+
+            const selectedEntry = currentKeyring.keys[selectedIndex];
+            const selectedName = keyDisplayName(selectedEntry, selectedIndex);
+            const isLastKey = currentKeyring.keys.length === 1;
+            const warningText = isLastKey
+                ? `\"${selectedName}\" ist der letzte lokale Schlüssel. Nach dem Löschen startet die Ersteinrichtung. Wirklich löschen?`
+                : `Schlüssel \"${selectedName}\" wirklich löschen?`;
+            const firstConfirm = window.confirm(warningText);
+            if (!firstConfirm) {
+                appendRequestLog(`Löschen abgebrochen: ${selectedName}`);
+                return;
+            }
+
+            const secondConfirm = window.confirm(
+                `Letzte Bestätigung: Schlüssel \"${selectedName}\" wird unwiderruflich gelöscht. Fortfahren?`
+            );
+            if (!secondConfirm) {
+                appendRequestLog(`Löschen abgebrochen (2. Bestätigung): ${selectedName}`);
+                return;
+            }
+
+            currentKeyring.keys.splice(selectedIndex, 1);
+
+            const bindings = loadWpUserBindings();
+            let bindingsChanged = false;
+            for (const [userId, keyId] of Object.entries(bindings.byUserId)) {
+                if (keyId === selectedId) {
+                    delete bindings.byUserId[userId];
+                    bindingsChanged = true;
+                }
+            }
+            if (bindingsChanged) saveWpUserBindings(bindings);
+
+            hideRevealedNsec();
+
+            if (currentKeyring.keys.length === 0) {
+                localStorage.removeItem(KEYRING_STORAGE_KEY);
+                localStorage.removeItem(ACTIVE_KEY_ID_STORAGE_KEY);
+                clearUnlockCache();
+                sessionPassword = "";
+                sessionUnlockMaterial = null;
+                activeKeyId = null;
+                activeNsec = null;
+                activeUser = null;
+                appendRequestLog(`Letzter Schlüssel gelöscht: ${selectedName}. Seite wird neu geladen.`);
+                window.location.reload();
+                return;
+            }
+
+            saveKeyring(currentKeyring);
+            appendRequestLog(`Schlüssel gelöscht: ${selectedName}`);
+
+            if (selectedId === activeKeyId) {
+                const replacement = currentKeyring.keys[0];
+                setActiveKeyId(replacement.id);
+                if (sessionPassword) {
+                    await updateUnlockCacheKeyId(replacement.id, sessionPassword, replacement.payload);
+                    sessionUnlockMaterial = await deriveUnlockMaterialFromPassword(sessionPassword, replacement.payload);
+                } else {
+                    clearUnlockCache();
+                    sessionUnlockMaterial = null;
+                }
+                appendRequestLog(`Aktiver Schlüssel wurde gelöscht. Neuer aktiver Schlüssel: ${keyDisplayName(replacement, 0)}. Seite wird neu geladen.`);
+                window.location.reload();
+                return;
+            }
+
+            renderKeyManager();
         }
 
         async function askForExportPassword() {
@@ -1967,6 +2200,7 @@
             if (!nsec) throw new Error("Bitte nsec eingeben oder generieren.");
             await addKeyToKeyring(nsec, name, sessionPassword || "");
             nsecInput.value = "";
+            resetSecretInputVisibility("new-key-nsec-input", "new-key-nsec-visibility-btn");
         }
 
         async function importKeyFromFile() {
@@ -2102,6 +2336,9 @@
             const newPasswordInput = document.getElementById("change-password-new-input");
             const changePasswordFeedback = document.getElementById("change-password-feedback");
 
+            setupSecretInputControls("unlock-nsec-input", "unlock-nsec-visibility-btn", "unlock-nsec-copy-btn", "Einrichtungs-nsec");
+            setupSecretInputControls("new-key-nsec-input", "new-key-nsec-visibility-btn", "new-key-nsec-copy-btn", "nsec");
+
             const validateChangePasswordFeedback = () => {
                 const value = newPasswordInput.value || "";
                 if (value && value.length < MIN_PASSWORD_LENGTH) {
@@ -2134,6 +2371,14 @@
                     await revealActiveNsecOnce();
                 } catch (err) {
                     appendRequestLog(`nsec-Anzeige fehlgeschlagen: ${err.message}`);
+                }
+            });
+
+            document.getElementById("delete-key-btn").addEventListener("click", async () => {
+                try {
+                    await deleteSelectedKey();
+                } catch (err) {
+                    appendRequestLog(`Löschen fehlgeschlagen: ${err.message}`);
                 }
             });
 
@@ -2611,10 +2856,10 @@
                 nostrconnectUri
             };
 
-            document.getElementById("status").innerText = "Signer bereit";
+            document.getElementById("status").innerText = "bereit 🟢";
             document.getElementById("user-info").innerText =
-                `Aktiver Schlüssel: ${unlocked.keyName}\n` +
-                `npub: ${user.npub.substring(0, 16)}...\n` +
+                `Aktiver Schlüssel: ${unlocked.keyName} | ` +
+                `${user.npub.substring(0, 32)}...\n` +
                 "Warte auf NostrConnect-Anfragen.";
             document.getElementById("connection-info").innerText =
                 `Aktiver Schlüssel: ${unlocked.keyName}\n` +
@@ -2748,7 +2993,7 @@
         startSigner().catch((err) => {
             console.error(err);
             setCompactConnectedMode(false);
-            document.getElementById("status").innerText = `Fehler: ${err.message}`;
+            document.getElementById("status").innerText = `🔴 Fehler: ${err.message}`;
         });
     </script>
 </body>
