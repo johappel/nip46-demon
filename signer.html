@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; connect-src 'self' https: wss:; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; frame-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self';">
     <title>JS Nostr Signer (No-Popup)</title>
     <style>
         body {
@@ -85,6 +86,9 @@
             color: #fff;
         }
         #unlock-panel p, #key-manager p { margin: 0 0 10px 0; color: #bbb; }
+        .danger-hint {
+            color: #ffb4b4 !important;
+        }
         .field-feedback {
             margin: -4px 0 10px 0 !important;
             color: #ff7676 !important;
@@ -219,7 +223,23 @@
             <select id="saved-keys-select"></select>
             <div class="button-row">
                 <button class="btn-allow-temporary" id="switch-key-btn">Zu Auswahl wechseln</button>
-                <button class="btn-approve" id="download-key-btn">Aktiven Schlüssel herunterladen</button>
+                <button class="btn-approve" id="download-key-btn">Aktiven Schlüssel exportieren (verschlüsselt)</button>
+                <button class="btn-reject" id="reveal-nsec-once-btn">nsec einmal anzeigen (10s)</button>
+            </div>
+            <p>Export-Dateien enthalten keinen Klartext-nsec mehr. Das Export-Passwort wird beim Import wieder benötigt.</p>
+            <p class="danger-hint">Warnung: "nsec einmal anzeigen" ist nur für Notfälle. Der Schlüssel erscheint kurz im Klartext.</p>
+            <div id="nsec-reveal-box" hidden>
+                <label for="nsec-reveal-output">Temporär angezeigter nsec</label>
+                <input id="nsec-reveal-output" readonly />
+                <p id="nsec-reveal-countdown" class="danger-hint"></p>
+                <div class="button-row">
+                    <button class="btn-reject" id="hide-nsec-btn" type="button">Sofort ausblenden</button>
+                </div>
+            </div>
+            <label for="import-key-file-input">Verschlüsselte Exportdatei (.json) importieren</label>
+            <input id="import-key-file-input" type="file" accept=".json,application/json" />
+            <div class="button-row">
+                <button class="btn-allow-temporary" id="import-key-file-btn">Exportdatei importieren</button>
             </div>
             <label for="new-key-name-input">Neuer Schlüsselname (optional)</label>
             <input id="new-key-name-input" placeholder="z.B. Phone Backup" />
@@ -254,7 +274,7 @@
     </div>
 
     <script type="module">
-        import NDK, { NDKNip46Backend, NDKPrivateKeySigner } from "https://esm.sh/@nostr-dev-kit/ndk@3.0.0?bundle&target=es2022";
+        import NDK, { NDKNip46Backend, NDKPrivateKeySigner } from "./vendor/ndk-3.0.0.js";
 
         // ===== Storage Keys =====
         // Älterer Speicherort für unverschlüsselte nsec (nur bei Migration relevant)
@@ -273,6 +293,9 @@
         const PERMISSION_STORAGE_KEY = "nip46_permissions_v1";
         // Bindet WordPress User-IDs an Nostr Schlüssel (für WP-Integration)
         const WP_USER_BINDINGS_STORAGE_KEY = "nip46_wp_user_bindings_v1";
+        // Versioniertes Dateiformat für passwortgeschützte Schlüssel-Exportdateien
+        const KEY_EXPORT_TYPE = "nip46-key-export";
+        const KEY_EXPORT_VERSION = 2;
         
         // ===== Relay und Bridge-Konfiguration =====
         // Standard-Relays für NIP-46 RPC-Kommunikation
@@ -290,6 +313,8 @@
         const PBKDF2_ITERATIONS = 210000;
         // Mindestlänge für neue Passwörter
         const MIN_PASSWORD_LENGTH = 8;
+        // Wie lange ein nsec maximal im UI sichtbar bleibt (Notfallfunktion)
+        const NSEC_REVEAL_DURATION_MS = 10 * 1000;
         // NIP-46 Methoden, die automatisch genehmigt werden (keine User-Bestätigung nötig)
         const AUTO_ALLOW_METHODS = new Set(["connect", "ping", "get_public_key"]);
         // NIP-46 Methoden, die Benutzer-Bestätigung benötigen (sensitiv)
@@ -332,6 +357,8 @@
         let lastPostedFrameHeight = 0;
         // Flag um redundante Frame-Size Updates zu vermeiden (Debouncing)
         let frameSizeNotifyScheduled = false;
+        // Timer-Handle für die einmalige nsec-Anzeige
+        let nsecRevealTimerHandle = null;
 
         // ===== Validierungs- und Normalisierungs-Funktionen =====
         
@@ -416,6 +443,14 @@
             return bytes;
         }
 
+        function isValidEncryptedPayload(payload) {
+            return !!payload &&
+                payload.v === 1 &&
+                typeof payload.salt === "string" &&
+                typeof payload.iv === "string" &&
+                typeof payload.ct === "string";
+        }
+
         // ===== AES-GCM Verschlüsselung (für nsec-Speicherung) =====
         
         /**
@@ -430,17 +465,17 @@
          * @param {number} iterations - PBKDF2 Iterationen (default: PBKDF2_ITERATIONS = 210000)
          * @returns {Promise<CryptoKey>} Ein WebCrypto AES-GCM Schlüssel
          */
-        async function deriveAesKeyFromPassword(password, saltBytes, iterations = PBKDF2_ITERATIONS) {
+        async function deriveAesKeyBytesFromPassword(password, saltBytes, iterations = PBKDF2_ITERATIONS) {
             const enc = new TextEncoder();
             const passwordKey = await crypto.subtle.importKey(
                 "raw",
                 enc.encode(password),
                 "PBKDF2",
                 false,
-                ["deriveKey"]
+                ["deriveBits"]
             );
 
-            return crypto.subtle.deriveKey(
+            const bits = await crypto.subtle.deriveBits(
                 {
                     name: "PBKDF2",
                     salt: saltBytes,
@@ -448,10 +483,24 @@
                     hash: "SHA-256"
                 },
                 passwordKey,
+                256
+            );
+            return new Uint8Array(bits);
+        }
+
+        async function importAesKeyFromRaw(rawKeyBytes, usages = ["decrypt"]) {
+            return crypto.subtle.importKey(
+                "raw",
+                rawKeyBytes,
                 { name: "AES-GCM", length: 256 },
                 false,
-                ["encrypt", "decrypt"]
+                usages
             );
+        }
+
+        async function deriveAesKeyFromPassword(password, saltBytes, iterations = PBKDF2_ITERATIONS) {
+            const rawKey = await deriveAesKeyBytesFromPassword(password, saltBytes, iterations);
+            return importAesKeyFromRaw(rawKey, ["encrypt", "decrypt"]);
         }
 
         /**
@@ -506,7 +555,7 @@
          * @throws {Error} Wenn Format ungültig oder Passwort falsch ist
          */
         async function decryptNsec(payload, password) {
-            if (!payload || payload.v !== 1 || !payload.salt || !payload.iv || !payload.ct) {
+            if (!isValidEncryptedPayload(payload)) {
                 throw new Error("Ungültiges verschlüsseltes Format.");
             }
 
@@ -521,6 +570,36 @@
                 ciphertext
             );
 
+            return dec.decode(clear);
+        }
+
+        async function deriveUnlockKeyFromPasswordAndPayload(password, payload) {
+            if (!isValidEncryptedPayload(payload)) {
+                throw new Error("Ungültiges verschlüsseltes Format.");
+            }
+            const salt = base64ToBytes(payload.salt);
+            const rawKey = await deriveAesKeyBytesFromPassword(password, salt, payload.iter || PBKDF2_ITERATIONS);
+            return bytesToBase64(rawKey);
+        }
+
+        async function decryptNsecWithDerivedKey(payload, derivedKeyBase64) {
+            if (!isValidEncryptedPayload(payload)) {
+                throw new Error("Ungültiges verschlüsseltes Format.");
+            }
+            if (typeof derivedKeyBase64 !== "string" || !derivedKeyBase64) {
+                throw new Error("Ungültiger Unlock-Cache-Schlüssel.");
+            }
+
+            const dec = new TextDecoder();
+            const iv = base64ToBytes(payload.iv);
+            const ciphertext = base64ToBytes(payload.ct);
+            const rawKey = base64ToBytes(derivedKeyBase64);
+            const key = await importAesKeyFromRaw(rawKey, ["decrypt"]);
+            const clear = await crypto.subtle.decrypt(
+                { name: "AES-GCM", iv },
+                key,
+                ciphertext
+            );
             return dec.decode(clear);
         }
 
@@ -647,43 +726,6 @@
             return bech32Encode("nsec", words);
         }
 
-        function generateKeyId() {
-            return `key_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
-        }
-
-        function loadKeyring() {
-            try {
-                const raw = localStorage.getItem(KEYRING_STORAGE_KEY);
-                if (!raw) return null;
-                const parsed = JSON.parse(raw);
-                if (!parsed || parsed.v !== 1 || !Array.isArray(parsed.keys)) return null;
-                const keys = parsed.keys
-                    .filter((entry) => entry && typeof entry.id === "string" && entry.id && entry.payload && typeof entry.payload === "object")
-                    .map((entry) => ({
-                        id: entry.id,
-                        name: normalizeKeyName(entry.name),
-                        createdAt: typeof entry.createdAt === "number" ? entry.createdAt : Date.now(),
-                        payload: entry.payload
-                    }));
-                if (keys.length === 0) return null;
-                return { v: 1, keys };
-            } catch (_err) {
-                return null;
-            }
-        }
-
-        function saveKeyring(keyring) {
-            localStorage.setItem(KEYRING_STORAGE_KEY, JSON.stringify(keyring));
-        }
-
-        function activeKeyIdFromStorage() {
-            return localStorage.getItem(ACTIVE_KEY_ID_STORAGE_KEY);
-        }
-
-        function setActiveKeyId(id) {
-            localStorage.setItem(ACTIVE_KEY_ID_STORAGE_KEY, id);
-        }
-
         // ===== WordPress User ID Bindings =====
         // Ermöglicht es, WordPress User-IDs an spezifische Nostr-Schlüssel zu binden
         // (nützlich für WordPress Integrations mit Nostr-Authentifizierung)
@@ -755,7 +797,7 @@
         }
 
         // ===== Unlock-Cache (Session und TTL-basiert) =====
-        // Speichert das Passwort temporär um häufiges Eingeben zu vermeiden
+        // Speichert einen abgeleiteten Schlüssel (nicht das Klartext-Passwort)
         
         /**
          * Löscht den Unlock-Cache vollständig:
@@ -767,22 +809,31 @@
             localStorage.removeItem(UNLOCK_CACHE_TTL_KEY);
         }
 
+        function isValidUnlockCacheRecord(parsed, requiresExpiry = false) {
+            if (!parsed || parsed.v !== 2) return false;
+            if (typeof parsed.unlockKey !== "string" || !parsed.unlockKey) return false;
+            if (requiresExpiry) {
+                return typeof parsed.expiresAt === "number" && parsed.expiresAt > Date.now();
+            }
+            return true;
+        }
+
         /**
          * Lädt den Unlock-Cache aus Session- oder localStorage.
          * Gibt Priorität dem Session-Cache (wird beim Tab-Schließen gelöscht).
          * Prüft TTL bei TTL-Cache und löscht abgelaufene Caches.
          * 
-         * @returns {object|null} { mode: "session"|"ttl", password: str, keyId: str } oder null
+         * @returns {object|null} { mode: "session"|"ttl", unlockKey: str, keyId: str } oder null
          */
         function loadUnlockCache() {
             try {
                 const sessionRaw = sessionStorage.getItem(UNLOCK_CACHE_SESSION_KEY);
                 if (sessionRaw) {
                     const sessionParsed = JSON.parse(sessionRaw);
-                    if (sessionParsed && typeof sessionParsed.password === "string") {
+                    if (isValidUnlockCacheRecord(sessionParsed, false)) {
                         return {
                             mode: "session",
-                            password: sessionParsed.password,
+                            unlockKey: sessionParsed.unlockKey,
                             keyId: typeof sessionParsed.keyId === "string" ? sessionParsed.keyId : null
                         };
                     }
@@ -796,14 +847,13 @@
                 const ttlRaw = localStorage.getItem(UNLOCK_CACHE_TTL_KEY);
                 if (!ttlRaw) return null;
                 const ttlParsed = JSON.parse(ttlRaw);
-                const now = Date.now();
-                if (!ttlParsed || typeof ttlParsed.password !== "string" || typeof ttlParsed.expiresAt !== "number" || ttlParsed.expiresAt <= now) {
+                if (!isValidUnlockCacheRecord(ttlParsed, true)) {
                     localStorage.removeItem(UNLOCK_CACHE_TTL_KEY);
                     return null;
                 }
                 return {
                     mode: "ttl",
-                    password: ttlParsed.password,
+                    unlockKey: ttlParsed.unlockKey,
                     keyId: typeof ttlParsed.keyId === "string" ? ttlParsed.keyId : null
                 };
             } catch (_err) {
@@ -813,7 +863,7 @@
         }
 
         /**
-         * Speichert das Unlock-Passwort temporär zur Vermeidung erneuter Eingaben.
+         * Speichert einen abgeleiteten Unlock-Schlüssel temporär.
          * 
          * Modes:
          * - "none": Keinen Cache speichern (löscht existierenden Cache)
@@ -821,18 +871,23 @@
          * - "15m": Im localStorage mit 15 Minuten TTL
          * - "1h": Im localStorage mit 1 Stunde TTL
          * 
-         * @param {string} password - Das zu speichernde Passwort
+         * @param {string} password - Das Passwort (nur zur Ableitung, wird nicht gespeichert)
          * @param {string} keyId - Die ID des zu speichernden Schlüssels (optional)
+         * @param {object} payload - Der verschlüsselte Keyring-Payload des aktiven Schlüssels
          * @param {string} mode - Der Speicher-Modus ("session", "15m", "1h", "none")
          */
-        function saveUnlockCache(password, keyId, mode) {
+        async function saveUnlockCache(password, keyId, payload, mode) {
             clearUnlockCache();
             if (!password || mode === "none") return;
+            if (!isValidEncryptedPayload(payload)) return;
+
+            const unlockKey = await deriveUnlockKeyFromPasswordAndPayload(password, payload);
+            const now = Date.now();
 
             if (mode === "session") {
                 sessionStorage.setItem(
                     UNLOCK_CACHE_SESSION_KEY,
-                    JSON.stringify({ v: 1, keyId: keyId || null, password, savedAt: Date.now() })
+                    JSON.stringify({ v: 2, keyId: keyId || null, unlockKey, savedAt: now })
                 );
                 return;
             }
@@ -845,30 +900,35 @@
             localStorage.setItem(
                 UNLOCK_CACHE_TTL_KEY,
                 JSON.stringify({
-                    v: 1,
+                    v: 2,
                     keyId: keyId || null,
-                    password,
-                    savedAt: Date.now(),
-                    expiresAt: Date.now() + ttlMs
+                    unlockKey,
+                    savedAt: now,
+                    expiresAt: now + ttlMs
                 })
             );
         }
 
         /**
-         * Aktualisiert die Key-ID im Unlock-Cache ohne das Passwort zu ändern.
+         * Aktualisiert Key-ID und Unlock-Schlüssel im Cache.
          * Nützlich wenn der Benutzer zwischen Schlüsseln wechselt.
          * 
          * @param {string} keyId - Die neue Key-ID
+         * @param {string} password - Aktuelles Passwort (nur zur Ableitung)
+         * @param {object} payload - Verschlüsselter Payload des neuen aktiven Schlüssels
          */
-        function updateUnlockCacheKeyId(keyId) {
-            if (!keyId) return;
+        async function updateUnlockCacheKeyId(keyId, password, payload) {
+            if (!keyId || !password || !isValidEncryptedPayload(payload)) return;
+            const unlockKey = await deriveUnlockKeyFromPasswordAndPayload(password, payload);
+            const now = Date.now();
 
             try {
                 const sessionRaw = sessionStorage.getItem(UNLOCK_CACHE_SESSION_KEY);
                 if (sessionRaw) {
                     const parsed = JSON.parse(sessionRaw);
-                    if (parsed && typeof parsed.password === "string") {
+                    if (isValidUnlockCacheRecord(parsed, false)) {
                         parsed.keyId = keyId;
+                        parsed.unlockKey = unlockKey;
                         sessionStorage.setItem(UNLOCK_CACHE_SESSION_KEY, JSON.stringify(parsed));
                     }
                 }
@@ -880,9 +940,12 @@
                 const ttlRaw = localStorage.getItem(UNLOCK_CACHE_TTL_KEY);
                 if (ttlRaw) {
                     const parsed = JSON.parse(ttlRaw);
-                    if (parsed && typeof parsed.password === "string" && typeof parsed.expiresAt === "number" && parsed.expiresAt > Date.now()) {
+                    if (isValidUnlockCacheRecord(parsed, true)) {
                         parsed.keyId = keyId;
+                        parsed.unlockKey = unlockKey;
                         localStorage.setItem(UNLOCK_CACHE_TTL_KEY, JSON.stringify(parsed));
+                    } else if (parsed?.expiresAt <= now) {
+                        localStorage.removeItem(UNLOCK_CACHE_TTL_KEY);
                     }
                 }
             } catch (_err) {
@@ -1004,10 +1067,41 @@
             };
         }
 
+        async function ensureSessionPassword() {
+            if (sessionPassword) return sessionPassword;
+            if (!currentKeyring || !Array.isArray(currentKeyring.keys) || currentKeyring.keys.length === 0) {
+                throw new Error("Kein Keyring geladen.");
+            }
+
+            const { entry: activeEntry } = resolveActiveKeyEntry(currentKeyring, activeKeyId);
+            const unlock = await showUnlockPanel({
+                title: "Passwort bestätigen",
+                hint: "Für diese Aktion bitte das aktuelle Keyring-Passwort eingeben.",
+                askNsec: false,
+                askConfirm: false,
+                askName: false,
+                askKey: false,
+                askRemember: false,
+                submitLabel: "Bestätigen"
+            });
+            if (!unlock.password) throw new Error("Kein Passwort angegeben.");
+
+            try {
+                const testNsec = await decryptNsec(activeEntry.payload, unlock.password);
+                if (!isValidNsec(testNsec)) throw new Error("invalid nsec");
+            } catch (_err) {
+                throw new Error("Passwort ist ungültig.");
+            }
+
+            sessionPassword = unlock.password;
+            return sessionPassword;
+        }
+
         async function ensureWpUserKey(userIdRaw) {
-            if (!currentKeyring || !sessionPassword) {
+            if (!currentKeyring) {
                 throw new Error("Signer ist gesperrt. Bitte zuerst entsperren.");
             }
+            const password = await ensureSessionPassword();
 
             const userId = normalizeWpUserId(userIdRaw);
             const bindings = loadWpUserBindings();
@@ -1017,7 +1111,7 @@
                 const existingIndex = currentKeyring.keys.findIndex((entry) => entry.id === boundKeyId);
                 if (existingIndex >= 0) {
                     const existingEntry = currentKeyring.keys[existingIndex];
-                    const existingNsec = await decryptNsec(existingEntry.payload, sessionPassword);
+                    const existingNsec = await decryptNsec(existingEntry.payload, password);
                     if (!isValidNsec(existingNsec)) {
                         throw new Error("Gebundener Schlüssel ist ungültig.");
                     }
@@ -1037,7 +1131,7 @@
             }
 
             const nsec = generateRandomNsec();
-            const newEntry = await createKeyringEntry(nsec, sessionPassword, wpBindingLabelForUser(userId));
+            const newEntry = await createKeyringEntry(nsec, password, wpBindingLabelForUser(userId));
             currentKeyring.keys.push(newEntry);
             saveKeyring(currentKeyring);
 
@@ -1067,16 +1161,16 @@
             if (keyring) {
                 const { entry: defaultEntry } = resolveActiveKeyEntry(keyring);
                 const cachedUnlock = loadUnlockCache();
-                if (cachedUnlock?.password) {
+                if (cachedUnlock?.unlockKey) {
                     const { entry: cachedEntry, index: cachedIndex } = resolveActiveKeyEntry(keyring, cachedUnlock.keyId || defaultEntry.id);
                     try {
-                        const cachedNsec = await decryptNsec(cachedEntry.payload, cachedUnlock.password);
+                        const cachedNsec = await decryptNsecWithDerivedKey(cachedEntry.payload, cachedUnlock.unlockKey);
                         if (!isValidNsec(cachedNsec)) throw new Error("invalid cached nsec");
                         setActiveKeyId(cachedEntry.id);
                         appendRequestLog(`Auto-Entsperrt (${cachedUnlock.mode === "session" ? "Session" : "TTL"}): ${keyDisplayName(cachedEntry, cachedIndex)}`);
                         return {
                             nsec: cachedNsec,
-                            password: cachedUnlock.password,
+                            password: "",
                             keyId: cachedEntry.id,
                             keyName: keyDisplayName(cachedEntry, cachedIndex),
                             keyring
@@ -1110,7 +1204,7 @@
                     const nsec = await decryptNsec(selectedEntry.payload, unlock.password);
                     if (!isValidNsec(nsec)) throw new Error("Ungültiger nsec nach Entschlüsselung.");
                     setActiveKeyId(selectedEntry.id);
-                    saveUnlockCache(unlock.password, selectedEntry.id, unlock.rememberMode || "none");
+                    await saveUnlockCache(unlock.password, selectedEntry.id, selectedEntry.payload, unlock.rememberMode || "none");
                     return {
                         nsec,
                         password: unlock.password,
@@ -1147,7 +1241,7 @@
                     const migratedKeyring = { v: 1, keys: [firstEntry] };
                     saveKeyring(migratedKeyring);
                     setActiveKeyId(firstEntry.id);
-                    saveUnlockCache(unlock.password, firstEntry.id, unlock.rememberMode || "none");
+                    await saveUnlockCache(unlock.password, firstEntry.id, firstEntry.payload, unlock.rememberMode || "none");
                     localStorage.removeItem(ENCRYPTED_NSEC_STORAGE_KEY);
                     localStorage.removeItem(LEGACY_NSEC_STORAGE_KEY);
                     appendRequestLog("Migration: alter verschlüsselter Storage wurde ins Keyring-Format übernommen.");
@@ -1185,7 +1279,7 @@
                 const migratedKeyring = { v: 1, keys: [firstEntry] };
                 saveKeyring(migratedKeyring);
                 setActiveKeyId(firstEntry.id);
-                saveUnlockCache(unlock.password, firstEntry.id, unlock.rememberMode || "none");
+                await saveUnlockCache(unlock.password, firstEntry.id, firstEntry.payload, unlock.rememberMode || "none");
                 localStorage.removeItem(ENCRYPTED_NSEC_STORAGE_KEY);
                 localStorage.removeItem(LEGACY_NSEC_STORAGE_KEY);
                 appendRequestLog("Klartext-nsec wurde in verschlüsselten Keyring migriert.");
@@ -1223,7 +1317,7 @@
             const newKeyring = { v: 1, keys: [firstEntry] };
             saveKeyring(newKeyring);
             setActiveKeyId(firstEntry.id);
-            saveUnlockCache(setup.password, firstEntry.id, setup.rememberMode || "none");
+            await saveUnlockCache(setup.password, firstEntry.id, firstEntry.payload, setup.rememberMode || "none");
             localStorage.removeItem(ENCRYPTED_NSEC_STORAGE_KEY);
             localStorage.removeItem(LEGACY_NSEC_STORAGE_KEY);
             appendRequestLog("nsec verschlüsselt im Keyring gespeichert.");
@@ -1457,11 +1551,11 @@
                         rememberMode: rememberSelect.value || "none"
                     };
                     cleanup();
-                    if (unlock.password.length < MIN_PASSWORD_LENGTH) throw new Error(`Passwort muss mindestens ${MIN_PASSWORD_LENGTH} Zeichen haben.`);
+                    resolve(value);
                 };
 
                 cancelBtn.onclick = () => {
-            if (setup.password.length < MIN_PASSWORD_LENGTH) throw new Error(`Passwort muss mindestens ${MIN_PASSWORD_LENGTH} Zeichen haben.`);
+                    cleanup();
                     reject(new Error("Entsperren abgebrochen."));
                 };
 
@@ -1514,60 +1608,167 @@
                 appendRequestLog("Ausgewählter Schlüssel ist bereits aktiv.");
                 return;
             }
+            const selectedEntry = currentKeyring.keys.find((entry) => entry.id === selectedId);
+            if (!selectedEntry) throw new Error("Ausgewählter Schlüssel konnte nicht geladen werden.");
 
             setActiveKeyId(selectedId);
-            updateUnlockCacheKeyId(selectedId);
+            if (sessionPassword) {
+                await updateUnlockCacheKeyId(selectedId, sessionPassword, selectedEntry.payload);
+            } else {
+                clearUnlockCache();
+            }
+            hideRevealedNsec();
             appendRequestLog("Aktiver Schlüssel gewechselt. Seite wird neu geladen.");
             window.location.reload();
         }
 
-        async function downloadActiveKeyPair() {
-            if (!currentKeyring || !sessionPassword) throw new Error("Keyring ist nicht entsperrt.");
+        async function askForExportPassword() {
+            const unlock = await showUnlockPanel({
+                title: "Export-Passwort setzen",
+                hint: "Das Passwort schützt nur die Exportdatei. Ohne dieses Passwort kann die Datei nicht importiert werden.",
+                askNsec: false,
+                askConfirm: true,
+                askName: false,
+                askKey: false,
+                askRemember: false,
+                submitLabel: "Verschlüsselt exportieren"
+            });
+            if (!unlock.password) throw new Error("Kein Export-Passwort angegeben.");
+            if (unlock.password.length < MIN_PASSWORD_LENGTH) {
+                throw new Error(`Export-Passwort muss mindestens ${MIN_PASSWORD_LENGTH} Zeichen haben.`);
+            }
+            if (unlock.password !== unlock.passwordConfirm) {
+                throw new Error("Export-Passwörter stimmen nicht überein.");
+            }
+            return unlock.password;
+        }
+
+        async function askForImportPassword() {
+            const unlock = await showUnlockPanel({
+                title: "Exportdatei entschlüsseln",
+                hint: "Bitte das Passwort der Exportdatei eingeben.",
+                askNsec: false,
+                askConfirm: false,
+                askName: false,
+                askKey: false,
+                askRemember: false,
+                submitLabel: "Datei entschlüsseln"
+            });
+            if (!unlock.password) throw new Error("Kein Export-Passwort angegeben.");
+            return unlock.password;
+        }
+
+        function parseKeyExport(rawText) {
+            let parsed;
+            try {
+                parsed = JSON.parse(rawText);
+            } catch (_err) {
+                throw new Error("Exportdatei ist kein gültiges JSON.");
+            }
+
+            if (!parsed || parsed.v !== KEY_EXPORT_VERSION || parsed.type !== KEY_EXPORT_TYPE) {
+                throw new Error("Unbekanntes Exportformat.");
+            }
+            if (!isValidEncryptedPayload(parsed.payload)) {
+                throw new Error("Exportdatei enthält keinen gültigen verschlüsselten Schlüssel.");
+            }
+            return {
+                label: normalizeKeyName(parsed.label),
+                encryptedPayload: parsed.payload
+            };
+        }
+
+        function hideRevealedNsec() {
+            const revealBox = document.getElementById("nsec-reveal-box");
+            const revealOutput = document.getElementById("nsec-reveal-output");
+            const revealCountdown = document.getElementById("nsec-reveal-countdown");
+
+            if (nsecRevealTimerHandle) {
+                clearInterval(nsecRevealTimerHandle);
+                nsecRevealTimerHandle = null;
+            }
+            if (revealOutput) revealOutput.value = "";
+            if (revealCountdown) revealCountdown.textContent = "";
+            if (revealBox) revealBox.hidden = true;
+            scheduleFrameSizeNotification(false);
+        }
+
+        async function askForNsecRevealPassword() {
+            const unlock = await showUnlockPanel({
+                title: "nsec einmal anzeigen",
+                hint: "Bitte Keyring-Passwort eingeben. Der nsec wird nur kurz angezeigt.",
+                askNsec: false,
+                askConfirm: false,
+                askName: false,
+                askKey: false,
+                askRemember: false,
+                submitLabel: "Anzeigen"
+            });
+            if (!unlock.password) throw new Error("Kein Passwort angegeben.");
+            return unlock.password;
+        }
+
+        async function revealActiveNsecOnce() {
+            if (!currentKeyring) throw new Error("Keyring ist nicht entsperrt.");
             const { entry: activeEntry, index: activeIndex } = resolveActiveKeyEntry(currentKeyring, activeKeyId);
             if (!activeEntry) throw new Error("Kein aktiver Schlüssel gefunden.");
 
-            const nsec = await decryptNsec(activeEntry.payload, sessionPassword);
-            const signer = new NDKPrivateKeySigner(nsec);
-            const user = await signer.user();
-            const displayName = keyDisplayName(activeEntry, activeIndex);
-            const exportPayload = {
-                label: displayName,
-                createdAt: new Date(activeEntry.createdAt || Date.now()).toISOString(),
-                nsec,
-                pubkey: user.pubkey,
-                npub: user.npub
-            };
+            const password = await askForNsecRevealPassword();
+            const accepted = window.confirm(
+                "Sicherheitswarnung: Der private Schlüssel wird 10 Sekunden im Klartext angezeigt. " +
+                "Nur in sicherer Umgebung fortfahren. Jetzt anzeigen?"
+            );
+            if (!accepted) {
+                appendRequestLog("nsec-Anzeige vom Benutzer abgebrochen.");
+                return;
+            }
 
-            const blob = new Blob([JSON.stringify(exportPayload, null, 2)], { type: "application/json" });
-            const fileName = `${safeFilename(displayName)}-${safeFilename(user.npub.slice(0, 12))}.json`;
-            const url = URL.createObjectURL(blob);
-            const link = document.createElement("a");
-            link.href = url;
-            link.download = fileName;
-            document.body.appendChild(link);
-            link.click();
-            link.remove();
-            URL.revokeObjectURL(url);
-            appendRequestLog(`Schlüsselpaar exportiert: ${fileName}`);
+            let nsec;
+            try {
+                nsec = await decryptNsec(activeEntry.payload, password);
+            } catch (_err) {
+                throw new Error("Passwort ist ungültig.");
+            }
+            if (!isValidNsec(nsec)) throw new Error("Aktiver Schlüssel konnte nicht als nsec gelesen werden.");
+
+            const revealBox = document.getElementById("nsec-reveal-box");
+            const revealOutput = document.getElementById("nsec-reveal-output");
+            const revealCountdown = document.getElementById("nsec-reveal-countdown");
+            if (!revealBox || !revealOutput || !revealCountdown) {
+                throw new Error("UI für nsec-Anzeige fehlt.");
+            }
+
+            sessionPassword = password;
+            revealOutput.value = nsec;
+            revealBox.hidden = false;
+            let remainingSeconds = Math.ceil(NSEC_REVEAL_DURATION_MS / 1000);
+            revealCountdown.textContent = `Wird in ${remainingSeconds}s automatisch ausgeblendet.`;
+            scheduleFrameSizeNotification(true);
+
+            if (nsecRevealTimerHandle) clearInterval(nsecRevealTimerHandle);
+            nsecRevealTimerHandle = setInterval(() => {
+                remainingSeconds -= 1;
+                if (remainingSeconds <= 0) {
+                    hideRevealedNsec();
+                    appendRequestLog(`nsec automatisch ausgeblendet (${keyDisplayName(activeEntry, activeIndex)}).`);
+                    return;
+                }
+                revealCountdown.textContent = `Wird in ${remainingSeconds}s automatisch ausgeblendet.`;
+            }, 1000);
+
+            appendRequestLog(`nsec einmalig angezeigt (${keyDisplayName(activeEntry, activeIndex)}).`);
         }
 
-        async function saveAdditionalKey() {
-            if (!currentKeyring || !sessionPassword) throw new Error("Keyring ist nicht entsperrt.");
-
-            const nameInput = document.getElementById("new-key-name-input");
-            const nsecInput = document.getElementById("new-key-nsec-input");
-            const nsec = nsecInput.value.trim();
-            const name = normalizeKeyName(nameInput.value);
-
-            if (!nsec) throw new Error("Bitte nsec eingeben oder generieren.");
+        async function addKeyToKeyring(nsec, name, password) {
             if (!isValidNsec(nsec)) throw new Error("Ungültiger nsec. Erwartet nsec1...");
+            if (!currentKeyring || !Array.isArray(currentKeyring.keys)) throw new Error("Kein Keyring geladen.");
 
             const newSigner = new NDKPrivateKeySigner(nsec);
             const newUser = await newSigner.user();
 
             for (const entry of currentKeyring.keys) {
                 try {
-                    const existingNsec = await decryptNsec(entry.payload, sessionPassword);
+                    const existingNsec = await decryptNsec(entry.payload, password);
                     const existingUser = await new NDKPrivateKeySigner(existingNsec).user();
                     if (existingUser.pubkey === newUser.pubkey) {
                         throw new Error("Dieser Schlüssel ist bereits gespeichert.");
@@ -1577,16 +1778,104 @@
                 }
             }
 
-            const entry = await createKeyringEntry(nsec, sessionPassword, name);
+            const entry = await createKeyringEntry(nsec, password, name);
             currentKeyring.keys.push(entry);
             saveKeyring(currentKeyring);
             appendRequestLog(`Neuer Schlüssel gespeichert: ${keyDisplayName(entry, currentKeyring.keys.length - 1)}`);
-            nsecInput.value = "";
             renderKeyManager();
         }
 
+        async function downloadActiveKeyPair() {
+            if (!currentKeyring) throw new Error("Keyring ist nicht entsperrt.");
+            const { entry: activeEntry, index: activeIndex } = resolveActiveKeyEntry(currentKeyring, activeKeyId);
+            if (!activeEntry) throw new Error("Kein aktiver Schlüssel gefunden.");
+            const password = await ensureSessionPassword();
+
+            const nsec = await decryptNsec(activeEntry.payload, password);
+            const signer = new NDKPrivateKeySigner(nsec);
+            const user = await signer.user();
+            const displayName = keyDisplayName(activeEntry, activeIndex);
+            const exportPassword = await askForExportPassword();
+            const encryptedPayload = await encryptNsec(nsec, exportPassword);
+            const exportPayload = {
+                v: KEY_EXPORT_VERSION,
+                type: KEY_EXPORT_TYPE,
+                format: "encrypted-nsec",
+                label: displayName || "",
+                createdAt: new Date().toISOString(),
+                sourceKeyCreatedAt: new Date(activeEntry.createdAt || Date.now()).toISOString(),
+                pubkey: user.pubkey,
+                npub: user.npub,
+                encryption: {
+                    kdf: "PBKDF2-SHA256",
+                    iterations: PBKDF2_ITERATIONS,
+                    cipher: "AES-256-GCM"
+                },
+                payload: encryptedPayload,
+                importHint: "Im Signer unter Verwaltung die Datei auswählen und auf \"Exportdatei importieren\" klicken."
+            };
+
+            const blob = new Blob([JSON.stringify(exportPayload, null, 2)], { type: "application/json" });
+            const fileName = `${safeFilename(displayName)}-${safeFilename(user.npub.slice(0, 12))}-secure-export.json`;
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.href = url;
+            link.download = fileName;
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            URL.revokeObjectURL(url);
+            appendRequestLog(`Verschlüsselter Schlüssel exportiert: ${fileName}`);
+        }
+
+        async function saveAdditionalKey() {
+            if (!currentKeyring) throw new Error("Keyring ist nicht entsperrt.");
+            const password = await ensureSessionPassword();
+
+            const nameInput = document.getElementById("new-key-name-input");
+            const nsecInput = document.getElementById("new-key-nsec-input");
+            const nsec = nsecInput.value.trim();
+            const name = normalizeKeyName(nameInput.value);
+
+            if (!nsec) throw new Error("Bitte nsec eingeben oder generieren.");
+            await addKeyToKeyring(nsec, name, password);
+            nsecInput.value = "";
+        }
+
+        async function importKeyFromFile() {
+            if (!currentKeyring) throw new Error("Keyring ist nicht entsperrt.");
+            const password = await ensureSessionPassword();
+            const fileInput = document.getElementById("import-key-file-input");
+            const nameInput = document.getElementById("new-key-name-input");
+            const file = fileInput?.files?.[0];
+            if (!file) throw new Error("Bitte zuerst eine Exportdatei auswählen.");
+
+            const raw = await file.text();
+            const parsed = parseKeyExport(raw);
+            let importedNsec = "";
+
+            if (!importedNsec && parsed.encryptedPayload) {
+                const exportPassword = await askForImportPassword();
+                try {
+                    importedNsec = await decryptNsec(parsed.encryptedPayload, exportPassword);
+                } catch (_err) {
+                    throw new Error("Exportdatei konnte nicht entschlüsselt werden. Passwort prüfen.");
+                }
+            }
+
+            if (!importedNsec || !isValidNsec(importedNsec)) {
+                throw new Error("Exportdatei enthält keinen gültigen nsec.");
+            }
+
+            const fallbackName = parsed.label || file.name.replace(/\.json$/i, "");
+            const targetName = normalizeKeyName(nameInput.value) || fallbackName;
+            await addKeyToKeyring(importedNsec, targetName, password);
+            fileInput.value = "";
+        }
+
         async function changeKeyringPassword() {
-            if (!currentKeyring || !sessionPassword) throw new Error("Keyring ist nicht entsperrt.");
+            if (!currentKeyring) throw new Error("Keyring ist nicht entsperrt.");
+            const knownPassword = await ensureSessionPassword();
 
             const currentInput = document.getElementById("change-password-current-input");
             const newInput = document.getElementById("change-password-new-input");
@@ -1600,7 +1889,7 @@
             setFieldFeedback(changePasswordFeedback, "");
 
             if (!currentPassword) throw new Error("Bitte aktuelles Passwort eingeben.");
-            if (currentPassword !== sessionPassword) throw new Error("Aktuelles Passwort ist falsch.");
+            if (currentPassword !== knownPassword) throw new Error("Aktuelles Passwort ist falsch.");
             if (!newPassword) throw new Error("Bitte neues Passwort eingeben.");
             if (newPassword.length < MIN_PASSWORD_LENGTH) {
                 setFieldFeedback(changePasswordFeedback, `Neues Passwort muss mindestens ${MIN_PASSWORD_LENGTH} Zeichen haben.`);
@@ -1608,11 +1897,11 @@
                 throw new Error(`Neues Passwort muss mindestens ${MIN_PASSWORD_LENGTH} Zeichen haben.`);
             }
             if (newPassword !== newPasswordConfirm) throw new Error("Neue Passwörter stimmen nicht überein.");
-            if (newPassword === sessionPassword) throw new Error("Neues Passwort muss sich vom aktuellen unterscheiden.");
+            if (newPassword === knownPassword) throw new Error("Neues Passwort muss sich vom aktuellen unterscheiden.");
 
             const reencryptedKeys = [];
             for (const entry of currentKeyring.keys) {
-                const nsec = await decryptNsec(entry.payload, sessionPassword);
+                const nsec = await decryptNsec(entry.payload, knownPassword);
                 const reencryptedPayload = await encryptNsec(nsec, newPassword);
                 reencryptedKeys.push({
                     ...entry,
@@ -1627,7 +1916,8 @@
             saveKeyring(currentKeyring);
 
             sessionPassword = newPassword;
-            saveUnlockCache(newPassword, activeKeyId, "session");
+            const { entry: activeEntryAfterPasswordChange } = resolveActiveKeyEntry(currentKeyring, activeKeyId);
+            await saveUnlockCache(newPassword, activeKeyId, activeEntryAfterPasswordChange?.payload, "session");
 
             currentInput.value = "";
             newInput.value = "";
@@ -1667,6 +1957,19 @@
                 }
             });
 
+            document.getElementById("reveal-nsec-once-btn").addEventListener("click", async () => {
+                try {
+                    await revealActiveNsecOnce();
+                } catch (err) {
+                    appendRequestLog(`nsec-Anzeige fehlgeschlagen: ${err.message}`);
+                }
+            });
+
+            document.getElementById("hide-nsec-btn").addEventListener("click", () => {
+                hideRevealedNsec();
+                appendRequestLog("nsec manuell ausgeblendet.");
+            });
+
             document.getElementById("generate-key-btn").addEventListener("click", () => {
                 try {
                     const generated = generateRandomNsec();
@@ -1682,6 +1985,14 @@
                     await saveAdditionalKey();
                 } catch (err) {
                     appendRequestLog(`Speichern fehlgeschlagen: ${err.message}`);
+                }
+            });
+
+            document.getElementById("import-key-file-btn").addEventListener("click", async () => {
+                try {
+                    await importKeyFromFile();
+                } catch (err) {
+                    appendRequestLog(`Import fehlgeschlagen: ${err.message}`);
                 }
             });
 
@@ -2257,4 +2568,3 @@
     </script>
 </body>
 </html>
-

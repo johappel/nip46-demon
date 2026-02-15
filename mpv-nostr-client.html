@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; connect-src 'self' https: wss:; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; frame-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self';">
     <title>MPV Nostr Client (NIP-7 mit NIP-46 Fallback)</title>
     <style>
         body {
@@ -128,7 +129,7 @@
     </div>
 
     <script type="module">
-        import NDK, { NDKEvent, NDKNip46Signer, NDKRelaySet } from "https://esm.sh/@nostr-dev-kit/ndk@3.0.0?bundle&target=es2022";
+        import NDK, { NDKEvent, NDKNip46Signer, NDKRelaySet } from "./vendor/ndk-3.0.0.js";
 
         // Konstante für das Bridge-Protokoll (muss mit signer.html übereinstimmen)
         const BRIDGE_SOURCE = "nip46-signer-bridge";
