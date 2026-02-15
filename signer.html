@@ -275,6 +275,12 @@
             <div class="button-row">
                 <button class="btn-approve" id="change-password-btn">Passwort für alle IDs ändern</button>
             </div>
+            <hr style="border-color:#333; margin:14px 0;">
+            <h4 style="margin:0 0 8px 0; color:#ffb4b4;">Notfallbereich</h4>
+            <p class="danger-hint">Löscht alle lokal gespeicherten Identitäten und Signer-Einstellungen in diesem Browser für diese Website (Keyring, aktive Auswahl, Unlock-Cache, Berechtigungen, WP-Bindings). Reimport ist nur mit vorher exportierter Datei möglich.</p>
+            <div class="button-row">
+                <button class="btn-reject" id="reset-keyring-btn" type="button">Alle lokalen Identitäten löschen</button>
+            </div>
         </div>
     </section>
 
@@ -2051,6 +2057,47 @@
             appendRequestLog("Passwort geändert. Alle gespeicherten Schlüssel wurden neu verschlüsselt.");
         }
 
+        function resetKeyringWithConfirmation() {
+            const firstConfirm = window.confirm(
+                "Warnung: Dadurch werden alle lokal gespeicherten Identitäten und Einstellungen dieses Signers gelöscht. Reimport ist nur mit Exportdatei möglich. Fortfahren?"
+            );
+            if (!firstConfirm) {
+                appendRequestLog("Löschen lokaler Identitäten abgebrochen (1. Bestätigung).");
+                return;
+            }
+
+            const phrase = window.prompt(
+                "Letzte Bestätigung: Tippe RESET, um alle lokalen Identitäten unwiderruflich zu löschen."
+            );
+            if (phrase !== "RESET") {
+                appendRequestLog("Löschen lokaler Identitäten abgebrochen (2. Bestätigung fehlgeschlagen).");
+                throw new Error("Reset abgebrochen. Bestätigungswort war nicht korrekt.");
+            }
+
+            hideRevealedNsec();
+            clearUnlockCache();
+
+            localStorage.removeItem(KEYRING_STORAGE_KEY);
+            localStorage.removeItem(ACTIVE_KEY_ID_STORAGE_KEY);
+            localStorage.removeItem(ENCRYPTED_NSEC_STORAGE_KEY);
+            localStorage.removeItem(LEGACY_NSEC_STORAGE_KEY);
+            localStorage.removeItem(PERMISSION_STORAGE_KEY);
+            localStorage.removeItem(WP_USER_BINDINGS_STORAGE_KEY);
+
+            sessionPassword = "";
+            sessionUnlockMaterial = null;
+            currentKeyring = null;
+            activeKeyId = null;
+            activeNsec = null;
+            activeUser = null;
+            connectionInfo = null;
+            pendingPermissionRequests.length = 0;
+            activePermissionRequest = null;
+
+            appendRequestLog("Alle lokalen Identitäten wurden gelöscht. Seite wird neu geladen.");
+            window.location.reload();
+        }
+
         function setupKeyManagerHandlers() {
             const newPasswordInput = document.getElementById("change-password-new-input");
             const changePasswordFeedback = document.getElementById("change-password-feedback");
@@ -2126,6 +2173,14 @@
                     await changeKeyringPassword();
                 } catch (err) {
                     appendRequestLog(`Passwort ändern fehlgeschlagen: ${err.message}`);
+                }
+            });
+
+            document.getElementById("reset-keyring-btn").addEventListener("click", () => {
+                try {
+                    resetKeyringWithConfirmation();
+                } catch (err) {
+                    appendRequestLog(`Löschen lokaler Identitäten fehlgeschlagen: ${err.message}`);
                 }
             });
         }
