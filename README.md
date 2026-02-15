@@ -60,6 +60,7 @@ Dieses Projekt zeigt die praktische Umsetzung mit:
 - **Origin-Validierung** – PostMessage nur mit erwarteten Origins
 - **Session & TTL Caching** – Optionales Passwort-Caching mit Ablauf
 - **Permission System** – Benutzer kontrolliert welche Clients was dürfen
+- **Security-Status Dokument** - Siehe `Security.md` (Status Quo, Grenzen, Bedrohungsmodell)
 
 ### 🔧 Entwickler-freundlich
 - **Template-Code** – Einfach kopieren & anpassen
@@ -102,6 +103,7 @@ nip46-demon/
 │   └── sendevent.html             ← Test event publishing
 │
 ├── mpv-nostr-client.html           ← Standalone client demo
+├── Security.md                     ← Sicherheitsarchitektur & Limitierungen
 └── SIGNER_DOKU.md                 ← Technische Dokumentation
 ```
 
