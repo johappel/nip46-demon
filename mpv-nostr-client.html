@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; connect-src 'self' https: wss:; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; frame-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self';">
-    <title>MPV Nostr Client (NIP-7 mit NIP-46 Fallback)</title>
+    <title>MPV Nostr Client (NIP-46 und NIP-7)</title>
     <style>
         body {
             font-family: sans-serif;
@@ -83,12 +83,12 @@
 </head>
 <body>
     <h1>MPV Nostr Client</h1>
-    <p class="hint">NIP-7 API nach außen, intern optional NIP-46.</p>
+    <p class="hint">Hinweis: NIP-7 API wird auch für NIP-46 genutzt.</p>
 
     <div class="card">
         <label class="label" for="connect-mode">Connect-Modus</label>
         <select id="connect-mode">
-            <option value="auto">Auto (NIP-7, sonst NIP-46)</option>
+            <option value="auto">Auto (NIP-46, sonst NIP-7)</option>
             <option value="nip7">Nur NIP-7 (Extension)</option>
             <option value="nip46">Nur NIP-46 (Signer/Bridge)</option>
         </select>
@@ -282,7 +282,7 @@
                 return;
             }
             connectHintEl.textContent = hasNativeProviderAvailable()
-                ? "Schritt 1: Auto verbindet per NIP-7 (falls vorhanden), sonst NIP-46. Danach unten Nachricht senden."
+                ? "Schritt 1: Auto verbindet zuerst per NIP-46, fallback auf NIP-7. Danach unten Nachricht senden."
                 : "Schritt 1: Auto nutzt NIP-46 (kein NIP-7 erkannt). Danach unten Nachricht senden.";
         }
 
@@ -591,9 +591,15 @@
             
             // Im NIP-7 Modus: keine iframe-Messages händeln
             if (selectedConnectMode() === "nip7") return;
-            
-            // Im Auto-Modus mit verfügbarem NIP-7: keine iframe-Messages nötig
-            if (selectedConnectMode() === "auto" && hasNativeProviderAvailable()) return;
+
+            // Im Auto-Modus mit aktivem NIP-7-Fallback: iframe-Status nicht übernehmen
+            if (
+                selectedConnectMode() === "auto" &&
+                hasNativeProviderAvailable() &&
+                nostrProvider === window.nostr
+            ) {
+                return;
+            }
             
             // Nur für relevante Nachrichtentypen
             if (data.type !== "ready" && data.type !== "connection-info" && data.type !== "locked") return;
@@ -860,8 +866,8 @@
         /**
          * Hauptfunktion zum "Einloggen" - Verbindet sich mit dem Nostr Provider.
          * Entscheidet automatisch zwischen:
-         * - NIP-7 (native Browser Extension) wenn verfügbar
-         * - NIP-46 (Remote Signer / Bunker) als Fallback oder auf Anforderung
+         * - NIP-46 (Remote Signer / Bunker) bevorzugt im Auto-Modus
+         * - NIP-7 (native Browser Extension) als Fallback
          * 
          * Aktualisiert die UI und speichert den Provider für spätere Operationen.
          * 
@@ -873,8 +879,8 @@
             resultEl.textContent = "";
             const mode = selectedConnectMode();
 
-            // Fall 1: NIP-7 native Extension
-            if (mode === "nip7" || (mode === "auto" && hasNativeProviderAvailable())) {
+            // Fall 1: NIP-7 native Extension (nur erzwungener NIP-7 Modus)
+            if (mode === "nip7") {
                 if (!hasNativeProviderAvailable()) {
                     throw new Error("Kein natives NIP-7 gefunden. Waehle 'Auto' oder 'Nur NIP-46'.");
                 }
@@ -890,8 +896,26 @@
                 return;
             }
 
-            // Fall 2: NIP-46 Remote Signing (Fallback oder exklusiv)
-            const connected = await connectViaNip46();
+            // Fall 2: NIP-46 Remote Signing (im Auto-Modus bevorzugt, sonst exklusiv)
+            let connected;
+            try {
+                connected = await connectViaNip46();
+            } catch (nip46Err) {
+                if (mode !== "auto" || !hasNativeProviderAvailable()) throw nip46Err;
+                setProviderReady(window.nostr);
+                setStatus("NIP-46 nicht erreichbar, Fallback auf NIP-7.");
+                userEl.textContent =
+                    `Modus: Auto (Fallback NIP-7)\n` +
+                    `Fehler NIP-46: ${nip46Err.message}\n` +
+                    "pubkey: (nicht abgefragt)";
+                try {
+                    await ensurePublishContextForProvider();
+                } catch (_err) {
+                    // Publikation ist optional für reine Signierung
+                }
+                return;
+            }
+
             setProviderReady(connected.provider);  // NIP-46 Adapter als Provider nutzen
 
             // Optional: Globales window.nostr setzen wenn kein natives vorhanden
