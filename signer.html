@@ -365,6 +365,17 @@
                 <button class="btn-approve" id="change-password-btn">Passwort für alle IDs ändern</button>
             </div>
             <hr style="border-color:#333; margin:14px 0;">
+            <h4 style="margin:0 0 8px 0; color:#9ad1ff;">NIP-46 Berechtigungen</h4>
+            <p>Dauerhafte Berechtigungen aus "Immer erlauben" können hier widerrufen werden.</p>
+            <p style="margin-top:-2px;">Format: Methode | Pubkey | Schluesselname</p>
+            <p id="permission-manager-empty">Keine permanenten Berechtigungen gespeichert.</p>
+            <label for="permission-manager-select">Gespeicherte permanente Berechtigungen</label>
+            <select id="permission-manager-select" size="6" disabled></select>
+            <div class="button-row">
+                <button class="btn-allow-temporary" id="revoke-selected-permission-btn" type="button">Ausgewählte Berechtigung widerrufen</button>
+                <button class="btn-reject" id="revoke-all-permissions-btn" type="button">Alle permanenten Berechtigungen widerrufen</button>
+            </div>
+            <hr style="border-color:#333; margin:14px 0;">
             <h4 style="margin:0 0 8px 0; color:#ffb4b4;">Notfallbereich</h4>
             <p class="danger-hint">Löscht alle lokal gespeicherten Identitäten und Signer-Einstellungen in diesem Browser für diese Website (Keyring, aktive Auswahl, Unlock-Cache, Berechtigungen, WP-Bindings). Reimport ist nur mit vorher exportierter Datei möglich.</p>
             <div class="button-row">
@@ -402,6 +413,8 @@
         const UNLOCK_CACHE_TTL_KEY = "nip46_unlock_cache_ttl_v1";
         // Speichert Genehmigungen für Anfragen (pubkey:method -> TTL oder PERMISSION_FOREVER)
         const PERMISSION_STORAGE_KEY = "nip46_permissions_v1";
+        // Optionale Metadaten zu Genehmigungen (z.B. aktiver Schluesselname beim Erteilen)
+        const PERMISSION_META_STORAGE_KEY = "nip46_permissions_meta_v1";
         // Bindet WordPress User-IDs an Nostr Schlüssel (für WP-Integration)
         const WP_USER_BINDINGS_STORAGE_KEY = "nip46_wp_user_bindings_v1";
         // Versioniertes Dateiformat für passwortgeschützte Schlüssel-Exportdateien
@@ -438,6 +451,9 @@
         ]);
         // Spezialwert: Genehmigung läuft niemals ab (-1 = unbegrenzt)
         const PERMISSION_FOREVER = -1;
+        // Unlock-Rate-Limiting: exponentielles Backoff nach fehlgeschlagenen Passwortversuchen
+        const UNLOCK_BACKOFF_BASE_MS = 1000;
+        const UNLOCK_BACKOFF_MAX_MS = 30000;
         // Bech32-Encoding Zeichensatz (für nsec1 Format)
         const BECH32_CHARSET = "qpzry9x8gf2tvdw0s3jn54khce6mua7l";
         // Bech32 Generator-Polynome (für Checksum-Berechnung)
@@ -472,6 +488,8 @@
         let frameSizeNotifyScheduled = false;
         // Timer-Handle für die einmalige nsec-Anzeige
         let nsecRevealTimerHandle = null;
+        // Anzahl fehlgeschlagener Unlock-Versuche für Backoff
+        let failedUnlockAttempts = 0;
 
         // ===== Validierungs- und Normalisierungs-Funktionen =====
         
@@ -527,6 +545,53 @@
             if (!element) return;
             element.innerText = message || "";
             element.style.display = message ? "block" : "none";
+        }
+
+        function isLocalDevHostname(hostname) {
+            const host = String(hostname || "").toLowerCase();
+            return host === "localhost" || host === "127.0.0.1" || host === "::1";
+        }
+
+        function getInsecureHttpWarningMessage() {
+            if (window.location.protocol !== "http:") return "";
+            if (isLocalDevHostname(window.location.hostname)) return "";
+            return "Unsicherer HTTP-Zugriff erkannt. Bitte Signer nur ueber HTTPS oeffnen.";
+        }
+
+        function ensureSecureTransportOrThrow() {
+            const warning = getInsecureHttpWarningMessage();
+            if (!warning) return;
+            appendRequestLog(warning);
+            throw new Error(warning);
+        }
+
+        function isDevelopmentMode() {
+            const params = new URLSearchParams(window.location.search);
+            if (params.get("debug") === "1") return true;
+            return isLocalDevHostname(window.location.hostname);
+        }
+
+        const DEBUG_MODE = isDevelopmentMode();
+
+        function devLog(...args) {
+            if (!DEBUG_MODE) return;
+            console.log(...args);
+        }
+
+        function waitMs(ms) {
+            const delay = Math.max(0, Number(ms) || 0);
+            return new Promise((resolve) => setTimeout(resolve, delay));
+        }
+
+        function unlockBackoffDelayMs(failedAttempts) {
+            if (!Number.isFinite(failedAttempts) || failedAttempts <= 0) return 0;
+            const exponent = Math.min(10, failedAttempts - 1);
+            return Math.min(UNLOCK_BACKOFF_MAX_MS, UNLOCK_BACKOFF_BASE_MS * (2 ** exponent));
+        }
+
+        function formatWaitSeconds(ms) {
+            const seconds = Math.ceil(Math.max(0, ms) / 1000);
+            return `${seconds}s`;
         }
 
         async function copyTextToClipboard(text) {
@@ -1674,6 +1739,7 @@
                 if (panel) panel.classList.toggle("active", tab === tabName);
                 if (btn) btn.classList.toggle("active", tab === tabName);
             }
+            if (tabName === "security") renderPermissionManager();
             scheduleFrameSizeNotification(false);
         }
 
@@ -2316,6 +2382,7 @@
             localStorage.removeItem(ENCRYPTED_NSEC_STORAGE_KEY);
             localStorage.removeItem(LEGACY_NSEC_STORAGE_KEY);
             localStorage.removeItem(PERMISSION_STORAGE_KEY);
+            localStorage.removeItem(PERMISSION_META_STORAGE_KEY);
             localStorage.removeItem(WP_USER_BINDINGS_STORAGE_KEY);
 
             sessionPassword = "";
@@ -2335,6 +2402,9 @@
         function setupKeyManagerHandlers() {
             const newPasswordInput = document.getElementById("change-password-new-input");
             const changePasswordFeedback = document.getElementById("change-password-feedback");
+            const permissionSelect = document.getElementById("permission-manager-select");
+            const revokeSelectedPermissionBtn = document.getElementById("revoke-selected-permission-btn");
+            const revokeAllPermissionsBtn = document.getElementById("revoke-all-permissions-btn");
 
             setupSecretInputControls("unlock-nsec-input", "unlock-nsec-visibility-btn", "unlock-nsec-copy-btn", "Einrichtungs-nsec");
             setupSecretInputControls("new-key-nsec-input", "new-key-nsec-visibility-btn", "new-key-nsec-copy-btn", "nsec");
@@ -2421,6 +2491,38 @@
                 }
             });
 
+            if (revokeSelectedPermissionBtn) {
+                revokeSelectedPermissionBtn.addEventListener("click", () => {
+                    const selectedKey = permissionSelect?.value || "";
+                    if (!selectedKey) {
+                        appendRequestLog("Keine permanente Berechtigung ausgewählt.");
+                        return;
+                    }
+                    const removed = revokePermissionByStorageKey(selectedKey);
+                    if (!removed) {
+                        appendRequestLog("Berechtigung konnte nicht widerrufen werden.");
+                        return;
+                    }
+                    const parsed = parsePermissionStorageKey(selectedKey);
+                    if (parsed) {
+                        appendRequestLog(`Berechtigung widerrufen: ${parsed.method} (${parsed.pubkey.slice(0, 12)}...)`);
+                    } else {
+                        appendRequestLog("Berechtigung widerrufen.");
+                    }
+                });
+            }
+
+            if (revokeAllPermissionsBtn) {
+                revokeAllPermissionsBtn.addEventListener("click", () => {
+                    const removedCount = revokeAllPermanentPermissions();
+                    if (removedCount <= 0) {
+                        appendRequestLog("Keine permanente Berechtigung zum Widerrufen vorhanden.");
+                        return;
+                    }
+                    appendRequestLog(`${removedCount} permanente Berechtigung(en) widerrufen.`);
+                });
+            }
+
             document.getElementById("reset-keyring-btn").addEventListener("click", () => {
                 try {
                     resetKeyringWithConfirmation();
@@ -2428,6 +2530,8 @@
                     appendRequestLog(`Löschen lokaler Identitäten fehlgeschlagen: ${err.message}`);
                 }
             });
+
+            renderPermissionManager();
         }
 
         // ===== Bridge-Kommunikation (PostMessage Protocol mit Parent) =====
@@ -2579,6 +2683,20 @@
             localStorage.setItem(PERMISSION_STORAGE_KEY, JSON.stringify(permissions));
         }
 
+        function loadPermissionMeta() {
+            try {
+                const raw = localStorage.getItem(PERMISSION_META_STORAGE_KEY);
+                const parsed = raw ? JSON.parse(raw) : {};
+                return parsed && typeof parsed === "object" ? parsed : {};
+            } catch (_err) {
+                return {};
+            }
+        }
+
+        function savePermissionMeta(meta) {
+            localStorage.setItem(PERMISSION_META_STORAGE_KEY, JSON.stringify(meta || {}));
+        }
+
         /**
          * Erzeugt einen eindeutigen Key für eine Genehmigung.
          * Format: "<pubkey>:<method>" (z.B. "abc123....:sign_event")
@@ -2591,6 +2709,45 @@
             return `${pubkey}:${method}`;
         }
 
+        function parsePermissionStorageKey(storageKey) {
+            if (typeof storageKey !== "string") return null;
+            const splitIndex = storageKey.lastIndexOf(":");
+            if (splitIndex <= 0 || splitIndex >= storageKey.length - 1) return null;
+            return {
+                pubkey: storageKey.slice(0, splitIndex),
+                method: storageKey.slice(splitIndex + 1)
+            };
+        }
+
+        function compactPubkey(pubkey) {
+            const value = String(pubkey || "");
+            if (value.length <= 24) return value;
+            return `${value.slice(0, 12)}...${value.slice(-8)}`;
+        }
+
+        function activeSignerKeyName() {
+            if (!currentKeyring || !Array.isArray(currentKeyring.keys) || currentKeyring.keys.length === 0) {
+                return "";
+            }
+            try {
+                const { entry, index } = resolveActiveKeyEntry(currentKeyring, activeKeyId);
+                return keyDisplayName(entry, index);
+            } catch (_err) {
+                return "";
+            }
+        }
+
+        function rememberPermissionMeta(storageKey, keyName) {
+            if (typeof storageKey !== "string" || !storageKey) return;
+            const normalized = normalizeKeyName(keyName);
+            const meta = loadPermissionMeta();
+            meta[storageKey] = {
+                keyName: normalized,
+                updatedAt: Date.now()
+            };
+            savePermissionMeta(meta);
+        }
+
         /**
          * Entfernt abgelaufene Genehmigungen aus dem Storage.
          * Behält nur Genehmigungen die noch nicht expired sind oder ewig gültig (PERMISSION_FOREVER).
@@ -2600,18 +2757,119 @@
         function clearExpiredPermissions() {
             const now = Date.now();
             const permissions = loadPermissions();
+            const meta = loadPermissionMeta();
             let changed = false;
+            let metaChanged = false;
 
             for (const [key, value] of Object.entries(permissions)) {
                 if (value === PERMISSION_FOREVER) continue;
                 if (typeof value !== "number" || value <= now) {
                     delete permissions[key];
+                    if (Object.prototype.hasOwnProperty.call(meta, key)) {
+                        delete meta[key];
+                        metaChanged = true;
+                    }
                     changed = true;
                 }
             }
 
+            for (const metaKey of Object.keys(meta)) {
+                if (!Object.prototype.hasOwnProperty.call(permissions, metaKey)) {
+                    delete meta[metaKey];
+                    metaChanged = true;
+                }
+            }
+
             if (changed) savePermissions(permissions);
+            if (metaChanged) savePermissionMeta(meta);
             return permissions;
+        }
+
+        function listPermanentPermissions() {
+            const permissions = clearExpiredPermissions();
+            const meta = loadPermissionMeta();
+            const entries = [];
+            for (const [key, value] of Object.entries(permissions)) {
+                if (value !== PERMISSION_FOREVER) continue;
+                const parsed = parsePermissionStorageKey(key);
+                if (!parsed) continue;
+                const keyName = normalizeKeyName(meta?.[key]?.keyName);
+                entries.push({ key, ...parsed, keyName });
+            }
+            entries.sort((a, b) => {
+                const methodCompare = a.method.localeCompare(b.method);
+                if (methodCompare !== 0) return methodCompare;
+                return a.pubkey.localeCompare(b.pubkey);
+            });
+            return entries;
+        }
+
+        function renderPermissionManager() {
+            const select = document.getElementById("permission-manager-select");
+            const emptyEl = document.getElementById("permission-manager-empty");
+            if (!select || !emptyEl) return;
+
+            const entries = listPermanentPermissions();
+            select.innerHTML = "";
+
+            if (entries.length === 0) {
+                select.disabled = true;
+                emptyEl.style.display = "block";
+                scheduleFrameSizeNotification(false);
+                return;
+            }
+
+            for (const entry of entries) {
+                const option = document.createElement("option");
+                option.value = entry.key;
+                option.textContent = `${entry.method} | ${compactPubkey(entry.pubkey)} | ${entry.keyName || "-"}`;
+                option.title =
+                    `Methode: ${entry.method}\n` +
+                    `Pubkey: ${entry.pubkey}\n` +
+                    `Schluesselname: ${entry.keyName || "-"}`;
+                select.appendChild(option);
+            }
+
+            select.disabled = false;
+            emptyEl.style.display = "none";
+            scheduleFrameSizeNotification(false);
+        }
+
+        function revokePermissionByStorageKey(storageKey) {
+            if (typeof storageKey !== "string" || !storageKey) return false;
+            const permissions = clearExpiredPermissions();
+            const meta = loadPermissionMeta();
+            if (!Object.prototype.hasOwnProperty.call(permissions, storageKey)) return false;
+            delete permissions[storageKey];
+            savePermissions(permissions);
+            if (Object.prototype.hasOwnProperty.call(meta, storageKey)) {
+                delete meta[storageKey];
+                savePermissionMeta(meta);
+            }
+            renderPermissionManager();
+            return true;
+        }
+
+        function revokeAllPermanentPermissions() {
+            const permissions = clearExpiredPermissions();
+            const meta = loadPermissionMeta();
+            let removedCount = 0;
+            let metaChanged = false;
+
+            for (const [key, value] of Object.entries(permissions)) {
+                if (value !== PERMISSION_FOREVER) continue;
+                delete permissions[key];
+                if (Object.prototype.hasOwnProperty.call(meta, key)) {
+                    delete meta[key];
+                    metaChanged = true;
+                }
+                removedCount += 1;
+            }
+
+            if (removedCount > 0) savePermissions(permissions);
+            if (metaChanged) savePermissionMeta(meta);
+            renderPermissionManager();
+            return removedCount;
         }
 
         /**
@@ -2652,8 +2910,11 @@
          */
         function grantPermissionForever(pubkey, method) {
             const permissions = clearExpiredPermissions();
-            permissions[permissionKey(pubkey, method)] = PERMISSION_FOREVER;
+            const key = permissionKey(pubkey, method);
+            permissions[key] = PERMISSION_FOREVER;
             savePermissions(permissions);
+            rememberPermissionMeta(key, activeSignerKeyName());
+            renderPermissionManager();
         }
 
         /**
@@ -2801,6 +3062,22 @@
                 msg.startsWith("Ungültiger nsec");
         }
 
+        function shouldApplyUnlockBackoff(err) {
+            const msg = err?.message || "";
+            return msg === "Entsperren fehlgeschlagen. Passwort oder Daten sind ungültig." ||
+                msg === "Migration fehlgeschlagen. Passwort oder Alt-Daten sind ungültig.";
+        }
+
+        function resetUnlockBackoff() {
+            failedUnlockAttempts = 0;
+        }
+
+        function nextUnlockBackoffDelay(err) {
+            if (!shouldApplyUnlockBackoff(err)) return 0;
+            failedUnlockAttempts += 1;
+            return unlockBackoffDelayMs(failedUnlockAttempts);
+        }
+
         /**
          * Ruft getOrAskActiveKey auf und wiederholt bei wiederholbaren Fehlern.
          * Zeigt Benutzern die Möglichkeit Fehler zu korrigieren (z.B. Passwort erneut eingeben).
@@ -2812,11 +3089,19 @@
         async function getOrAskActiveKeyWithRetry() {
             while (true) {
                 try {
-                    return await getOrAskActiveKey();
+                    const unlocked = await getOrAskActiveKey();
+                    resetUnlockBackoff();
+                    return unlocked;
                 } catch (err) {
                     if (err?.message === "Entsperren abgebrochen.") throw err;
                     if (!isRetryableUnlockError(err)) throw err;
-                    appendRequestLog(`${err.message} Bitte erneut versuchen.`);
+                    const backoffMs = nextUnlockBackoffDelay(err);
+                    if (backoffMs > 0) {
+                        appendRequestLog(`${err.message} Bitte in ${formatWaitSeconds(backoffMs)} erneut versuchen.`);
+                        await waitMs(backoffMs);
+                    } else {
+                        appendRequestLog(`${err.message} Bitte erneut versuchen.`);
+                    }
                 }
             }
         }
@@ -2826,6 +3111,8 @@
         
         /**\n         * KRITISCHE FUNKTION: Initialisiert und startet den kompletten NIP-46 Signer.\n         * Dies ist der Einstiegspunkt am Ende des Skriptes.\n         * \n         * Prozess (in Reihenfolge):\n         * 1. NDK mit RELAYS initialisieren\n         * 2. Benutzer-Entsperrrung (mit Retry bei Validierungsfehlern)\n         * 3. Aktiven Schlüssel laden und NDKUser erstellen\n         * 4. Bunker/Nostrconnect URIs generieren\n         * 5. Verbindungsinformationen für Parent bereitstellen\n         * 6. UI aktualisieren (Status, User-Info, ConnectionInfo)\n         * 7. NIP-46 NDKNip46Backend initialisieren mit Permission-Callback\n         * 8. RPC-Relay-Zuverlässigkeit patchen\n         * 9. Relay-Verbindungen gewährleisten\n         * 10. \"ready\" Message an Parent senden\n         * \n         * Permission-Callback logik:\n         * - switch_relays: BLOCKIERT (feste Allowlist)\n         * - AUTO_ALLOW_METHODS: Auto erlaubt (connect, ping, get_public_key)\n         * - Nicht-sensible Methoden: Auto erlaubt\n         * - SENSITIVE_METHODS mit TTL-Genehmigung: Erlaubt wenn noch nicht abgelaufen\n         * - SENSITIVE_METHODEN ohne TTL: Frage Benutzer via Modal\n         * \n         * @throws {Error} Bei Entsperrrung fehlgeschlagen, NDK/Relay Fehler, oder NIP-46 Backend Start Fehler\n         */
         async function startSigner() {
+            ensureSecureTransportOrThrow();
+
             const ndk = new NDK({ explicitRelayUrls: RELAYS });
             await ndk.connect();
 
@@ -2877,7 +3164,7 @@
                 ndk,
                 localSigner,
                 async (request) => {
-                    console.log("NIP-46 Anfrage:", request);
+                    devLog("NIP-46 Anfrage:", request);
                     const method = request?.method;
                     const pubkey = request?.pubkey ?? "";
                     appendRequestLog(`Methode: ${method} von ${pubkey.slice(0, 12) || "?"}...`);
@@ -2913,8 +3200,8 @@
             appendRequestLog("Signer RPC verbunden.");
             postBridgeMessage("ready", connectionInfo);
             appendRequestLog("Bridge: ready an Parent gesendet");
-            console.log("Bunker URI:", bunkerUri);
-            console.log("Nostrconnect URI:", nostrconnectUri);
+            devLog("Bunker URI:", bunkerUri);
+            devLog("Nostrconnect URI:", nostrconnectUri);
         }
 
         // ===== Modal UI Hilfsfunktionen =====

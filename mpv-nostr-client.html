@@ -192,6 +192,23 @@
         // Aktuelle Höhe des Signer-iframes in Pixeln
         let currentSignerFrameHeight = 260;
 
+        function isLocalDevHostname(hostname) {
+            const host = String(hostname || "").toLowerCase();
+            return host === "localhost" || host === "127.0.0.1" || host === "::1";
+        }
+
+        function getInsecureHttpWarningMessage() {
+            if (window.location.protocol !== "http:") return "";
+            if (isLocalDevHostname(window.location.hostname)) return "";
+            return "Unsicherer HTTP-Zugriff erkannt. Bitte Client nur ueber HTTPS oeffnen.";
+        }
+
+        function ensureSecureTransportOrThrow() {
+            const warning = getInsecureHttpWarningMessage();
+            if (!warning) return;
+            throw new Error(warning);
+        }
+
         /**
          * Prüft ob ein Objekt wie einen NIP-7 Provider aussieht (z.B. window.nostr).
          * Ein valider NIP-7 Provider muss die Funktionen getPublicKey() und signEvent() bereitstellen.
@@ -247,6 +264,12 @@
          * Informiert den Benutzer über den nächsten Schritt und warnt bei fehlenden Extensions.
          */
         function updateConnectHint() {
+            const insecureWarning = getInsecureHttpWarningMessage();
+            if (insecureWarning) {
+                connectHintEl.textContent = insecureWarning;
+                return;
+            }
+
             const mode = selectedConnectMode();
             if (mode === "nip7") {
                 connectHintEl.textContent = hasNativeProviderAvailable()
@@ -845,6 +868,7 @@
          * @throws {Error} Wenn weder NIP-7 noch NIP-46 erreichbar sind
          */
         async function installProvider() {
+            ensureSecureTransportOrThrow();
             setStatus("Verbinde...");
             resultEl.textContent = "";
             const mode = selectedConnectMode();
@@ -1081,6 +1105,12 @@
         
         // UI basierend auf aktuellem Modus aktualisieren
         updateConnectModeUi();
+
+        const insecureTransportWarning = getInsecureHttpWarningMessage();
+        if (insecureTransportWarning) {
+            setStatus(insecureTransportWarning, true);
+            resultEl.textContent = insecureTransportWarning;
+        }
 
         /**
          * Viele Browser-Extensions injizieren window.nostr asynchron.
