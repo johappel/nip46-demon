@@ -1017,6 +1017,45 @@ import { createSignerAttentionManager } from "./signer-ui.js";
             return sessionPassword;
         }
 
+        async function confirmKeyringPasswordForSecurityAction(actionHint) {
+            if (!currentKeyring || !Array.isArray(currentKeyring.keys) || currentKeyring.keys.length === 0) {
+                throw new Error("Kein Keyring geladen.");
+            }
+
+            const { entry: activeEntry } = resolveActiveKeyEntry(currentKeyring, activeKeyId);
+            let previewConfirmedNsec = "";
+            const unlock = await showUnlockPanel({
+                title: "Sicherheitsaktion bestätigen",
+                hint: actionHint || "Bitte aktuelles Keyring-Passwort eingeben.",
+                askNsec: false,
+                askConfirm: false,
+                askName: false,
+                askKey: false,
+                askRemember: false,
+                modal: true,
+                submitLabel: "Bestätigen",
+                beforeSubmit: async (draft) => {
+                    previewConfirmedNsec = "";
+                    if (!draft.password) return "Bitte Passwort eingeben.";
+                    try {
+                        const testNsec = await decryptNsec(activeEntry.payload, draft.password);
+                        if (!isValidNsec(testNsec)) return "Passwort ist ungültig.";
+                        previewConfirmedNsec = testNsec;
+                        return true;
+                    } catch (_err) {
+                        return "Passwort ist ungültig.";
+                    }
+                }
+            });
+
+            if (!unlock.password || !previewConfirmedNsec) {
+                throw new Error("Passwort ist ungültig.");
+            }
+
+            sessionPassword = unlock.password;
+            sessionUnlockMaterial = await deriveUnlockMaterialFromPassword(unlock.password, activeEntry.payload);
+        }
+
         async function ensureWpUserKey(userIdRaw) {
             if (!currentKeyring) {
                 throw new Error("Signer ist gesperrt. Bitte zuerst entsperren.");
@@ -2279,13 +2318,32 @@ import { createSignerAttentionManager } from "./signer-ui.js";
             }
 
             if (revokeAllPermissionsBtn) {
-                revokeAllPermissionsBtn.addEventListener("click", () => {
-                    const removedCount = revokeAllPermanentPermissions();
-                    if (removedCount <= 0) {
-                        appendRequestLog("Keine permanente Berechtigung zum Widerrufen vorhanden.");
-                        return;
+                revokeAllPermissionsBtn.addEventListener("click", async () => {
+                    try {
+                        const permissionsSnapshot = clearExpiredPermissions();
+                        const hasPermanentPermission = Object.values(permissionsSnapshot).some((expiry) => expiry === PERMISSION_FOREVER);
+                        if (!hasPermanentPermission) {
+                            appendRequestLog("Keine permanente Berechtigung zum Widerrufen vorhanden.");
+                            return;
+                        }
+
+                        await confirmKeyringPasswordForSecurityAction(
+                            "Bitte Keyring-Passwort eingeben, um alle permanenten Berechtigungen zu widerrufen."
+                        );
+
+                        const removedCount = revokeAllPermanentPermissions();
+                        if (removedCount <= 0) {
+                            appendRequestLog("Keine permanente Berechtigung zum Widerrufen vorhanden.");
+                            return;
+                        }
+                        appendRequestLog(`${removedCount} permanente Berechtigung(en) widerrufen.`);
+                    } catch (err) {
+                        if (err?.message === "Entsperren abgebrochen.") {
+                            appendRequestLog("Widerruf aller Berechtigungen abgebrochen.");
+                            return;
+                        }
+                        appendRequestLog(`Widerruf aller Berechtigungen fehlgeschlagen: ${err?.message || err}`);
                     }
-                    appendRequestLog(`${removedCount} permanente Berechtigung(en) widerrufen.`);
                 });
             }
 
