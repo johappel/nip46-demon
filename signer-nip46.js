@@ -1637,6 +1637,7 @@ import { createSignerAttentionManager } from "./signer-ui.js";
             const nameInput = document.getElementById("unlock-name-input");
             const nsecInput = document.getElementById("unlock-nsec-input");
             const nsecVisibilityBtn = document.getElementById("unlock-nsec-visibility-btn");
+            const nsecFeedbackEl = document.getElementById("unlock-nsec-feedback");
             const passwordInput = document.getElementById("unlock-password-input");
             const confirmInput = document.getElementById("unlock-password-confirm-input");
             const passwordFeedbackEl = document.getElementById("unlock-password-feedback");
@@ -1674,6 +1675,7 @@ import { createSignerAttentionManager } from "./signer-ui.js";
             nsecInput.value = options.defaultNsec || "";
             nsecInput.readOnly = Boolean(options.readonlyNsec);
             setSecretInputVisibility(nsecInput, nsecVisibilityBtn, false);
+            setFieldFeedback(nsecFeedbackEl, "");
             passwordInput.value = "";
             confirmInput.value = "";
             const requestedRememberMode = normalizeRememberMode(options.defaultRememberMode);
@@ -1707,8 +1709,46 @@ import { createSignerAttentionManager } from "./signer-ui.js";
                 return true;
             };
 
+            /**
+             * Validiert nsec-Eingaben im Unlock-Panel.
+             * Bei strict=true wird ein leeres Feld als Fehler bewertet (Submit-Phase).
+             * @param {boolean} strict - true: leere Eingabe als Fehler markieren
+             * @returns {boolean} true wenn nsec valide oder nicht erforderlich
+             */
+            const validateUnlockNsecFeedback = (strict = false) => {
+                if (!options.askNsec) {
+                    setFieldFeedback(nsecFeedbackEl, "");
+                    return true;
+                }
+
+                const nsecValue = nsecInput.value.trim();
+                if (!nsecValue) {
+                    setFieldFeedback(
+                        nsecFeedbackEl,
+                        strict ? "Bitte nsec eingeben oder generieren." : ""
+                    );
+                    if (strict) scheduleFrameSizeNotification(false);
+                    return !strict;
+                }
+
+                if (!isValidNsec(nsecValue)) {
+                    setFieldFeedback(
+                        nsecFeedbackEl,
+                        "Ungültiger nsec. Erwartet wird ein kompletter nsec1...-Wert."
+                    );
+                    scheduleFrameSizeNotification(false);
+                    return false;
+                }
+
+                setFieldFeedback(nsecFeedbackEl, "");
+                return true;
+            };
+
             passwordInput.oninput = validateUnlockPasswordFeedback;
             confirmInput.oninput = validateUnlockPasswordFeedback;
+            nsecInput.oninput = () => {
+                validateUnlockNsecFeedback(false);
+            };
 
             if (!useModal) {
                 setActiveTab("management");
@@ -1732,8 +1772,10 @@ import { createSignerAttentionManager } from "./signer-ui.js";
                     generateBtn.onclick = null;
                     passwordInput.oninput = null;
                     confirmInput.oninput = null;
+                    nsecInput.oninput = null;
                     nsecInput.value = "";
                     setSecretInputVisibility(nsecInput, nsecVisibilityBtn, false);
+                    setFieldFeedback(nsecFeedbackEl, "");
                     setFieldFeedback(passwordFeedbackEl, "");
                     panel.style.display = "none";
                     panel.classList.remove("unlock-panel-modal");
@@ -1750,6 +1792,10 @@ import { createSignerAttentionManager } from "./signer-ui.js";
 
                 submitBtn.onclick = async () => {
                     if (submitInFlight) return;
+                    if (!validateUnlockNsecFeedback(true)) {
+                        nsecInput.focus();
+                        return;
+                    }
                     if (!validateUnlockPasswordFeedback()) return;
 
                     const value = {

@@ -1,0 +1,59 @@
+﻿<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; connect-src 'self' https: wss:; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; frame-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self';">
+    <title>Demo Nostr Client (Bunkerconnect)</title>
+    <link rel="stylesheet" href="./index.css">
+</head>
+<body>
+    <main class="layout">
+        <header class="hero">
+            <p class="eyebrow">Boilerplate</p>
+            <h1>Nostr Client mit Bunkerconnect</h1>
+            <p>Setup laeuft im Dialog. Nach Entsperrung verbindet der Client automatisch.</p>
+            <button id="show-signer-btn" class="ghost-btn signer-btn" type="button" data-state="connecting">
+                <span class="status-dot" aria-hidden="true"></span>
+                <span id="show-signer-label">Signer: verbindet</span>
+            </button>
+        </header>
+
+        <section class="card">
+            <h2>Event posten (Demo-spezifisch)</h2>
+            <div class="row compact">
+                <button id="pubkey-btn" type="button" disabled>Public Key laden</button>
+                <span id="content-count" class="muted">0 / 280</span>
+            </div>
+
+            <form id="post-form" novalidate>
+                <label for="post-content">Content (kind:1)</label>
+                <textarea id="post-content" maxlength="280" placeholder="Hallo von meinem eigenen Nostr Client"></textarea>
+                <button id="send-btn" type="submit" disabled>Signieren + senden</button>
+            </form>
+
+            <pre id="result" class="output">Noch kein Event gesendet.</pre>
+        </section>
+    </main>
+
+    <dialog id="signer-setup-dialog" class="setup-dialog">
+        <section class="card setup-card">
+            <h2>Signer Setup</h2>
+            <p class="muted">Bitte Signer entsperren. Danach wird die Verbindung automatisch aufgebaut.</p>
+            <p id="status" class="status" data-state="idle">Noch nicht initialisiert.</p>
+            <pre id="connection-info" class="output">Keine aktive Verbindung.</pre>
+            <iframe id="signer-frame" title="NIP-46 Signer" src="about:blank"></iframe>
+        </section>
+    </dialog>
+
+    <dialog id="signer-request-dialog" class="request-dialog request-dialog-compact">
+        <h3 id="signer-request-title">Genehmigung erforderlich</h3>
+        <p id="signer-request-details">Bitte Anfrage im Signer bestaetigen.</p>
+        <form method="dialog">
+            <button type="submit">Okay</button>
+        </form>
+    </dialog>
+
+    <script type="module" src="./index.js"></script>
+</body>
+</html>

@@ -1,4 +1,4 @@
-# NIP-46 Signer Doku
+﻿# NIP-46 Signer Doku
 
 Diese Doku beschreibt, wie `signer.html` funktioniert und wie du ihn in einen Nostr Client einbindest.
 
@@ -164,6 +164,7 @@ Die Referenz-Implementierungen sind:
 
 - `mpv-nostr-client.html`
 - `tests/sendevent.html`
+- `democlient/index.html` + `democlient/nostr.js` + `democlient/index.js`
 
 ### 6.1 Iframe-Integration (empfohlen)
 
@@ -259,6 +260,7 @@ Use-Case: Multi-User-Systeme (z. B. WordPress), in denen pro App-User ein eigene
 - Keine RPC-Relay-Verbindung: Relay-Auswahl pruefen, Netzwerk pruefen.
 - Relay-Aenderung ohne Effekt: nach `Relays speichern` die Seite neu laden.
 - Ungueltige URI: Nur `nostrconnect://` oder `bunker://` akzeptieren.
+- Ersteinrichtung ohne `nsec`: Das Unlock-Panel zeigt direkt ein Feld-Feedback (`Bitte nsec eingeben oder generieren.` / `Ungueltiger nsec...`) und blockiert Submit bis ein gueltiger `nsec1...`-Wert gesetzt ist.
 
 ## 9. Minimaler Integrations-Blueprint
 
@@ -278,3 +280,74 @@ Use-Case: Multi-User-Systeme (z. B. WordPress), in denen pro App-User ein eigene
 - `manifest.webmanifest`, `sw.js`, `icons/` (PWA/Installierbarkeit + Notification-Fallback)
 - `mpv-nostr-client.html` (NIP-7 + NIP-46 Fallback, produktionsnahe Client-Integration)
 - `tests/sendevent.html` (fokussierter Testclient inkl. WP-Bridge-Call)
+- `democlient/index.html` (Boilerplate UI fuer eigene Clients)
+- `democlient/index.css` (ausgelagerte Demo-Styles)
+- `democlient/nostr.js` (gekapselte Bunkerconnect-Lib mit Auto-Connect + Dialog-Mirroring)
+- `democlient/index.js` (Client-spezifische Logik wie Formularvalidierung und Absenden)
+
+## 11. Manual: Nostr Client mit Bunkerconnect in 2 Minuten
+
+Dieses Minimal-Setup nutzt die neue Boilerplate im Ordner `democlient/`.
+
+### Schritt 1: Dateien einbinden
+
+In deiner Client-Seite:
+
+- `democlient/index.css` laden
+- `democlient/index.js` als `type="module"` laden
+- `signer.html` per iframe einbetten (in der Demo ueber `#signer-frame`)
+
+Die Demo trennt bewusst:
+
+- `democlient/nostr.js`: wiederverwendbare NIP-46/Bunkerconnect Logik
+- `democlient/index.js`: nur app-spezifische Demo-Funktionen
+
+### Schritt 2: Ein Kommando fuer Einbettung + Auto-Connect
+
+```js
+import { createBunkerConnectClient } from "./nostr.js";
+
+const SIGNER_URL = "../signer.html"; // fest im Code
+// Optional spaeter per Settings:
+// const CUSTOM_BUNKER_URI = "bunker://<pubkey>?relay=...";
+
+const bunkerClient = createBunkerConnectClient({
+  signerFrameEl: document.getElementById("signer-frame"),
+  signerUrl: SIGNER_URL,
+  requestDialogEl: document.getElementById("signer-request-dialog"),
+  requestDialogTitleEl: document.getElementById("signer-request-title"),
+  requestDialogDetailsEl: document.getElementById("signer-request-details"),
+  autoConnect: true
+});
+
+await bunkerClient.installSignerAndAutoConnect();
+```
+
+Ergebnis:
+
+- Signer wird mit `parentOrigin` sicher eingebettet
+- nach Passwort-Eingabe im Signer verbindet der Client automatisch
+- URI-Sync (Bridge) passiert automatisch im Setup-Flow
+- empfohlenes UX-Muster: grosser Setup-Dialog (mit iframe) bis zur Verbindung, danach kleiner Dialog nur fuer Genehmigungen
+- im Demo-Client ist `showUnlockRequestDialog: false` und `showApprovalRequestDialog: true` gesetzt
+- der `Signer`-Button zeigt den Zustand per Statuspunkt: gelb (`verbindet`), gruen (`bereit`), rot (`Fehler`)
+
+### Schritt 3: Event absenden
+
+```js
+const response = await bunkerClient.publishTextNote("Hallo von meinem Client");
+console.log(response.signedEvent, response.publishedRelayUrls);
+```
+
+Alternativ granular:
+
+1. `await bunkerClient.getPublicKey()`
+2. `await bunkerClient.signEvent(unsignedEvent)`
+3. `await bunkerClient.publishSignedEvent(signedEvent)`
+
+### Schritt 4: Eigene App-Logik erweitern
+
+Empfehlung:
+
+- `democlient/nostr.js` unveraendert als technische Basis behalten
+- eigene Business/UI-Logik in einem separaten Modul nach Vorbild `democlient/index.js` halten
