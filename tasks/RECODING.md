@@ -24,6 +24,7 @@ Refactoring von `signer.html` in wartbare Module plus neue Aufmerksamkeits-Featu
 - [x] 14. Dokumentation aktualisiert (`README.md`, `SIGNER_DOKU.md`).
 - [x] 15. Archiv-Datei-Entscheidung: `tests/signer-archived.html` bleibt als Legacy-Referenz bestehen.
 - [x] 16. Test-Benachrichtigung fuer PWA/Desktop-Debugging hinzugefuegt.
+- [x] 17. Relay-Tab mit lokaler Relay-Konfiguration (Speichern/Reset) hinzugefuegt.
 
 ## Umgesetzte Aenderungen
 
@@ -55,6 +56,10 @@ Refactoring von `signer.html` in wartbare Module plus neue Aufmerksamkeits-Featu
 4. `signer-nip46.js`
 - Vollstaendige Auslagerung der bisherigen Signer-Logik aus HTML.
 - Import von `createSignerAttentionManager` und Integration in den Permission-Flow.
+- User-konfigurierbare Relay-Liste:
+  - Storage-Key `nip46_custom_relays_v1`
+  - Defaults + Validierung (`ws://`/`wss://`) + Deduplizierung
+  - Verwendung fuer NDK-Connect, Backend und Bunker/Nostrconnect URI
 - Hook-Punkte:
   - `notifyPermissionRequest(request)` beim Start einer sensiblen Freigabe
   - `resolvePermissionRequest()` beim Schliessen des Modals

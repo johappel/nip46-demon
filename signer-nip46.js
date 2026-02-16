@@ -21,18 +21,21 @@ import { createSignerAttentionManager } from "./signer-ui.js";
         const PERMISSION_META_STORAGE_KEY = "nip46_permissions_meta_v1";
         // Bindet WordPress User-IDs an Nostr Schlüssel (für WP-Integration)
         const WP_USER_BINDINGS_STORAGE_KEY = "nip46_wp_user_bindings_v1";
+        // Optional userdefinierte Relay-Liste fuer den Signer
+        const RELAYS_STORAGE_KEY = "nip46_custom_relays_v1";
         // Versioniertes Dateiformat für passwortgeschützte Schlüssel-Exportdateien
         const KEY_EXPORT_TYPE = "nip46-key-export";
         const KEY_EXPORT_VERSION = 2;
         
         // ===== Relay und Bridge-Konfiguration =====
         // Standard-Relays für NIP-46 RPC-Kommunikation
-        const RELAYS = [
+        const DEFAULT_RELAYS = Object.freeze([
             "wss://relay.damus.io",
             "wss://nos.lol",
             "wss://relay.primal.net",
             "wss://relay.snort.social"
-        ];
+        ]);
+        const MAX_CUSTOM_RELAYS = 12;
         // Identifikator für sichere Cross-Origin PostMessage-Kommunikation mit Parent-Frame
         const BRIDGE_SOURCE = "nip46-signer-bridge";
         
@@ -92,6 +95,8 @@ import { createSignerAttentionManager } from "./signer-ui.js";
         let lastPostedFrameHeight = 0;
         // Flag um redundante Frame-Size Updates zu vermeiden (Debouncing)
         let frameSizeNotifyScheduled = false;
+        // Laufzeit-Relay-Liste fuer NDK/URI/Backend (aus Defaults + optionalem localStorage-Override)
+        let runtimeRelays = loadConfiguredRelays();
         // Timer-Handle für die einmalige nsec-Anzeige
         let nsecRevealTimerHandle = null;
         // Anzahl fehlgeschlagener Unlock-Versuche für Backoff
@@ -235,6 +240,81 @@ import { createSignerAttentionManager } from "./signer-ui.js";
             } catch (_err) {
                 // Ignore storage failures (private mode / quota etc.)
             }
+        }
+
+        function normalizeRelayUrl(rawUrl) {
+            const value = String(rawUrl || "").trim();
+            if (!value) return "";
+            let parsed;
+            try {
+                parsed = new URL(value);
+            } catch (_err) {
+                return "";
+            }
+            if (parsed.protocol !== "wss:" && parsed.protocol !== "ws:") return "";
+            if (!parsed.hostname) return "";
+
+            parsed.hash = "";
+            const normalizedPath = parsed.pathname.replace(/\/+$/, "");
+            const normalizedSearch = parsed.search || "";
+            return `${parsed.protocol}//${parsed.host}${normalizedPath}${normalizedSearch}`;
+        }
+
+        function normalizeRelayList(rawRelays, options = {}) {
+            const fallbackToDefault = options?.fallbackToDefault !== false;
+            const relays = [];
+            const invalid = [];
+            const seen = new Set();
+            const input = Array.isArray(rawRelays) ? rawRelays : [];
+
+            for (const raw of input) {
+                const source = String(raw || "").trim();
+                if (!source) continue;
+                const normalized = normalizeRelayUrl(source);
+                if (!normalized) {
+                    invalid.push(source);
+                    continue;
+                }
+                const dedupeKey = normalized.toLowerCase();
+                if (seen.has(dedupeKey)) continue;
+                seen.add(dedupeKey);
+                relays.push(normalized);
+                if (relays.length >= MAX_CUSTOM_RELAYS) break;
+            }
+
+            if (relays.length === 0 && fallbackToDefault) {
+                relays.push(...DEFAULT_RELAYS);
+            }
+
+            return { relays, invalid };
+        }
+
+        function loadConfiguredRelays() {
+            try {
+                const raw = localStorage.getItem(RELAYS_STORAGE_KEY);
+                if (!raw) return [...DEFAULT_RELAYS];
+                const parsed = JSON.parse(raw);
+                const normalized = normalizeRelayList(parsed, { fallbackToDefault: true });
+                return normalized.relays;
+            } catch (_err) {
+                return [...DEFAULT_RELAYS];
+            }
+        }
+
+        function saveConfiguredRelays(relays) {
+            const normalized = normalizeRelayList(relays, { fallbackToDefault: false });
+            if (normalized.relays.length === 0) {
+                throw new Error("Mindestens ein gueltiges Relay ist erforderlich.");
+            }
+            localStorage.setItem(RELAYS_STORAGE_KEY, JSON.stringify(normalized.relays));
+            runtimeRelays = [...normalized.relays];
+            return normalized;
+        }
+
+        function resetConfiguredRelays() {
+            localStorage.removeItem(RELAYS_STORAGE_KEY);
+            runtimeRelays = [...DEFAULT_RELAYS];
+            return runtimeRelays;
         }
 
         async function copyTextToClipboard(text) {
@@ -1453,7 +1533,7 @@ import { createSignerAttentionManager } from "./signer-ui.js";
         }
 
         function setActiveTab(tabName) {
-            const tabs = ["signer", "info", "management", "security"];
+            const tabs = ["signer", "info", "management", "relays", "security"];
             for (const tab of tabs) {
                 const panel = document.getElementById(`tab-${tab}`);
                 const btn = document.getElementById(`tab-btn-${tab}`);
@@ -1461,6 +1541,7 @@ import { createSignerAttentionManager } from "./signer-ui.js";
                 if (btn) btn.classList.toggle("active", tab === tabName);
             }
             if (tabName === "security") renderPermissionManager();
+            if (tabName === "relays") renderRelayManager();
             scheduleFrameSizeNotification(false);
         }
 
@@ -1468,11 +1549,13 @@ import { createSignerAttentionManager } from "./signer-ui.js";
             const signerBtn = document.getElementById("tab-btn-signer");
             const infoBtn = document.getElementById("tab-btn-info");
             const managementBtn = document.getElementById("tab-btn-management");
+            const relaysBtn = document.getElementById("tab-btn-relays");
             const securityBtn = document.getElementById("tab-btn-security");
 
             signerBtn.addEventListener("click", () => setActiveTab("signer"));
             infoBtn.addEventListener("click", () => setActiveTab("info"));
             managementBtn.addEventListener("click", () => setActiveTab("management"));
+            relaysBtn.addEventListener("click", () => setActiveTab("relays"));
             securityBtn.addEventListener("click", () => setActiveTab("security"));
         }
 
@@ -1503,6 +1586,37 @@ import { createSignerAttentionManager } from "./signer-ui.js";
             bunkerInput.value = connectionInfo.bunkerUri;
             nostrconnectInput.value = connectionInfo.nostrconnectUri;
             box.hidden = false;
+            scheduleFrameSizeNotification(false);
+        }
+
+        function setRelayManagerState(message, tone = "neutral") {
+            const stateEl = document.getElementById("relay-settings-state");
+            if (!stateEl) return;
+            stateEl.textContent = message || "";
+            if (tone === "ok") {
+                stateEl.style.color = "#9ad1ff";
+                return;
+            }
+            if (tone === "error") {
+                stateEl.style.color = "#ffb4b4";
+                return;
+            }
+            stateEl.style.color = "#bbb";
+        }
+
+        function renderRelayManager(message, tone = "neutral") {
+            const input = document.getElementById("relay-list-input");
+            if (!input) return;
+            input.value = runtimeRelays.join("\n");
+
+            if (message) {
+                setRelayManagerState(message, tone);
+            } else {
+                setRelayManagerState(
+                    `Aktiv: ${runtimeRelays.length} Relay(s). Änderungen gelten nach Reload.`,
+                    "neutral"
+                );
+            }
             scheduleFrameSizeNotification(false);
         }
 
@@ -2243,6 +2357,7 @@ import { createSignerAttentionManager } from "./signer-ui.js";
             localStorage.removeItem(PERMISSION_META_STORAGE_KEY);
             localStorage.removeItem(WP_USER_BINDINGS_STORAGE_KEY);
             localStorage.removeItem(UNLOCK_REMEMBER_PREF_STORAGE_KEY);
+            localStorage.removeItem(RELAYS_STORAGE_KEY);
 
             sessionPassword = "";
             sessionUnlockMaterial = null;
@@ -2256,6 +2371,54 @@ import { createSignerAttentionManager } from "./signer-ui.js";
             signerAttention.clearAttention();
             appendRequestLog("Alle lokalen Identitäten wurden gelöscht. Seite wird neu geladen.");
             window.location.reload();
+        }
+
+        function setupRelayManagerHandlers() {
+            const relayInput = document.getElementById("relay-list-input");
+            const relaySaveBtn = document.getElementById("save-relays-btn");
+            const relayResetBtn = document.getElementById("reset-relays-btn");
+            if (!relayInput || !relaySaveBtn || !relayResetBtn) return;
+
+            relaySaveBtn.addEventListener("click", () => {
+                try {
+                    const entries = relayInput.value
+                        .split(/[\n,]+/)
+                        .map((entry) => entry.trim())
+                        .filter(Boolean);
+                    const normalized = saveConfiguredRelays(entries);
+                    if (normalized.invalid.length > 0) {
+                        renderRelayManager(
+                            `Gespeichert, aber ignoriert: ${normalized.invalid.join(", ")}`,
+                            "error"
+                        );
+                    } else {
+                        renderRelayManager(
+                            `Relay-Liste gespeichert (${normalized.relays.length}). Seite neu laden, damit die Verbindung umstellt.`,
+                            "ok"
+                        );
+                    }
+                    appendRequestLog(`Relay-Liste gespeichert (${normalized.relays.length}).`);
+                } catch (err) {
+                    setRelayManagerState(`Relay-Liste konnte nicht gespeichert werden: ${err.message}`, "error");
+                    appendRequestLog(`Relay-Update fehlgeschlagen: ${err.message}`);
+                }
+            });
+
+            relayResetBtn.addEventListener("click", () => {
+                try {
+                    resetConfiguredRelays();
+                    renderRelayManager(
+                        "Auf Standard-Relays zurückgesetzt. Seite neu laden, damit die Verbindung umstellt.",
+                        "ok"
+                    );
+                    appendRequestLog("Relay-Liste auf Standard zurückgesetzt.");
+                } catch (err) {
+                    setRelayManagerState(`Relay-Reset fehlgeschlagen: ${err.message}`, "error");
+                    appendRequestLog(`Relay-Reset fehlgeschlagen: ${err.message}`);
+                }
+            });
+
+            renderRelayManager();
         }
 
         function setupKeyManagerHandlers() {
@@ -3046,7 +3209,9 @@ import { createSignerAttentionManager } from "./signer-ui.js";
         async function startSigner() {
             ensureSecureTransportOrThrow();
 
-            const ndk = new NDK({ explicitRelayUrls: RELAYS });
+            runtimeRelays = loadConfiguredRelays();
+            const activeRelays = [...runtimeRelays];
+            const ndk = new NDK({ explicitRelayUrls: activeRelays });
             await ndk.connect();
 
             const unlocked = await getOrAskActiveKeyWithRetry();
@@ -3064,14 +3229,14 @@ import { createSignerAttentionManager } from "./signer-ui.js";
             const user = await localSigner.user();
             activeUser = user;
 
-            const relayQuery = RELAYS.map((relayUrl) => `relay=${encodeURIComponent(relayUrl)}`).join("&");
+            const relayQuery = activeRelays.map((relayUrl) => `relay=${encodeURIComponent(relayUrl)}`).join("&");
             const bunkerUri = `bunker://${user.pubkey}?${relayQuery}`;
             const nostrconnectUri = `nostrconnect://${user.pubkey}?${relayQuery}`;
             connectionInfo = {
                 pubkey: user.pubkey,
                 npub: user.npub,
                 keyName: unlocked.keyName,
-                relays: RELAYS,
+                relays: activeRelays,
                 bunkerUri,
                 nostrconnectUri
             };
@@ -3085,7 +3250,7 @@ import { createSignerAttentionManager } from "./signer-ui.js";
                 `Aktiver Schlüssel: ${unlocked.keyName}\n` +
                 `pubkey: ${user.pubkey}\n` +
                 `npub: ${user.npub}\n` +
-                `Relays: ${RELAYS.join(", ")}\n` +
+                `Relays: ${activeRelays.join(", ")}\n` +
                 `Bunker URI: ${bunkerUri}\n` +
                 `Nostrconnect URI: ${nostrconnectUri}`;
 
@@ -3104,7 +3269,7 @@ import { createSignerAttentionManager } from "./signer-ui.js";
                     appendRequestLog(`Methode: ${method} von ${pubkey.slice(0, 12) || "?"}...`);
 
                     if (method === "switch_relays") {
-                        appendRequestLog("Blockiert: switch_relays (feste Relay-Allowlist)");
+                        appendRequestLog("Blockiert: switch_relays (Relays nur lokal im Signer-Tab änderbar)");
                         return false;
                     }
 
@@ -3125,7 +3290,7 @@ import { createSignerAttentionManager } from "./signer-ui.js";
 
                     return requestPermission(request);
                 },
-                RELAYS
+                activeRelays
             );
 
             patchBackendRpcReliability(nip46Backend);
@@ -3229,6 +3394,7 @@ import { createSignerAttentionManager } from "./signer-ui.js";
         // Diese Zeilen richten alle Event-Listener auf und starten den Signer
         
         setupTabNavigation();
+        setupRelayManagerHandlers();
         setupKeyManagerHandlers();
         signerAttention.initSettingsUi();
         setupFrameAutoResizeBridge();

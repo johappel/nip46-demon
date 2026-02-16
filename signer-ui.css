@@ -115,14 +115,14 @@
             border-radius: 8px;
             display: none;
         }
-        #password-manager {
+        #password-manager, #relay-manager {
             margin-top: 10px;
             padding: 12px;
             background: #171717;
             border: 1px solid #333;
             border-radius: 8px;
         }
-        #unlock-panel input, #unlock-panel select, #key-manager input, #key-manager select, #password-manager input, #password-manager select {
+        #unlock-panel input, #unlock-panel select, #key-manager input, #key-manager select, #password-manager input, #password-manager select, #relay-manager textarea {
             width: 100%;
             box-sizing: border-box;
             margin-top: 6px;
@@ -133,7 +133,12 @@
             background: #0f0f0f;
             color: #fff;
         }
-        #unlock-panel p, #key-manager p, #password-manager p { margin: 0 0 10px 0; color: #bbb; }
+        #relay-manager textarea {
+            resize: vertical;
+            min-height: 130px;
+            font-family: "Courier New", Courier, monospace;
+        }
+        #unlock-panel p, #key-manager p, #password-manager p, #relay-manager p { margin: 0 0 10px 0; color: #bbb; }
         .secret-input-row {
             display: flex;
             gap: 6px;
@@ -316,6 +321,7 @@
         body.compact-connected #tab-nav,
         body.compact-connected #tab-info,
         body.compact-connected #tab-management,
+        body.compact-connected #tab-relays,
         body.compact-connected #tab-security {
             display: none !important;
         }
@@ -346,4 +352,3 @@
         body.compact-connected #toggle-request-details-btn {
             display: none;
         }
-

@@ -21,6 +21,7 @@
         <button class="tab-btn active" id="tab-btn-signer" type="button">Signer</button>
         <button class="tab-btn" id="tab-btn-info" type="button">Info/Log</button>
         <button class="tab-btn" id="tab-btn-management" type="button">Verwaltung</button>
+        <button class="tab-btn" id="tab-btn-relays" type="button">Relays</button>
         <button class="tab-btn" id="tab-btn-security" type="button">Passwort</button>
     </div>
 
@@ -201,6 +202,21 @@
             <p class="danger-hint">Löscht alle lokal gespeicherten Identitäten und Signer-Einstellungen in diesem Browser für diese Website (Keyring, aktive Auswahl, Unlock-Cache, Berechtigungen, WP-Bindings). Reimport ist nur mit vorher exportierter Datei möglich.</p>
             <div class="button-row">
                 <button class="btn-reject" id="reset-keyring-btn" type="button">Alle lokalen Identitäten löschen</button>
+            </div>
+        </div>
+    </section>
+
+    <section class="tab-panel" id="tab-relays">
+        <div id="relay-manager">
+            <h3>Relay-Konfiguration</h3>
+            <p>Diese Liste steuert die NIP-46 RPC-Relays fuer Verbindungen ueber Bunker/Nostrconnect URI.</p>
+            <p>Ein Relay pro Zeile oder kommasepariert. Erlaubt sind nur `wss://` oder `ws://` URLs.</p>
+            <label for="relay-list-input">Aktive Relay-Liste</label>
+            <textarea id="relay-list-input" rows="8" placeholder="wss://relay.example.com"></textarea>
+            <p id="relay-settings-state" class="attention-hint"></p>
+            <div class="button-row">
+                <button class="btn-approve" id="save-relays-btn" type="button">Relays speichern</button>
+                <button class="btn-reject" id="reset-relays-btn" type="button">Auf Standard zuruecksetzen</button>
             </div>
         </div>
     </section>
