@@ -106,7 +106,6 @@
             border-radius: 8px;
             white-space: pre-wrap;
             overflow: auto;
-            max-height: 180px;
         }
         #unlock-panel, #key-manager {
             margin-top: 10px;
@@ -211,12 +210,11 @@
             margin-top: 10px;
             padding: 10px;
             min-height: 100px;
-            max-height: 220px;
             overflow: auto;
             background: #171717;
             border: 1px solid #333;
             border-radius: 8px;
-            white-space: pre-wrap;
+            white-space: nowrap;
         }
         #auth-modal {
             display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);

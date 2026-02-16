@@ -66,6 +66,8 @@ import { createSignerAttentionManager } from "./signer-ui.js";
         // ===== Global State =====
         // Queue für ausstehende Genehmigungsanfragen (FIFO-Verarbeitung)
         const pendingPermissionRequests = [];
+        const REQUEST_LOG_MAX_LINES = 60;
+        const requestLogBuffer = [];
         // Die aktuell zu bearbeitende Genehmigungsanfrage
         let activePermissionRequest = null;
         // Verbindungsinformationen (bunker URI, pubkey, relays, etc.) nach Entsperrrung
@@ -1368,10 +1370,21 @@ import { createSignerAttentionManager } from "./signer-ui.js";
 
         function appendRequestLog(line) {
             const logEl = document.getElementById("request-log");
+            if (!logEl) return;
+
             const now = new Date().toLocaleTimeString();
-            const previous = logEl.innerText ? `${logEl.innerText}\n` : "";
-            const combined = `[${now}] ${line}\n${previous}`.split("\n").slice(0, 60).join("\n");
-            logEl.innerText = combined.trimEnd();
+            const raw = String(line ?? "").replace(/\r\n?/g, "\n");
+            const normalizedLines = raw.split("\n").filter((part) => part.length > 0);
+            const entries = normalizedLines.length > 0 ? normalizedLines : [""];
+
+            for (const entry of entries) {
+                requestLogBuffer.unshift(`[${now}] ${entry}`);
+            }
+            if (requestLogBuffer.length > REQUEST_LOG_MAX_LINES) {
+                requestLogBuffer.length = REQUEST_LOG_MAX_LINES;
+            }
+
+            logEl.textContent = requestLogBuffer.join("\n");
             scheduleFrameSizeNotification();
         }
 
