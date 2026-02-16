@@ -15,6 +15,7 @@ Der Signer in `signer.html` ist ein Browser-basierter NIP-46 Signer mit:
 Wichtige Eigenschaften:
 
 - Default-Relays mit lokalem User-Override (Tab `Relays`)
+- Datenschutzhinweise in einfacher Sprache direkt im Tab `Datenschutz`
 - per-Methoden-Freigaben mit "einmal" / "immer"
 - Auto-Allow fuer nicht-kritische Methoden (`connect`, `ping`, `get_public_key`)
 - Blockierung von `switch_relays` (remote), Relay-Aenderung nur lokal im Signer
@@ -120,6 +121,15 @@ Wichtig:
 - Aenderungen gelten nach Reload/Neustart des Signers.
 - Die konfigurierte Liste wird fuer NDK-Verbindung, `NDKNip46Backend` und URI-Erzeugung (`bunker://`, `nostrconnect://`) verwendet.
 - Externe `switch_relays`-Requests bleiben aus Sicherheitsgruenden blockiert.
+
+### 4.6 Datenschutz-Tab (User-Transparenz)
+
+Der Tab `Datenschutz` erklaert in einfacher Sprache:
+
+- welche Daten nur lokal im Browser gespeichert werden
+- welche Daten bei der Relay-Nutzung an Dritte (Relay-Betreiber) sichtbar sein koennen
+- was der Signer nicht automatisch an Dritte weitergibt
+- welche Eigenverantwortung beim Nutzer bleibt (Passwort, Geraetesicherheit, vorsichtiger Umgang mit `nsec`)
 
 ## 5. Bridge-Protokoll (iframe <-> Parent)
 

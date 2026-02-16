@@ -115,7 +115,7 @@
             border-radius: 8px;
             display: none;
         }
-        #password-manager, #relay-manager {
+        #password-manager, #relay-manager, #privacy-manager {
             margin-top: 10px;
             padding: 12px;
             background: #171717;
@@ -138,7 +138,7 @@
             min-height: 130px;
             font-family: "Courier New", Courier, monospace;
         }
-        #unlock-panel p, #key-manager p, #password-manager p, #relay-manager p { margin: 0 0 10px 0; color: #bbb; }
+        #unlock-panel p, #key-manager p, #password-manager p, #relay-manager p, #privacy-manager p { margin: 0 0 10px 0; color: #bbb; }
         .secret-input-row {
             display: flex;
             gap: 6px;
@@ -322,6 +322,7 @@
         body.compact-connected #tab-info,
         body.compact-connected #tab-management,
         body.compact-connected #tab-relays,
+        body.compact-connected #tab-privacy,
         body.compact-connected #tab-security {
             display: none !important;
         }

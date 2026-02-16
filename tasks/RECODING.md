@@ -25,12 +25,14 @@ Refactoring von `signer.html` in wartbare Module plus neue Aufmerksamkeits-Featu
 - [x] 15. Archiv-Datei-Entscheidung: `tests/signer-archived.html` bleibt als Legacy-Referenz bestehen.
 - [x] 16. Test-Benachrichtigung fuer PWA/Desktop-Debugging hinzugefuegt.
 - [x] 17. Relay-Tab mit lokaler Relay-Konfiguration (Speichern/Reset) hinzugefuegt.
+- [x] 18. Datenschutz-Tab mit klarer Datenfluss-Erklaerung hinzugefuegt.
 
 ## Umgesetzte Aenderungen
 
 1. `signer.html`
 - Inline-`<style>` entfernt, durch `<link rel="stylesheet" href="./signer-ui.css">` ersetzt.
 - Inline-`<script type="module">` entfernt, durch `<script type="module" src="./signer-nip46.js">` ersetzt.
+- Neuer Tab `Datenschutz` mit einfacher Erklaerung zu lokaler Speicherung, Datenweitergabe an Relays, Nicht-Tracking und Nutzer-Risiken.
 - Neuer Einstellungsbereich im Passwort-Tab:
   - `attention-notification-toggle`
   - `attention-title-toggle`

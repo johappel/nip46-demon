@@ -22,6 +22,7 @@
         <button class="tab-btn" id="tab-btn-info" type="button">Info/Log</button>
         <button class="tab-btn" id="tab-btn-management" type="button">Verwaltung</button>
         <button class="tab-btn" id="tab-btn-relays" type="button">Relays</button>
+        <button class="tab-btn" id="tab-btn-privacy" type="button">Datenschutz</button>
         <button class="tab-btn" id="tab-btn-security" type="button">Passwort</button>
     </div>
 
@@ -169,7 +170,7 @@
             <hr style="border-color:#333; margin:14px 0;">
             <h4 style="margin:0 0 8px 0; color:#9ad1ff;">NIP-46 Berechtigungen</h4>
             <p>Dauerhafte Berechtigungen aus "Immer erlauben" können hier widerrufen werden.</p>
-            <p style="margin-top:-2px;">Format: Methode | Pubkey | Schluesselname</p>
+            <p style="margin-top:-2px;">Format: Methode | Pubkey | Schlüsselname</p>
             <p id="permission-manager-empty">Keine permanenten Berechtigungen gespeichert.</p>
             <label for="permission-manager-select">Gespeicherte permanente Berechtigungen</label>
             <select id="permission-manager-select" size="6" disabled></select>
@@ -209,15 +210,52 @@
     <section class="tab-panel" id="tab-relays">
         <div id="relay-manager">
             <h3>Relay-Konfiguration</h3>
-            <p>Diese Liste steuert die NIP-46 RPC-Relays fuer Verbindungen ueber Bunker/Nostrconnect URI.</p>
+            <p>Diese Liste steuert die NIP-46 RPC-Relays für Verbindungen über Bunker/Nostrconnect URI.</p>
             <p>Ein Relay pro Zeile oder kommasepariert. Erlaubt sind nur `wss://` oder `ws://` URLs.</p>
             <label for="relay-list-input">Aktive Relay-Liste</label>
             <textarea id="relay-list-input" rows="8" placeholder="wss://relay.example.com"></textarea>
             <p id="relay-settings-state" class="attention-hint"></p>
             <div class="button-row">
                 <button class="btn-approve" id="save-relays-btn" type="button">Relays speichern</button>
-                <button class="btn-reject" id="reset-relays-btn" type="button">Auf Standard zuruecksetzen</button>
+                <button class="btn-reject" id="reset-relays-btn" type="button">Auf Standard zurücksetzen</button>
             </div>
+        </div>
+    </section>
+
+    <section class="tab-panel" id="tab-privacy">
+        <div id="privacy-manager">
+            <h3>Datenschutz auf einen Blick</h3>
+            <p>Zweck: Dieser Signer verwaltet deinen Nostr-Schlüssel ausschließlich lokal in deinem Browser und signiert damit NIP-46-Anfragen, ohne dass dein privater Schlüssel den Browser verlässt.</p>
+
+            <fieldset class="toolset">
+                <legend>Was bleibt nur auf deinem Gerät</legend>
+                <p>- Dein nsec (nur verschlüsselt im Browser-Storage)</p>
+                <p>- Keyring-Daten, aktive Auswahl, Entsperr-Optionen</p>
+                <p>- Lokale Berechtigungen ("einmal/immer erlauben"), Relay-Einstellungen, Logs</p>
+                <p>- Optionales Unlock-Caching (Session / 15m / 1h)</p>
+            </fieldset>
+
+            <fieldset class="toolset">
+                <legend>Was an Dritte gehen kann</legend>
+                <p>- Verbindungen zu den von dir gesetzten Relays (diese Relays sind Drittanbieter)</p>
+                <p>- Dabei sehen Relays typischerweise Metadaten wie IP-Adresse, Zeitpunkt, Pubkeys und Request-Verkehr</p>
+                <p>- Wenn du signierte Events veröffentlichst, ist deren Inhalt wie bei Nostr üblich öffentlich</p>
+            </fieldset>
+
+            <fieldset class="toolset">
+                <legend>Was nicht automatisch passiert</legend>
+                <p>- Keine Weitergabe an Werbenetzwerke oder Analytics-Dienste durch diesen Signer</p>
+                <p>- Kein automatischer Upload deines nsec an externe Server</p>
+                <p>- Keine Fernsteuerung der Relay-Liste per NIP-46 (`switch_relays` bleibt blockiert)</p>
+            </fieldset>
+
+            <fieldset class="toolset toolset-export">
+                <legend>Deine Sicherheit hängt vor allem von dir ab</legend>
+                <p>- Verwende ein starkes Keyring-Passwort und sichere dein Gerät</p>
+                <p>- Nutze vertrauenswürdige Relays und möglichst HTTPS für den Signer-Host</p>
+                <p>- "nsec einmal anzeigen" nur in sicherer Umgebung verwenden</p>
+                <p>- Bei gemeinsam genutzten Geräten: nach Nutzung sperren und Browserdaten schützen</p>
+            </fieldset>
         </div>
     </section>
 

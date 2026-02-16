@@ -17,11 +17,11 @@ import { createSignerAttentionManager } from "./signer-ui.js";
         const UNLOCK_REMEMBER_PREF_STORAGE_KEY = "nip46_unlock_remember_pref_v1";
         // Speichert Genehmigungen für Anfragen (pubkey:method -> TTL oder PERMISSION_FOREVER)
         const PERMISSION_STORAGE_KEY = "nip46_permissions_v1";
-        // Optionale Metadaten zu Genehmigungen (z.B. aktiver Schluesselname beim Erteilen)
+        // Optionale Metadaten zu Genehmigungen (z.B. aktiver Schlüsselname beim Erteilen)
         const PERMISSION_META_STORAGE_KEY = "nip46_permissions_meta_v1";
         // Bindet WordPress User-IDs an Nostr Schlüssel (für WP-Integration)
         const WP_USER_BINDINGS_STORAGE_KEY = "nip46_wp_user_bindings_v1";
-        // Optional userdefinierte Relay-Liste fuer den Signer
+        // Optional userdefinierte Relay-Liste für den Signer
         const RELAYS_STORAGE_KEY = "nip46_custom_relays_v1";
         // Versioniertes Dateiformat für passwortgeschützte Schlüssel-Exportdateien
         const KEY_EXPORT_TYPE = "nip46-key-export";
@@ -95,13 +95,13 @@ import { createSignerAttentionManager } from "./signer-ui.js";
         let lastPostedFrameHeight = 0;
         // Flag um redundante Frame-Size Updates zu vermeiden (Debouncing)
         let frameSizeNotifyScheduled = false;
-        // Laufzeit-Relay-Liste fuer NDK/URI/Backend (aus Defaults + optionalem localStorage-Override)
+        // Laufzeit-Relay-Liste für NDK/URI/Backend (aus Defaults + optionalem localStorage-Override)
         let runtimeRelays = loadConfiguredRelays();
         // Timer-Handle für die einmalige nsec-Anzeige
         let nsecRevealTimerHandle = null;
         // Anzahl fehlgeschlagener Unlock-Versuche für Backoff
         let failedUnlockAttempts = 0;
-        // Steuerung fuer Notification / Titel-Blink / Signalton
+        // Steuerung für Notification / Titel-Blink / Signalton
         const signerAttention = createSignerAttentionManager({
             onUiChanged: () => scheduleFrameSizeNotification(true)
         });
@@ -169,7 +169,7 @@ import { createSignerAttentionManager } from "./signer-ui.js";
         function getInsecureHttpWarningMessage() {
             if (window.location.protocol !== "http:") return "";
             if (isLocalDevHostname(window.location.hostname)) return "";
-            return "Unsicherer HTTP-Zugriff erkannt. Bitte Signer nur ueber HTTPS oeffnen.";
+            return "Unsicherer HTTP-Zugriff erkannt. Bitte Signer nur über HTTPS öffnen.";
         }
 
         function ensureSecureTransportOrThrow() {
@@ -304,7 +304,7 @@ import { createSignerAttentionManager } from "./signer-ui.js";
         function saveConfiguredRelays(relays) {
             const normalized = normalizeRelayList(relays, { fallbackToDefault: false });
             if (normalized.relays.length === 0) {
-                throw new Error("Mindestens ein gueltiges Relay ist erforderlich.");
+                throw new Error("Mindestens ein gültiges Relay ist erforderlich.");
             }
             localStorage.setItem(RELAYS_STORAGE_KEY, JSON.stringify(normalized.relays));
             runtimeRelays = [...normalized.relays];
@@ -1119,11 +1119,11 @@ import { createSignerAttentionManager } from "./signer-ui.js";
                     if (!draft.password) return "Bitte Passwort eingeben.";
                     try {
                         const testNsec = await decryptNsec(activeEntry.payload, draft.password);
-                        if (!isValidNsec(testNsec)) return "Passwort ist ungueltig.";
+                        if (!isValidNsec(testNsec)) return "Passwort ist ungültig.";
                         previewSessionPasswordNsec = testNsec;
                         return true;
                     } catch (_err) {
-                        return "Passwort ist ungueltig.";
+                        return "Passwort ist ungültig.";
                     }
                 }
             });
@@ -1255,7 +1255,7 @@ import { createSignerAttentionManager } from "./signer-ui.js";
                         };
                     } catch (_err) {
                         clearUnlockCache();
-                        appendRequestLog("Gespeicherte Entsperrung war ungueltig und wurde entfernt.");
+                        appendRequestLog("Gespeicherte Entsperrung war ungültig und wurde entfernt.");
                     }
                 }
                 postBridgeMessage("locked", { reason: "Passwort benötigt." });
@@ -1283,19 +1283,19 @@ import { createSignerAttentionManager } from "./signer-ui.js";
 
                         const { entry: draftEntry } = resolveActiveKeyEntry(keyring, draft.keyId || defaultEntry.id);
                         if (!isValidEncryptedPayload(draftEntry?.payload)) {
-                            return "Schlüssel-Daten sind ungueltig oder beschaedigt.";
+                            return "Schlüssel-Daten sind ungültig oder beschädigt.";
                         }
 
                         try {
                             const nsec = await decryptNsec(draftEntry.payload, draft.password);
                             if (!isValidNsec(nsec)) {
-                                return "Entschluesselter Schluessel ist ungueltig.";
+                                return "Entschlüsselter Schlüssel ist ungültig.";
                             }
                             previewUnlockNsec = nsec;
                             return true;
                         } catch (err) {
                             devLog("Unlock decrypt failed:", err);
-                            return "Entsperren fehlgeschlagen. Passwort oder Daten sind ungueltig.";
+                            return "Entsperren fehlgeschlagen. Passwort oder Daten sind ungültig.";
                         }
                     }
                 });
@@ -1533,7 +1533,7 @@ import { createSignerAttentionManager } from "./signer-ui.js";
         }
 
         function setActiveTab(tabName) {
-            const tabs = ["signer", "info", "management", "relays", "security"];
+            const tabs = ["signer", "info", "management", "relays", "privacy", "security"];
             for (const tab of tabs) {
                 const panel = document.getElementById(`tab-${tab}`);
                 const btn = document.getElementById(`tab-btn-${tab}`);
@@ -1550,12 +1550,14 @@ import { createSignerAttentionManager } from "./signer-ui.js";
             const infoBtn = document.getElementById("tab-btn-info");
             const managementBtn = document.getElementById("tab-btn-management");
             const relaysBtn = document.getElementById("tab-btn-relays");
+            const privacyBtn = document.getElementById("tab-btn-privacy");
             const securityBtn = document.getElementById("tab-btn-security");
 
             signerBtn.addEventListener("click", () => setActiveTab("signer"));
             infoBtn.addEventListener("click", () => setActiveTab("info"));
             managementBtn.addEventListener("click", () => setActiveTab("management"));
             relaysBtn.addEventListener("click", () => setActiveTab("relays"));
+            privacyBtn.addEventListener("click", () => setActiveTab("privacy"));
             securityBtn.addEventListener("click", () => setActiveTab("security"));
         }
 
@@ -2071,7 +2073,7 @@ import { createSignerAttentionManager } from "./signer-ui.js";
 
         async function askForNsecRevealPassword(encryptedPayload) {
             if (!isValidEncryptedPayload(encryptedPayload)) {
-                throw new Error("Aktiver Schlüssel ist ungueltig.");
+                throw new Error("Aktiver Schlüssel ist ungültig.");
             }
 
             const unlock = await showUnlockPanel({
@@ -2922,7 +2924,7 @@ import { createSignerAttentionManager } from "./signer-ui.js";
                 option.title =
                     `Methode: ${entry.method}\n` +
                     `Pubkey: ${entry.pubkey}\n` +
-                    `Schluesselname: ${entry.keyName || "-"}`;
+                    `Schlüsselname: ${entry.keyName || "-"}`;
                 select.appendChild(option);
             }
 

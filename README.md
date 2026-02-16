@@ -55,6 +55,7 @@ Dieses Projekt zeigt die praktische Umsetzung mit:
 - **Auto-Resize** – iframe passt sich automatisch an Höhe an
 - **PWA-fähig** – Installierbar als App-Fenster (Desktop/Standalone)
 - **Relay-Tab** – Relays lokal im Signer pflegbar (Speichern/Reset)
+- **Datenschutz-Tab** – Transparente, einfache Erklärung zu lokaler Speicherung und Datenfluss zu Relays
 
 ### 🔒 Sicherheit
 - **AES-256-GCM Verschlüsselung** – nsec wird verschlüsselt gespeichert
