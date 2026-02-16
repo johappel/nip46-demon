@@ -9,14 +9,15 @@ Der Signer in `signer.html` ist ein Browser-basierter NIP-46 Signer mit:
 - lokalem Keyring (verschluesselte `nsec`-Keys in `localStorage`)
 - UI fuer Entsperren, Key-Verwaltung und Request-Freigaben
 - NIP-46 Backend ueber NDK (`NDKNip46Backend`)
+- PWA-Basis (Manifest + Service Worker) fuer Standalone-App-Fenster
 - optionaler iframe-Bridge fuer Parent-Clients (z. B. `mpv-nostr-client.html`, `tests/sendevent.html`)
 
 Wichtige Eigenschaften:
 
-- fester Relay-Satz (`RELAYS`)
+- Default-Relays mit lokalem User-Override (Tab `Relays`)
 - per-Methoden-Freigaben mit "einmal" / "immer"
 - Auto-Allow fuer nicht-kritische Methoden (`connect`, `ping`, `get_public_key`)
-- Blockierung von `switch_relays`
+- Blockierung von `switch_relays` (remote), Relay-Aenderung nur lokal im Signer
 
 Aktuelle Dateiaufteilung (Recoding):
 
@@ -36,7 +37,7 @@ Aktuelle Dateiaufteilung (Recoding):
 
 ### 2.2 Lifecycle
 
-1. `startSigner()` startet NDK und verbindet Relays.
+1. `startSigner()` laedt die konfigurierte Relay-Liste (oder Defaults), startet NDK und verbindet Relays.
 2. `getOrAskActiveKeyWithRetry()` entsperrt oder initialisiert den Keyring.
 3. Aktiver Key wird als `NDKPrivateKeySigner` geladen.
 4. `bunker://...` und `nostrconnect://...` URI werden erzeugt.
@@ -58,8 +59,12 @@ Aktuelle Dateiaufteilung (Recoding):
 - Aktiver Key: `nip46_demo_active_key_id_v1`
 - Session-Cache: `nip46_unlock_cache_session_v1`
 - TTL-Cache: `nip46_unlock_cache_ttl_v1`
+- Unlock-Remember-Praferenz: `nip46_unlock_remember_pref_v1`
 - Permissions: `nip46_permissions_v1`
+- Permission-Metadaten: `nip46_permissions_meta_v1`
 - WP-User-Bindings: `nip46_wp_user_bindings_v1`
+- Attention-Settings: `nip46_attention_settings_v1`
+- User-Relay-Override: `nip46_custom_relays_v1`
 
 ### 3.3 Migrationen
 
@@ -74,7 +79,7 @@ Beim Start werden alte Formate migriert:
 
 - Auto-Allow: `connect`, `ping`, `get_public_key`
 - Sensitiv: `sign_event`, `nip04_encrypt`, `nip04_decrypt`, `nip44_encrypt`, `nip44_decrypt`
-- `switch_relays` wird explizit geblockt
+- `switch_relays` wird explizit geblockt (Relays werden nur lokal im Signer gesetzt)
 
 ### 4.2 Freigabe-Flow
 
@@ -95,10 +100,26 @@ Bei neuen sensiblen Requests kann der Signer optional:
 - einen kurzen Signalton ueber Web Audio API abspielen
 
 Die Optionen sind im Tab "Passwort" konfigurierbar und werden in `localStorage` gespeichert (`nip46_attention_settings_v1`).
+Zusaetzlich gibt es dort einen Button `Test-Benachrichtigung`, um Notification + Blinkverhalten direkt zu pruefen.
 
-### 4.3 Relay-Robustheit
+### 4.4 Relay-Robustheit
 
 `patchBackendRpcReliability()` patched `sendRequest` / `sendResponse`, damit vor RPC-Operationen mindestens eine Relay-Verbindung steht.
+
+### 4.5 Relay-Konfiguration durch den User
+
+Im Tab `Relays` kann die Relay-Liste lokal ueberschrieben werden:
+
+- Eingabe: eine URL pro Zeile oder kommasepariert
+- Erlaubt: `wss://` und `ws://`
+- Deduplizierung und Validierung vor dem Speichern
+- Reset auf Default-Relays ueber Button
+
+Wichtig:
+
+- Aenderungen gelten nach Reload/Neustart des Signers.
+- Die konfigurierte Liste wird fuer NDK-Verbindung, `NDKNip46Backend` und URI-Erzeugung (`bunker://`, `nostrconnect://`) verwendet.
+- Externe `switch_relays`-Requests bleiben aus Sicherheitsgruenden blockiert.
 
 ## 5. Bridge-Protokoll (iframe <-> Parent)
 
@@ -226,6 +247,7 @@ Use-Case: Multi-User-Systeme (z. B. WordPress), in denen pro App-User ein eigene
 - `locked`: Signer ist nicht entsperrt -> im iframe entsperren.
 - Handshake-Timeout: Client kann fallback auf `getPublicKey()` machen (siehe `tests/sendevent.html`).
 - Keine RPC-Relay-Verbindung: Relay-Auswahl pruefen, Netzwerk pruefen.
+- Relay-Aenderung ohne Effekt: nach `Relays speichern` die Seite neu laden.
 - Ungueltige URI: Nur `nostrconnect://` oder `bunker://` akzeptieren.
 
 ## 9. Minimaler Integrations-Blueprint
@@ -239,6 +261,10 @@ Use-Case: Multi-User-Systeme (z. B. WordPress), in denen pro App-User ein eigene
 
 ## 10. Relevante Dateien im Repo
 
-- `signer.html` (Signer + Keyring + Bridge + NIP-46 Backend)
+- `signer.html` (Signer-Layout mit Tabs inkl. `Relays`, Modals, CSP, Modul-Bootstrap)
+- `signer-nip46.js` (NIP-46 Core, Keyring, Permissions, Relay-Config, Bridge, Startup)
+- `signer-ui.js` (Attention-Features: Notification, Blink, Sound)
+- `signer-ui.css` (komplette UI-Styles)
+- `manifest.webmanifest`, `sw.js`, `icons/` (PWA/Installierbarkeit + Notification-Fallback)
 - `mpv-nostr-client.html` (NIP-7 + NIP-46 Fallback, produktionsnahe Client-Integration)
 - `tests/sendevent.html` (fokussierter Testclient inkl. WP-Bridge-Call)

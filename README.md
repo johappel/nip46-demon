@@ -1,8 +1,8 @@
 # NIP-46 Signer Demo – Popupfreie Nostr-Authentifizierung für Webseiten
 
-> **Template für einen benutzerfreundlichen Remote-Signer & Bunker-Dienst**
+> **Vorlage für einen benutzerfreundlichen Remote-Signer & Bunker-Dienst**
 > 
-> Zeigt wie man ein **dezentrales Authentifizierungssystem** über **NIP-46** in bestehende Webseiten (WordPress, Jekyll, etc.) integriert – ohne Popup-Flut und mit vollem Benutzer-Kontroll.
+> Zeigt, wie man ein **dezentrales Authentifizierungssystem** über **NIP-46** in bestehende Webseiten (WordPress, Jekyll, etc.) integriert – ohne Popup-Flut und mit voller Benutzerkontrolle.
 
 ## 🎯 Was ist NIP-46?
 
@@ -14,8 +14,8 @@
 - **NIP-7 kompatibel**: Funktioniert mit bestehenden Nostr-Apps via standardisierter API
 
 Dieses Projekt zeigt die praktische Umsetzung mit:
-- **Frontend** (`mpv-nostr-client.html`) – Plugin für Webseiten zur Authentifizierung
-- **Backend** (`signer.html`) – Bunker/Signer für sichere Schlüsselverwaltung
+- **Client** (`mpv-nostr-client.html`) – Einbettung für Webseiten zur Authentifizierung
+- **Signer** (`signer.html`) – Bunker/Signer für sichere Schlüsselverwaltung
 
 ## 🏗️ Architektur
 
@@ -42,7 +42,7 @@ Dieses Projekt zeigt die praktische Umsetzung mit:
           ↓ WebSocket (NDK)
 ┌─────────────────────────────────────────┐
 │  Nostr Relays                           │
-│  (wss://relay.damus.io, ...)            │
+│  (konfigurierbar im Signer-Tab Relays)  │
 └─────────────────────────────────────────┘
 ```
 
@@ -53,6 +53,8 @@ Dieses Projekt zeigt die praktische Umsetzung mit:
 - **Responsive UI** – Funktioniert auf Desktop & Mobile
 - **Mehrsprachig** – Deutsche Benutzerführung
 - **Auto-Resize** – iframe passt sich automatisch an Höhe an
+- **PWA-fähig** – Installierbar als App-Fenster (Desktop/Standalone)
+- **Relay-Tab** – Relays lokal im Signer pflegbar (Speichern/Reset)
 
 ### 🔒 Sicherheit
 - **AES-256-GCM Verschlüsselung** – nsec wird verschlüsselt gespeichert
@@ -60,12 +62,13 @@ Dieses Projekt zeigt die praktische Umsetzung mit:
 - **Origin-Validierung** – PostMessage nur mit erwarteten Origins
 - **Session & TTL Caching** – Optionales Passwort-Caching mit Ablauf
 - **Permission System** – Benutzer kontrolliert welche Clients was dürfen
+- **Relay-Härtung** – `switch_relays` aus Remote-Requests bleibt blockiert
 - **Security-Status Dokument** - Siehe `Security.md` (Status Quo, Grenzen, Bedrohungsmodell)
-- **Request-Alerts** - Optionale Windows-Benachrichtigung, blinkender Titel, kurzer Signalton bei sensiblen NIP-46 Anfragen
+- **Aufmerksamkeits-Features** - Optionale Windows-Benachrichtigung, blinkender Titel, kurzer Signalton bei sensiblen NIP-46 Anfragen inkl. Test-Button
 
 ### 🔧 Entwickler-freundlich
-- **Template-Code** – Einfach kopieren & anpassen
-- **Vollständig dokumentiert** – JSDoc Comments für alle Funktionen
+- **Vorlagen-Code** – Einfach kopieren & anpassen
+- **Vollständig dokumentiert** – JSDoc-Kommentare für alle Funktionen
 - **Modular** – Bridge Pattern, Adapter Pattern, Storage Abstraction
 - **Erweiterbar** – Neue Funktionen leicht hinzufügbar
   - WordPress User Bindings (WP User → Nostr Key)
@@ -74,10 +77,10 @@ Dieses Projekt zeigt die praktische Umsetzung mit:
   - Custom Permission Policies
 
 ### 🌐 Integrations-ready
-- **WordPress Plugin Template** – Webseite kann Client iframe laden
+- **WordPress-Plugin-Vorlage** – Webseite kann Client-iframe laden
 - **Jekyll Integration** – Static Sites können Authentifizierung nutzen
 - **Beliebige HTTP-Server** – Einfach HTML-Datei servieren
-- **Browser Extension Fallback** – Funktioniert auch mit NIP-7 Extensions
+- **Browser-Extension-Fallback** – Funktioniert auch mit NIP-7-Extensions
 
 ## 📦 Projektstruktur
 
@@ -88,9 +91,14 @@ nip46-demon/
 ├── signer-ui.css                  ← Ausgelagertes Signer-Stylesheet
 ├── signer-ui.js                   ← UI-Module (Attention/Notifications)
 ├── signer-nip46.js                ← NIP-46 Core + Signer Runtime
+├── manifest.webmanifest           ← PWA Manifest
+├── sw.js                          ← Service Worker (PWA/Notifications)
+├── icons/
+│   ├── icon-192.png
+│   └── icon-512.png
 │
 ├── mpv-nostr-client.html          ← Client für Webseiten-Integration
-│   ├─ NIP-7 Detection & Fallback
+│   ├─ NIP-7 Erkennung & Fallback
 │   ├─ NIP-46 Connection
 │   ├─ NDK Integration
 │   ├─ Relay Management
@@ -100,12 +108,11 @@ nip46-demon/
 │   ├── signer-archived.html       ← Legacy signer snapshot
 │   └── sendevent.html             ← Test event publishing
 │
-├── mpv-nostr-client.html           ← Standalone client demo
 ├── Security.md                     ← Sicherheitsarchitektur & Limitierungen
 └── SIGNER_DOKU.md                 ← Technische Dokumentation
 ```
 
-## 🚀 Quick Start
+## 🚀 Schnellstart
 
 ### 1. Signer-Server starten
 
@@ -123,13 +130,19 @@ Die **signer.html Seite** wird:
 1. Dich auffordern einen **nsec einzugeben oder zu generieren**
 2. Ein **Passwort zu setzen** (mit Bestätigung)
 3. Schlüssel **verschlüsselt** speichern
-4. NIP-46 **RPC Server starten** auf den Standard-Relays
+4. NIP-46 **RPC Server starten** auf den konfigurierten Relays (Default oder eigene Liste im Tab `Relays`)
 
 **Connection Info merken:**
 ```
 Bunker URI: bunker://abc123...?relay=wss://relay.damus.io&...
-Nostrconnect URI: nostrconnect://abc123...?relay=wss://relay.damus.io&...
+NostrConnect URI: nostrconnect://abc123...?relay=wss://relay.damus.io&...
 ```
+
+Optional als App-Fenster (PWA):
+
+- In Chrome/Edge `signer.html` öffnen
+- Über Browser-Menü "Installieren" / "Als App installieren" wählen
+- Danach läuft der Signer als eigenes Desktop-Fenster
 
 ### 2. Client in Webseite einbetten
 
@@ -163,10 +176,10 @@ window.addEventListener('message', (event) => {
 </script>
 ```
 
-### 3. Im Backend User authentifizieren
+### 3. Im Backend Benutzer authentifizieren
 
 ```php
-// WordPress Plugin Template
+// WordPress Plugin Vorlage
 add_action('rest_api_init', function() {
   register_rest_route('nostr', '/auth', array(
     'methods' => 'POST',
@@ -313,7 +326,7 @@ export const handler = async (event) => {
 
 ## 🔐 Sicherheits-Best Practices
 
-### Für den Signer (Backend)
+### Für den Signer (Serverseite)
 
 ✅ **DO:**
 - Nur über HTTPS bereitstellen (selbst-signierte Certs im dev ok)
@@ -327,7 +340,7 @@ export const handler = async (event) => {
 - Beliebig lange TTL-Genehmigungen geben
 - Logs löschen ohne Backups
 
-### Für den Client (Frontend)
+### Für den Client (Webseite)
 
 ✅ **DO:**
 - HTTPS für signer.html verwenden
@@ -340,21 +353,25 @@ export const handler = async (event) => {
 - NIP-46 URI direkt im Code einbetten
 - User ohne Bestätigung Genehmigungen geben
 
-## 📝 Customization
+## 📝 Anpassung
 
 ### Relays ändern
 
-In `signer.html` (Line ~30):
-```javascript
-const RELAYS = [
-  "wss://relay.custom.com",  // ← Deine Relays
-  "wss://backup.custom.com"
-];
-```
+Im Signer-UI über Tab `Relays`:
+
+1. Eine Relay-URL pro Zeile (oder kommasepariert) eintragen
+2. `Relays speichern` klicken
+3. Seite neu laden (erst dann verbinden NDK/Backend mit der neuen Liste)
+
+Hinweise:
+- Erlaubt sind `wss://` und `ws://`
+- Ungültige Einträge werden ignoriert
+- `Auf Standard zurücksetzen` stellt die Default-Liste wieder her
+- Gespeichert wird lokal unter `nip46_custom_relays_v1`
 
 ### Genehmigungen konfigurieren
 
-In `signer.html` (Line ~40):
+In `signer-nip46.js`:
 ```javascript
 // Diese Methoden werden automatisch erlaubt (kein Popup)
 const AUTO_ALLOW_METHODS = new Set([
@@ -367,9 +384,13 @@ const AUTO_ALLOW_METHODS = new Set([
 const SENSITIVE_METHODS = new Set([
   "sign_event",
   "nip04_encrypt",
-  "nip04_decrypt"
+  "nip04_decrypt",
+  "nip44_encrypt",
+  "nip44_decrypt"
 ]);
 ```
+
+`switch_relays` bleibt bewusst blockiert und wird nicht aus Remote-Requests übernommen.
 
 ### WordPress User Bindings
 
@@ -384,9 +405,9 @@ if (wpUserId) {
 }
 ```
 
-## 🧪 Testing
+## 🧪 Tests
 
-### Standalone Signer-Test
+### Standalone-Signer-Test
 
 ```bash
 # Terminal 1: signer.html öffnen
@@ -413,10 +434,17 @@ open http://localhost:8000/tests/sendevent.html
 # Mit dem Signer ein Event signieren und publishen
 ```
 
+### Attention/Notification testen
+
+- Im Signer Tab `Passwort` öffnen
+- `Windows-Benachrichtigung` aktivieren (ggf. Permission erlauben)
+- Button `Test-Benachrichtigung` klicken
+- Optional auch `Blinkender Dokument-Titel` und `Kurzer Signalton` aktivieren
+
 ## 📚 Dokumentation
 
 - `SIGNER_DOKU.md` – Technische Details zu Encryption, Keyring, Bech32
-- Inline JSDoc Comments – In `signer.html` und `mpv-nostr-client.html`
+- Inline JSDoc-Kommentare – Vor allem in `signer-nip46.js` und `mpv-nostr-client.html`
 - `idea.md` – Ursprüngliche Projekt-Ideen
 
 ## 🤝 Häufige Fragen
@@ -425,7 +453,7 @@ open http://localhost:8000/tests/sendevent.html
 **A:** Ja! Bei Setup eingeben oder in Schlüsselverwaltung hinzufügen. Wird immer verschlüsselt gespeichert.
 
 ### F: Ist das production-ready?
-**A:** Das ist ein **Template/Demo**. Für Production:
+**A:** Das ist eine **Vorlage/Demo**. Für Produktivbetrieb:
 - HTTPS verwenden
 - Regelmäßig Security Audits
 - Monitoring für Permission-Logs
@@ -436,10 +464,10 @@ open http://localhost:8000/tests/sendevent.html
 **A:** Ja! "Schlüsselverwaltung" Tab → "Neuen Schlüssel speichern"
 
 ### F: Funktioniert das mit {Browser Extension X}?
-**A:** Das Projekt versucht zuerst NIP-46 (Bunker) zu nutzen. Falls nicht vorhanden, fallback auf NIP-7 (Browser Extension). So funktioniert es mit **allen** Nostr-Extensions.
+**A:** Das Projekt versucht zuerst NIP-46 (Bunker) zu nutzen. Falls nicht vorhanden, Fallback auf NIP-7 (Browser-Extension). So funktioniert es mit **allen** Nostr-Extensions.
 
 ### F: Kann ich das in meinen bestehenden Monolithen integrieren?
-**A:** Absolutely! 
+**A:** Ja. 
 - WordPress: Als Plugin mit Shortcode
 - Django: Als iframe-View
 - Ruby on Rails: Als Stimulus-Komponente
@@ -450,18 +478,18 @@ open http://localhost:8000/tests/sendevent.html
 1. **RPC Relays offline** – Wenn alle Relays offline sind, funktioniert NIP-46 nicht
    - **Fix:** Fallback auf andere Relays in der URI
    
-2. **No Private Key Export** – nsec wird X-verschlüsselt gespeichert
-   - **Feature:** Export am Bunker selbst, nicht über Browser-API
+2. **Private-Key Exposure (bewusste Aktionen)** – nsec ist standardmäßig verschlüsselt gespeichert
+   - **Aktuell:** Verschlüsselter Export ist über den Signer möglich (Export-Passwort erforderlich)
+   - **Risiko:** Die Funktion "nsec einmal anzeigen" zeigt den Klartext kurz im UI und sollte nur bewusst genutzt werden
    
 3. **Browser Local Storage** – Passwort-Cache läuft mit Browser-Daten
    - **Feature:** TTL-Optionen für Session, 15m, 1h
 
 ## 📦 Abhängigkeiten
 
-- **NDK** (Nostr Development Kit) – Von esm.sh
+- **NDK** (Nostr Development Kit) – eingebunden über `vendor/ndk-3.0.0.js`
   - WebCrypto API (AES-GCM, PBKDF2)
-  - BIP32 (falls implementiert)
-  - Keine externen npm-Module nötig!
+  - Keine externen npm-Module nötig
 
 ## 🎓 Bildungs-Ressourcen
 
@@ -472,12 +500,12 @@ open http://localhost:8000/tests/sendevent.html
 
 ## 📄 Lizenz
 
-CC0. Dieses Projekt ist ein **Educational Template**. Nutze es frei für deine Projekte!
+CC0. Dieses Projekt ist eine **Lernvorlage**. Nutze es frei für deine Projekte.
 
 ## 🤝 Beiträge
 
 Verbesserungen willkommen! Vor allem:
-- Neue language-Unterstützung
+- Neue Sprachunterstützung
 - Weitere Integrations-Beispiele
 - Security Audit Feedback
 - Performance-Optimierungen
