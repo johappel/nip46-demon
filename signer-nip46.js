@@ -985,6 +985,7 @@ import { createSignerAttentionManager } from "./signer-ui.js";
             }
 
             const { entry: activeEntry } = resolveActiveKeyEntry(currentKeyring, activeKeyId);
+            let previewSessionPasswordNsec = "";
             const unlock = await showUnlockPanel({
                 title: "Passwort bestätigen",
                 hint: "Für diese Aktion bitte das aktuelle Keyring-Passwort eingeben.",
@@ -993,16 +994,23 @@ import { createSignerAttentionManager } from "./signer-ui.js";
                 askName: false,
                 askKey: false,
                 askRemember: false,
-                submitLabel: "Bestätigen"
+                modal: true,
+                submitLabel: "Bestätigen",
+                beforeSubmit: async (draft) => {
+                    previewSessionPasswordNsec = "";
+                    if (!draft.password) return "Bitte Passwort eingeben.";
+                    try {
+                        const testNsec = await decryptNsec(activeEntry.payload, draft.password);
+                        if (!isValidNsec(testNsec)) return "Passwort ist ungueltig.";
+                        previewSessionPasswordNsec = testNsec;
+                        return true;
+                    } catch (_err) {
+                        return "Passwort ist ungueltig.";
+                    }
+                }
             });
             if (!unlock.password) throw new Error("Kein Passwort angegeben.");
-
-            try {
-                const testNsec = await decryptNsec(activeEntry.payload, unlock.password);
-                if (!isValidNsec(testNsec)) throw new Error("invalid nsec");
-            } catch (_err) {
-                throw new Error("Passwort ist ungültig.");
-            }
+            if (!previewSessionPasswordNsec) throw new Error("Passwort ist ungültig.");
 
             sessionPassword = unlock.password;
             sessionUnlockMaterial = await deriveUnlockMaterialFromPassword(unlock.password, activeEntry.payload);
@@ -1387,6 +1395,7 @@ import { createSignerAttentionManager } from "./signer-ui.js";
 
         function showUnlockPanel(options) {
             const panel = document.getElementById("unlock-panel");
+            const unlockOverlay = document.getElementById("unlock-overlay");
             const titleEl = document.getElementById("unlock-title");
             const hintEl = document.getElementById("unlock-hint");
             const keyRow = document.getElementById("unlock-key-row");
@@ -1406,6 +1415,9 @@ import { createSignerAttentionManager } from "./signer-ui.js";
             const generateBtn = document.getElementById("unlock-generate-btn");
             const submitBtn = document.getElementById("unlock-submit-btn");
             const cancelBtn = document.getElementById("unlock-cancel-btn");
+            const useModal = Boolean(options?.modal);
+            let originalParent = null;
+            let originalNextSibling = null;
 
             titleEl.innerText = options.title;
             hintEl.innerText = options.hint || "";
@@ -1465,8 +1477,18 @@ import { createSignerAttentionManager } from "./signer-ui.js";
             passwordInput.oninput = validateUnlockPasswordFeedback;
             confirmInput.oninput = validateUnlockPasswordFeedback;
 
-            setActiveTab("management");
+            if (!useModal) {
+                setActiveTab("management");
+            } else if (panel.parentElement !== document.body) {
+                originalParent = panel.parentElement;
+                originalNextSibling = panel.nextSibling;
+                document.body.appendChild(panel);
+                panel.classList.add("unlock-panel-modal");
+                if (unlockOverlay) unlockOverlay.style.display = "block";
+            }
+
             panel.style.display = "block";
+            passwordInput.focus();
             scheduleFrameSizeNotification(true);
 
             return new Promise((resolve, reject) => {
@@ -1481,6 +1503,15 @@ import { createSignerAttentionManager } from "./signer-ui.js";
                     setSecretInputVisibility(nsecInput, nsecVisibilityBtn, false);
                     setFieldFeedback(passwordFeedbackEl, "");
                     panel.style.display = "none";
+                    panel.classList.remove("unlock-panel-modal");
+                    if (unlockOverlay) unlockOverlay.style.display = "none";
+                    if (originalParent) {
+                        if (originalNextSibling && originalNextSibling.parentNode === originalParent) {
+                            originalParent.insertBefore(panel, originalNextSibling);
+                        } else {
+                            originalParent.appendChild(panel);
+                        }
+                    }
                     scheduleFrameSizeNotification(true);
                 };
 
@@ -1676,25 +1707,27 @@ import { createSignerAttentionManager } from "./signer-ui.js";
         async function askForExportPassword() {
             const unlock = await showUnlockPanel({
                 title: "Export-Passwort setzen",
-                hint: "Das Passwort schützt nur die Exportdatei. Ohne dieses Passwort kann die Datei nicht importiert werden.",
+                hint: "Das Passwort schützt nur die Exportdatei. Dies ist ein neues Export-Passwort (nicht dein aktuelles Keyring-Passwort). Ohne dieses Passwort kann die Datei nicht importiert werden.",
                 askNsec: false,
-                askConfirm: true,
+                askConfirm: false,
                 askName: false,
                 askKey: false,
                 askRemember: false,
+                modal: true,
                 submitLabel: "Verschlüsselt exportieren"
             });
             if (!unlock.password) throw new Error("Kein Export-Passwort angegeben.");
             if (unlock.password.length < MIN_PASSWORD_LENGTH) {
                 throw new Error(`Export-Passwort muss mindestens ${MIN_PASSWORD_LENGTH} Zeichen haben.`);
             }
-            if (unlock.password !== unlock.passwordConfirm) {
-                throw new Error("Export-Passwörter stimmen nicht überein.");
-            }
             return unlock.password;
         }
 
-        async function askForImportPassword() {
+        async function askForImportPassword(encryptedPayload) {
+            if (!isValidEncryptedPayload(encryptedPayload)) {
+                throw new Error("Exportdatei enthält keinen gültigen verschlüsselten Schlüssel.");
+            }
+
             const unlock = await showUnlockPanel({
                 title: "Exportdatei entschlüsseln",
                 hint: "Bitte das Passwort der Exportdatei eingeben.",
@@ -1703,7 +1736,20 @@ import { createSignerAttentionManager } from "./signer-ui.js";
                 askName: false,
                 askKey: false,
                 askRemember: false,
-                submitLabel: "Datei entschlüsseln"
+                modal: true,
+                submitLabel: "Datei entschlüsseln",
+                beforeSubmit: async (draft) => {
+                    if (!draft.password) return "Bitte Passwort eingeben.";
+                    try {
+                        const importedNsec = await decryptNsec(encryptedPayload, draft.password);
+                        if (!isValidNsec(importedNsec)) {
+                            return "Exportdatei enthält keinen gültigen nsec.";
+                        }
+                        return true;
+                    } catch (_err) {
+                        return "Exportdatei konnte nicht entschlüsselt werden. Passwort prüfen.";
+                    }
+                }
             });
             if (!unlock.password) throw new Error("Kein Export-Passwort angegeben.");
             return unlock.password;
@@ -1744,7 +1790,11 @@ import { createSignerAttentionManager } from "./signer-ui.js";
             scheduleFrameSizeNotification(false);
         }
 
-        async function askForNsecRevealPassword() {
+        async function askForNsecRevealPassword(encryptedPayload) {
+            if (!isValidEncryptedPayload(encryptedPayload)) {
+                throw new Error("Aktiver Schlüssel ist ungueltig.");
+            }
+
             const unlock = await showUnlockPanel({
                 title: "nsec einmal anzeigen",
                 hint: "Bitte Keyring-Passwort eingeben. Der nsec wird nur kurz angezeigt.",
@@ -1753,7 +1803,18 @@ import { createSignerAttentionManager } from "./signer-ui.js";
                 askName: false,
                 askKey: false,
                 askRemember: false,
-                submitLabel: "Anzeigen"
+                modal: true,
+                submitLabel: "Anzeigen",
+                beforeSubmit: async (draft) => {
+                    if (!draft.password) return "Bitte Passwort eingeben.";
+                    try {
+                        const nsec = await decryptNsec(encryptedPayload, draft.password);
+                        if (!isValidNsec(nsec)) return "Passwort ist ungültig.";
+                        return true;
+                    } catch (_err) {
+                        return "Passwort ist ungültig.";
+                    }
+                }
             });
             if (!unlock.password) throw new Error("Kein Passwort angegeben.");
             return unlock.password;
@@ -1764,7 +1825,7 @@ import { createSignerAttentionManager } from "./signer-ui.js";
             const { entry: activeEntry, index: activeIndex } = resolveActiveKeyEntry(currentKeyring, activeKeyId);
             if (!activeEntry) throw new Error("Kein aktiver Schlüssel gefunden.");
 
-            const password = await askForNsecRevealPassword();
+            const password = await askForNsecRevealPassword(activeEntry.payload);
             const accepted = window.confirm(
                 "Sicherheitswarnung: Der private Schlüssel wird 10 Sekunden im Klartext angezeigt. " +
                 "Nur in sicherer Umgebung fortfahren. Jetzt anzeigen?"
@@ -1936,7 +1997,7 @@ import { createSignerAttentionManager } from "./signer-ui.js";
             let importedNsec = "";
 
             if (!importedNsec && parsed.encryptedPayload) {
-                const exportPassword = await askForImportPassword();
+                const exportPassword = await askForImportPassword(parsed.encryptedPayload);
                 try {
                     importedNsec = await decryptNsec(parsed.encryptedPayload, exportPassword);
                 } catch (_err) {
