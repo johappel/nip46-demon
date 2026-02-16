@@ -1779,6 +1779,11 @@ import { createSignerAttentionManager } from "./signer-ui.js";
             const revealBox = document.getElementById("nsec-reveal-box");
             const revealOutput = document.getElementById("nsec-reveal-output");
             const revealCountdown = document.getElementById("nsec-reveal-countdown");
+            const nsecModal = document.getElementById("nsec-modal");
+            const nsecOverlay = document.getElementById("nsec-overlay");
+            const nsecModalOutput = document.getElementById("nsec-modal-output");
+            const nsecModalCountdown = document.getElementById("nsec-modal-countdown");
+            const nsecModalKeyname = document.getElementById("nsec-modal-keyname");
 
             if (nsecRevealTimerHandle) {
                 clearInterval(nsecRevealTimerHandle);
@@ -1787,7 +1792,46 @@ import { createSignerAttentionManager } from "./signer-ui.js";
             if (revealOutput) revealOutput.value = "";
             if (revealCountdown) revealCountdown.textContent = "";
             if (revealBox) revealBox.hidden = true;
+            if (nsecModalOutput) nsecModalOutput.value = "";
+            if (nsecModalCountdown) nsecModalCountdown.textContent = "";
+            if (nsecModalKeyname) nsecModalKeyname.textContent = "";
+            if (nsecModal) nsecModal.style.display = "none";
+            if (nsecOverlay) nsecOverlay.style.display = "none";
             scheduleFrameSizeNotification(false);
+        }
+
+        function showNsecRevealModal(nsec, keyLabel = "") {
+            const nsecModal = document.getElementById("nsec-modal");
+            const nsecOverlay = document.getElementById("nsec-overlay");
+            const nsecModalOutput = document.getElementById("nsec-modal-output");
+            const nsecModalCountdown = document.getElementById("nsec-modal-countdown");
+            const nsecModalKeyname = document.getElementById("nsec-modal-keyname");
+
+            if (!nsecModal || !nsecOverlay || !nsecModalOutput || !nsecModalCountdown) {
+                throw new Error("UI für nsec-Anzeige fehlt.");
+            }
+
+            nsecModalOutput.value = nsec;
+            if (nsecModalKeyname) {
+                nsecModalKeyname.textContent = keyLabel ? `Schlüssel: ${keyLabel}` : "";
+            }
+
+            nsecOverlay.style.display = "block";
+            nsecModal.style.display = "block";
+
+            let remainingSeconds = Math.ceil(NSEC_REVEAL_DURATION_MS / 1000);
+            nsecModalCountdown.textContent = `Wird in ${remainingSeconds}s automatisch ausgeblendet.`;
+
+            if (nsecRevealTimerHandle) clearInterval(nsecRevealTimerHandle);
+            nsecRevealTimerHandle = setInterval(() => {
+                remainingSeconds -= 1;
+                if (remainingSeconds <= 0) {
+                    hideRevealedNsec();
+                    appendRequestLog(`nsec automatisch ausgeblendet (${keyLabel || "aktiver Schlüssel"}).`);
+                    return;
+                }
+                nsecModalCountdown.textContent = `Wird in ${remainingSeconds}s automatisch ausgeblendet.`;
+            }, 1000);
         }
 
         async function askForNsecRevealPassword(encryptedPayload) {
@@ -1826,15 +1870,6 @@ import { createSignerAttentionManager } from "./signer-ui.js";
             if (!activeEntry) throw new Error("Kein aktiver Schlüssel gefunden.");
 
             const password = await askForNsecRevealPassword(activeEntry.payload);
-            const accepted = window.confirm(
-                "Sicherheitswarnung: Der private Schlüssel wird 10 Sekunden im Klartext angezeigt. " +
-                "Nur in sicherer Umgebung fortfahren. Jetzt anzeigen?"
-            );
-            if (!accepted) {
-                appendRequestLog("nsec-Anzeige vom Benutzer abgebrochen.");
-                return;
-            }
-
             let nsec;
             try {
                 nsec = await decryptNsec(activeEntry.payload, password);
@@ -1844,31 +1879,8 @@ import { createSignerAttentionManager } from "./signer-ui.js";
             if (!isValidNsec(nsec)) throw new Error("Aktiver Schlüssel konnte nicht als nsec gelesen werden.");
             sessionUnlockMaterial = await deriveUnlockMaterialFromPassword(password, activeEntry.payload);
 
-            const revealBox = document.getElementById("nsec-reveal-box");
-            const revealOutput = document.getElementById("nsec-reveal-output");
-            const revealCountdown = document.getElementById("nsec-reveal-countdown");
-            if (!revealBox || !revealOutput || !revealCountdown) {
-                throw new Error("UI für nsec-Anzeige fehlt.");
-            }
-
             sessionPassword = password;
-            revealOutput.value = nsec;
-            revealBox.hidden = false;
-            let remainingSeconds = Math.ceil(NSEC_REVEAL_DURATION_MS / 1000);
-            revealCountdown.textContent = `Wird in ${remainingSeconds}s automatisch ausgeblendet.`;
-            scheduleFrameSizeNotification(true);
-
-            if (nsecRevealTimerHandle) clearInterval(nsecRevealTimerHandle);
-            nsecRevealTimerHandle = setInterval(() => {
-                remainingSeconds -= 1;
-                if (remainingSeconds <= 0) {
-                    hideRevealedNsec();
-                    appendRequestLog(`nsec automatisch ausgeblendet (${keyDisplayName(activeEntry, activeIndex)}).`);
-                    return;
-                }
-                revealCountdown.textContent = `Wird in ${remainingSeconds}s automatisch ausgeblendet.`;
-            }, 1000);
-
+            showNsecRevealModal(nsec, keyDisplayName(activeEntry, activeIndex));
             appendRequestLog(`nsec einmalig angezeigt (${keyDisplayName(activeEntry, activeIndex)}).`);
         }
 
@@ -2168,6 +2180,35 @@ import { createSignerAttentionManager } from "./signer-ui.js";
                 hideRevealedNsec();
                 appendRequestLog("nsec manuell ausgeblendet.");
             });
+
+            const nsecModalCloseBtn = document.getElementById("nsec-modal-close-btn");
+            if (nsecModalCloseBtn) {
+                nsecModalCloseBtn.addEventListener("click", () => {
+                    hideRevealedNsec();
+                    appendRequestLog("nsec modal manuell ausgeblendet.");
+                });
+            }
+
+            const nsecModalOverlay = document.getElementById("nsec-overlay");
+            if (nsecModalOverlay) {
+                nsecModalOverlay.addEventListener("click", () => {
+                    hideRevealedNsec();
+                    appendRequestLog("nsec modal per Overlay geschlossen.");
+                });
+            }
+
+            const nsecModalCopyBtn = document.getElementById("nsec-modal-copy-btn");
+            if (nsecModalCopyBtn) {
+                nsecModalCopyBtn.addEventListener("click", async () => {
+                    try {
+                        const value = document.getElementById("nsec-modal-output")?.value || "";
+                        await copyTextToClipboard(value);
+                        appendRequestLog("Temporärer nsec in Zwischenablage kopiert.");
+                    } catch (err) {
+                        appendRequestLog(`nsec konnte nicht kopiert werden: ${err.message}`);
+                    }
+                });
+            }
 
             document.getElementById("generate-key-btn").addEventListener("click", () => {
                 try {

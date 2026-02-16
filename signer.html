@@ -188,6 +188,7 @@
 
     <div id="overlay" class="overlay"></div>
     <div id="unlock-overlay" class="overlay"></div>
+    <div id="nsec-overlay" class="overlay"></div>
     <div id="auth-modal">
         <h3 id="request-title">Signier-Anfrage</h3>
         <p id="request-details"></p>
@@ -195,6 +196,18 @@
             <button class="btn-approve" id="allow-once-btn">Einmal erlauben</button>
             <button class="btn-allow-temporary" id="allow-always-btn">Immer erlauben</button>
             <button class="btn-reject" id="reject-btn">Ablehnen</button>
+        </div>
+    </div>
+    <div id="nsec-modal">
+        <h3>nsec temporär sichtbar</h3>
+        <p class="danger-hint">Warnung: Der private Schlüssel wird im Klartext angezeigt. Nur in sicherer Umgebung verwenden.</p>
+        <p id="nsec-modal-keyname" class="attention-hint"></p>
+        <label for="nsec-modal-output">Temporär angezeigter nsec</label>
+        <input id="nsec-modal-output" readonly />
+        <p id="nsec-modal-countdown" class="danger-hint"></p>
+        <div class="button-row">
+            <button class="btn-allow-temporary" id="nsec-modal-copy-btn" type="button">Kopieren</button>
+            <button class="btn-reject" id="nsec-modal-close-btn" type="button">Sofort ausblenden</button>
         </div>
     </div>
 
