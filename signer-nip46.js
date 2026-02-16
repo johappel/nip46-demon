@@ -1930,6 +1930,7 @@ import { createSignerAttentionManager } from "./signer-ui.js";
                 appendRequestLog("Hinweis: Ohne Passwort war die Duplikatprüfung eingeschränkt.");
             }
             renderKeyManager();
+            return entry;
         }
 
         async function downloadActiveKeyPair() {
@@ -1988,9 +1989,15 @@ import { createSignerAttentionManager } from "./signer-ui.js";
             const name = normalizeKeyName(nameInput.value);
 
             if (!nsec) throw new Error("Bitte nsec eingeben oder generieren.");
-            await addKeyToKeyring(nsec, name, sessionPassword || "");
+            const addedEntry = await addKeyToKeyring(nsec, name, sessionPassword || "");
             nsecInput.value = "";
             resetSecretInputVisibility("new-key-nsec-input", "new-key-nsec-visibility-btn");
+            const savedKeysSelect = document.getElementById("saved-keys-select");
+            if (savedKeysSelect && addedEntry?.id) {
+                savedKeysSelect.value = addedEntry.id;
+                appendRequestLog("Neuer Schlüssel wird direkt aktiviert.");
+                await switchToSelectedKey();
+            }
         }
 
         async function importKeyFromFile() {
@@ -2023,8 +2030,14 @@ import { createSignerAttentionManager } from "./signer-ui.js";
 
             const fallbackName = parsed.label || file.name.replace(/\.json$/i, "");
             const targetName = normalizeKeyName(nameInput.value) || fallbackName;
-            await addKeyToKeyring(importedNsec, targetName, sessionPassword || "");
+            const addedEntry = await addKeyToKeyring(importedNsec, targetName, sessionPassword || "");
             fileInput.value = "";
+            const savedKeysSelect = document.getElementById("saved-keys-select");
+            if (savedKeysSelect && addedEntry?.id) {
+                savedKeysSelect.value = addedEntry.id;
+                appendRequestLog("Importierter Schlüssel wird direkt aktiviert.");
+                await switchToSelectedKey();
+            }
         }
 
         async function changeKeyringPassword() {
