@@ -61,6 +61,7 @@ Dieses Projekt zeigt die praktische Umsetzung mit:
 - **Session & TTL Caching** – Optionales Passwort-Caching mit Ablauf
 - **Permission System** – Benutzer kontrolliert welche Clients was dürfen
 - **Security-Status Dokument** - Siehe `Security.md` (Status Quo, Grenzen, Bedrohungsmodell)
+- **Request-Alerts** - Optionale Windows-Benachrichtigung, blinkender Titel, kurzer Signalton bei sensiblen NIP-46 Anfragen
 
 ### 🔧 Entwickler-freundlich
 - **Template-Code** – Einfach kopieren & anpassen
@@ -83,13 +84,10 @@ Dieses Projekt zeigt die praktische Umsetzung mit:
 ```
 nip46-demon/
 ├── README.md                      ← Du liest gerade hier
-├── signer.html                    ← NIP-46 Bunker/Signer Backend
-│   ├─ Keyring Management
-│   ├─ AES-GCM Encryption
-│   ├─ Bech32 nsec Generation
-│   ├─ Permission System
-│   ├─ NIP-46 RPC Backend
-│   └─ Frame Auto-Resize Bridge
+├── signer.html                    ← NIP-46 Signer UI Shell (Markup + CSP)
+├── signer-ui.css                  ← Ausgelagertes Signer-Stylesheet
+├── signer-ui.js                   ← UI-Module (Attention/Notifications)
+├── signer-nip46.js                ← NIP-46 Core + Signer Runtime
 │
 ├── mpv-nostr-client.html          ← Client für Webseiten-Integration
 │   ├─ NIP-7 Detection & Fallback
@@ -99,7 +97,7 @@ nip46-demon/
 │   └─ User Session Management
 │
 ├── tests/
-│   ├── signer.html                ← Standalone signer test
+│   ├── signer-archived.html       ← Legacy signer snapshot
 │   └── sendevent.html             ← Test event publishing
 │
 ├── mpv-nostr-client.html           ← Standalone client demo

@@ -1,0 +1,233 @@
+﻿body {
+            font-family: sans-serif;
+            margin: 0;
+            padding: 10px;
+            background: #121212;
+            color: white;
+            font-size: 14px;
+        }
+        #app-title {
+            margin: 0 0 8px 0;
+            font-size: 16px;
+            font-weight: 700;
+        }
+        #status {
+            margin: 0 0 4px 0;
+            font-weight: 700;
+            font-family: 'Courier New', Courier, monospace;
+        }
+        #user-info {
+            margin: 0;
+            color: #9ad1ff;
+            white-space: pre-wrap;
+        }
+        #tab-nav {
+            display: flex;
+            gap: 6px;
+            margin: 10px 0;
+        }
+        .tab-btn {
+            margin: 0;
+            padding: 8px 10px;
+            background: #242424;
+            color: #fff;
+            border: 1px solid #343434;
+        }
+        .tab-btn.active {
+            background: #2f7cfe;
+            border-color: #2f7cfe;
+        }
+        .tab-panel {
+            display: none;
+        }
+        .tab-panel.active {
+            display: block;
+        }
+        #tab-signer {
+            padding: 10px;
+            background: #171717;
+            border: 1px solid #333;
+            border-radius: 8px;
+        }
+        #connection-info {
+            margin-top: 0;
+            padding: 12px;
+            background: #171717;
+            border: 1px solid #333;
+            border-radius: 8px;
+            white-space: pre-wrap;
+            overflow: auto;
+            max-height: 180px;
+        }
+        #unlock-panel, #key-manager {
+            margin-top: 10px;
+            padding: 12px;
+            background: #171717;
+            border: 1px solid #333;
+            border-radius: 8px;
+            display: none;
+        }
+        #password-manager {
+            margin-top: 10px;
+            padding: 12px;
+            background: #171717;
+            border: 1px solid #333;
+            border-radius: 8px;
+        }
+        #unlock-panel input, #unlock-panel select, #key-manager input, #key-manager select, #password-manager input, #password-manager select {
+            width: 100%;
+            box-sizing: border-box;
+            margin-top: 6px;
+            margin-bottom: 10px;
+            padding: 8px 10px;
+            border-radius: 6px;
+            border: 1px solid #444;
+            background: #0f0f0f;
+            color: #fff;
+        }
+        #unlock-panel p, #key-manager p, #password-manager p { margin: 0 0 10px 0; color: #bbb; }
+        .secret-input-row {
+            display: flex;
+            gap: 6px;
+            margin-top: 6px;
+            margin-bottom: 10px;
+            align-items: stretch;
+        }
+        .secret-input-row input {
+            margin: 0 !important;
+            flex: 1 1 auto;
+        }
+        .secret-icon-btn {
+            width: 40px;
+            min-width: 40px;
+            margin: 0 !important;
+            padding: 0 !important;
+            border-radius: 6px;
+            border: 1px solid #444;
+            background: #0f0f0f;
+            color: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+            line-height: 1;
+        }
+        .secret-icon-btn.active {
+            border-color: #2f7cfe;
+            background: #1c3f7a;
+        }
+        .danger-hint {
+            color: #ffb4b4 !important;
+        }
+        .toolset {
+            border: 1px solid #333;
+            border-radius: 8px;
+            padding: 10px;
+            margin: 10px 0 0 0;
+            background: #131313;
+        }
+        .toolset legend {
+            padding: 0 6px;
+            color: #9ad1ff;
+            font-weight: 700;
+        }
+        .toolset-export {
+            border-color: #7b2f36;
+            background: #1d1214;
+        }
+        .toolset-export legend {
+            color: #ffb4b4;
+        }
+        .key-switch-row {
+            display: flex;
+            gap: 8px;
+            align-items: stretch;
+        }
+        .key-switch-row select {
+            flex: 1 1 auto;
+            margin: 0 !important;
+        }
+        .key-switch-row button {
+            margin: 0 !important;
+            white-space: nowrap;
+        }
+        .field-feedback {
+            margin: -4px 0 10px 0 !important;
+            color: #ff7676 !important;
+            font-size: 12px;
+            min-height: 16px;
+        }
+        #active-key-info { margin-bottom: 10px; color: #9ad1ff; white-space: pre-wrap; }
+        #request-log {
+            margin-top: 10px;
+            padding: 10px;
+            min-height: 100px;
+            max-height: 220px;
+            overflow: auto;
+            background: #171717;
+            border: 1px solid #333;
+            border-radius: 8px;
+            white-space: pre-wrap;
+        }
+        #auth-modal {
+            display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            background: #222; padding: 20px; border: 1px solid #444; border-radius: 8px; z-index: 1000; max-width: 680px; width: 95%;
+        }
+        .overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); }
+        button { cursor: pointer; padding: 10px 14px; margin: 5px; border-radius: 5px; border: none; }
+        .btn-approve { background: #28a745; color: white; }
+        .btn-allow-temporary { background: #2f7cfe; color: white; }
+        .btn-reject { background: #dc3545; color: white; }
+        .button-row { display: flex; flex-wrap: wrap; margin-top: 10px; }
+        .attention-toggle {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin: 6px 0;
+        }
+        .attention-toggle input[type="checkbox"] {
+            width: auto !important;
+            margin: 0 !important;
+            accent-color: #2f7cfe;
+        }
+        .attention-hint {
+            margin-top: 8px !important;
+            color: #bbb !important;
+            min-height: 18px;
+        }
+        #request-details { white-space: pre-wrap; max-height: 280px; overflow: auto; background: #171717; border: 1px solid #333; border-radius: 8px; padding: 10px; }
+        body.compact-connected {
+            padding: 6px;
+        }
+        body.compact-connected #app-title {
+            font-size: 13px;
+            margin-bottom: 2px;
+        }
+        body.compact-connected #tab-nav,
+        body.compact-connected #tab-info,
+        body.compact-connected #tab-management,
+        body.compact-connected #tab-security {
+            display: none !important;
+        }
+        body.compact-connected #tab-signer {
+            padding: 6px 0 0 0;
+            border: none;
+            background: transparent;
+        }
+        body.compact-connected #status {
+            margin-bottom: 2px;
+            font-size: 12px;
+        }
+        body.compact-connected #user-info {
+            font-size: 12px;
+            color: #bbb;
+        }
+        body.compact-connected #auth-modal {
+            max-width: 420px;
+            width: calc(100% - 12px);
+            padding: 12px;
+        }
+        body.compact-connected #request-details {
+            display: none;
+        }
+

@@ -18,6 +18,13 @@ Wichtige Eigenschaften:
 - Auto-Allow fuer nicht-kritische Methoden (`connect`, `ping`, `get_public_key`)
 - Blockierung von `switch_relays`
 
+Aktuelle Dateiaufteilung (Recoding):
+
+- `signer.html`: HTML-Layout + CSP + Modul-Bootstrap
+- `signer-ui.css`: komplette Signer-Styles
+- `signer-nip46.js`: NIP-46 Core, Keyring, Bridge, Startup
+- `signer-ui.js`: UI-nahe Features fuer Aufmerksamkeit (Notification, Title-Blink, Sound)
+
 ## 2. Architektur
 
 ### 2.1 Kernkomponenten
@@ -78,6 +85,16 @@ Wenn eine sensitive Methode ankommt:
 3. Bei "Immer erlauben": Permission wird persistent gespeichert (`PERMISSION_FOREVER`).
 
 Die Requests laufen ueber eine Queue, damit mehrere gleichzeitige Anfragen nacheinander angezeigt werden.
+
+### 4.3 Aufmerksamkeit bei offenen Requests
+
+Bei neuen sensiblen Requests kann der Signer optional:
+
+- eine Windows-Benachrichtigung per Notification API senden
+- den `document.title` blinken lassen
+- einen kurzen Signalton ueber Web Audio API abspielen
+
+Die Optionen sind im Tab "Passwort" konfigurierbar und werden in `localStorage` gespeichert (`nip46_attention_settings_v1`).
 
 ### 4.3 Relay-Robustheit
 
@@ -225,4 +242,3 @@ Use-Case: Multi-User-Systeme (z. B. WordPress), in denen pro App-User ein eigene
 - `signer.html` (Signer + Keyring + Bridge + NIP-46 Backend)
 - `mpv-nostr-client.html` (NIP-7 + NIP-46 Fallback, produktionsnahe Client-Integration)
 - `tests/sendevent.html` (fokussierter Testclient inkl. WP-Bridge-Call)
-

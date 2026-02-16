@@ -1,46 +1,68 @@
-**TASK-Liste (Recoding `signer.html`)**
+﻿# RECODING Fortschritt (Signer)
 
-1. `Refactor-Plan finalisieren`  
-   Scope festlegen: welche Funktionen bleiben in `signer.html`, welche wandern nach `signer-ui.js`, `signer-nip46.js`, `signer-ui.css`.
+Stand: 2026-02-16
 
-2. `Dateistruktur anlegen`  
-   Neue Dateien erstellen: `signer-ui.js`, `signer-nip46.js`, `signer-ui.css`.
+## Ziel
 
-3. `CSS auslagern`  
-   Alle Styles aus `signer.html` nach `signer-ui.css` verschieben und per `<link>` einbinden.
+Refactoring von `signer.html` in wartbare Module plus neue Aufmerksamkeits-Features bei sensiblen NIP-46 Requests.
 
-4. `UI-Logik auslagern`  
-   DOM-Updates, Tabs, Modals, Render-Funktionen, Event-Handler nach `signer-ui.js` verschieben.
+## Task-Status
 
-5. `NIP-46/Core-Logik auslagern`  
-   NDK-Setup, Relay-Handling, Permission-Callback, Bridge-PostMessage, Start/Stop nach `signer-nip46.js`.
+- [x] 1. Refactor-Plan finalisieren.
+- [x] 2. Dateistruktur angelegt: `signer-ui.js`, `signer-nip46.js`, `signer-ui.css`.
+- [x] 3. CSS aus `signer.html` ausgelagert nach `signer-ui.css`.
+- [~] 4. UI-Logik ausgelagert: Initial umgesetzt fuer Attention/Notification-UI in `signer-ui.js`; weitere UI-Helfer koennen in einem zweiten Schritt folgen.
+- [x] 5. NIP-46/Core-Logik aus `signer.html` in `signer-nip46.js` verschoben.
+- [x] 6. Modulgrenzen definiert: `signer-nip46.js` (Core) + `signer-ui.js` (Attention/UI-Features).
+- [x] 7. Bootstrapping vereinfacht: `signer.html` bindet nur noch CSS + externes Modulscript ein.
+- [x] 8. Windows-Benachrichtigung (Notification API) integriert.
+- [x] 9. Blinkender `document.title` integriert (Reset bei Fokus/Erledigung).
+- [x] 10. Optionaler kurzer Sound bei neuer Sign-Anfrage integriert.
+- [x] 11. User-Settings hinzugefuegt (Checkboxen + Persistenz in `localStorage`).
+- [x] 12. Request-Hooks vereinheitlicht: Alert-Trigger zentral in Permission-Queue.
+- [x] 13. Cleanup/Checks: JS-Syntax-Check mit `node --check` fuer neue Module.
+- [x] 14. Dokumentation aktualisiert (`README.md`, `SIGNER_DOKU.md`).
+- [x] 15. Archiv-Datei-Entscheidung: `tests/signer-archived.html` bleibt als Legacy-Referenz bestehen.
 
-6. `Klare Modulgrenzen definieren`  
-   Öffentliche API zwischen Modulen festlegen, z. B. `initUI(...)`, `startSigner(...)`, `onPermissionRequest(...)`.
+## Umgesetzte Aenderungen
 
-7. `Bootstrapping vereinfachen`  
-   `signer.html` auf schlanken Einstieg reduzieren (Imports + `init()`).
+1. `signer.html`
+- Inline-`<style>` entfernt, durch `<link rel="stylesheet" href="./signer-ui.css">` ersetzt.
+- Inline-`<script type="module">` entfernt, durch `<script type="module" src="./signer-nip46.js">` ersetzt.
+- Neuer Einstellungsbereich im Passwort-Tab:
+  - `attention-notification-toggle`
+  - `attention-title-toggle`
+  - `attention-sound-toggle`
+  - `attention-request-permission-btn`
+  - `attention-notification-state`
 
-8. `Notification API integrieren`  
-   Permission-Flow bauen (`default/granted/denied`) und bei neuer Sign-Anfrage Windows-Notification senden.
+2. `signer-ui.css`
+- Vollstaendige Auslagerung des bisherigen Signer-CSS.
+- Neue Styles fuer Attention-Settings (`.attention-toggle`, `.attention-hint`).
 
-9. `Blinkenden Titel implementieren`  
-   Bei offener Genehmigungsanfrage zwischen z. B. `"NIP-46 Signer"` und `"Signatur anfragen..."` toggeln; bei Fokus/Erledigung zurücksetzen.
+3. `signer-ui.js`
+- Neues UI-Modul fuer Attention-Features.
+- Enthalten:
+  - Settings laden/speichern (`nip46_attention_settings_v1`)
+  - Notification-Permission-Handling
+  - Notification senden bei neuen Requests
+  - Titel-Blink starten/stoppen
+  - Signalton ueber Web Audio API
 
-10. `Optionalen Sound integrieren`  
-    Kurzen Signalton bei neuer Anfrage abspielen; robust gegen Autoplay-Blocker.
+4. `signer-nip46.js`
+- Vollstaendige Auslagerung der bisherigen Signer-Logik aus HTML.
+- Import von `createSignerAttentionManager` und Integration in den Permission-Flow.
+- Hook-Punkte:
+  - `notifyPermissionRequest(request)` beim Start einer sensiblen Freigabe
+  - `resolvePermissionRequest()` beim Schliessen des Modals
+  - `clearAttention()` beim Full-Reset
+  - `initSettingsUi()` beim App-Init
 
-11. `User-Settings hinzufügen`  
-    Schalter für `Benachrichtigung`, `Title-Blink`, `Sound` in UI + Persistenz via `localStorage`.
+5. Dokumentation
+- `README.md`: neue Modulstruktur + Request-Alerts ergaenzt.
+- `SIGNER_DOKU.md`: Dateiaufteilung + Attention-Features dokumentiert.
 
-12. `Request-Hooks vereinheitlichen`  
-    Alle drei Alarmwege (Notification, Title, Sound) zentral an „neue sensitive Anfrage“ koppeln.
+## Offene Follow-ups (optional, naechster Refactor-Schritt)
 
-13. `Cleanup & Regression-Test`  
-    Testen: Unlock, `ready`, `locked`, Sign-Freigabe, iframe-Bridge, Standalone-Betrieb.
-
-14. `Dokumentation aktualisieren`  
-    `README.md` und `SIGNER_DOKU.md` um neue Dateistruktur und Notification-Verhalten ergänzen.
-
-15. `Archiv-Datei entscheiden`  
-    `tests/signer-archived.html` entweder auf neuen Stand bringen oder klar als Legacy markieren.
+- Restliche generische UI-Helfer (Tabs/Modal/Render-Funktionen) weiter von `signer-nip46.js` nach `signer-ui.js` verschieben.
+- Optional dedizierten `signer-core.js` fuer reine Kryptografie/Storage-Helfer extrahieren.
