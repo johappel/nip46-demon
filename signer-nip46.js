@@ -13,6 +13,8 @@ import { createSignerAttentionManager } from "./signer-ui.js";
         const UNLOCK_CACHE_SESSION_KEY = "nip46_unlock_cache_session_v1";
         // TTL-basiertes Entsperra-Caching mit Ablaufzeit (15m/1h möglich)
         const UNLOCK_CACHE_TTL_KEY = "nip46_unlock_cache_ttl_v1";
+        // Merkt die zuletzt gewählte "Entsperrt bleiben"-Option im UI
+        const UNLOCK_REMEMBER_PREF_STORAGE_KEY = "nip46_unlock_remember_pref_v1";
         // Speichert Genehmigungen für Anfragen (pubkey:method -> TTL oder PERMISSION_FOREVER)
         const PERMISSION_STORAGE_KEY = "nip46_permissions_v1";
         // Optionale Metadaten zu Genehmigungen (z.B. aktiver Schluesselname beim Erteilen)
@@ -207,6 +209,30 @@ import { createSignerAttentionManager } from "./signer-ui.js";
         function formatWaitSeconds(ms) {
             const seconds = Math.ceil(Math.max(0, ms) / 1000);
             return `${seconds}s`;
+        }
+
+        function normalizeRememberMode(mode) {
+            const value = String(mode || "").trim();
+            if (value === "session" || value === "15m" || value === "1h") return value;
+            return "none";
+        }
+
+        function loadRememberModePreference() {
+            try {
+                const raw = localStorage.getItem(UNLOCK_REMEMBER_PREF_STORAGE_KEY);
+                return normalizeRememberMode(raw);
+            } catch (_err) {
+                return "none";
+            }
+        }
+
+        function saveRememberModePreference(mode) {
+            try {
+                const normalized = normalizeRememberMode(mode);
+                localStorage.setItem(UNLOCK_REMEMBER_PREF_STORAGE_KEY, normalized);
+            } catch (_err) {
+                // Ignore storage failures (private mode / quota etc.)
+            }
         }
 
         async function copyTextToClipboard(text) {
@@ -1496,7 +1522,11 @@ import { createSignerAttentionManager } from "./signer-ui.js";
             setSecretInputVisibility(nsecInput, nsecVisibilityBtn, false);
             passwordInput.value = "";
             confirmInput.value = "";
-            rememberSelect.value = options.defaultRememberMode || "none";
+            const requestedRememberMode = normalizeRememberMode(options.defaultRememberMode);
+            const preferredRememberMode = loadRememberModePreference();
+            rememberSelect.value = options.askRemember
+                ? (requestedRememberMode === "none" ? preferredRememberMode : requestedRememberMode)
+                : "none";
             setFieldFeedback(passwordFeedbackEl, "");
 
             const validateUnlockPasswordFeedback = () => {
@@ -1598,6 +1628,10 @@ import { createSignerAttentionManager } from "./signer-ui.js";
                             submitInFlight = false;
                             submitBtn.disabled = false;
                         }
+                    }
+
+                    if (options.askRemember) {
+                        saveRememberModePreference(value.rememberMode);
                     }
 
                     cleanup();
@@ -2170,6 +2204,7 @@ import { createSignerAttentionManager } from "./signer-ui.js";
             localStorage.removeItem(PERMISSION_STORAGE_KEY);
             localStorage.removeItem(PERMISSION_META_STORAGE_KEY);
             localStorage.removeItem(WP_USER_BINDINGS_STORAGE_KEY);
+            localStorage.removeItem(UNLOCK_REMEMBER_PREF_STORAGE_KEY);
 
             sessionPassword = "";
             sessionUnlockMaterial = null;
