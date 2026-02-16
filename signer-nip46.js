@@ -183,6 +183,16 @@ import { createSignerAttentionManager } from "./signer-ui.js";
             console.log(...args);
         }
 
+        async function registerPwaServiceWorker() {
+            if (!("serviceWorker" in navigator)) return;
+            try {
+                const registration = await navigator.serviceWorker.register("./sw.js");
+                devLog("Service Worker registriert:", registration?.scope || "(ohne scope)");
+            } catch (err) {
+                appendRequestLog(`Service Worker Registrierung fehlgeschlagen: ${err?.message || err}`);
+            }
+        }
+
         function waitMs(ms) {
             const delay = Math.max(0, Number(ms) || 0);
             return new Promise((resolve) => setTimeout(resolve, delay));
@@ -3098,6 +3108,7 @@ import { createSignerAttentionManager } from "./signer-ui.js";
         signerAttention.initSettingsUi();
         setupFrameAutoResizeBridge();
         window.addEventListener("message", bridgeMessageHandler);
+        registerPwaServiceWorker().catch(() => {});
 
         /**
          * Startet den kompletten Signer Prozess.
