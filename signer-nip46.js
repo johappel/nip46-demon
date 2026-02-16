@@ -3153,13 +3153,29 @@ import { createSignerAttentionManager } from "./signer-ui.js";
          * @param {function} onReject - Callback für "ablehnen"
          */
         function showModal(req, onAllowOnce, onAllowAlways, onReject) {
-            document.getElementById("request-title").innerText = humanRequestTitle(req.method);
-            document.getElementById("request-details").innerText =
-                `Methode: ${req.method}\nParameter: ${formatRequestParams(req)}`;
+            const requestTitleEl = document.getElementById("request-title");
+            const requestDetailsEl = document.getElementById("request-details");
+            const toggleDetailsBtn = document.getElementById("toggle-request-details-btn");
+
+            const setRequestDetailsVisible = (visible) => {
+                requestDetailsEl.classList.toggle("collapsed", !visible);
+                toggleDetailsBtn.classList.toggle("active", visible);
+                toggleDetailsBtn.setAttribute("aria-pressed", visible ? "true" : "false");
+                toggleDetailsBtn.title = visible ? "Event-Details ausblenden" : "Event-Details anzeigen";
+            };
+
+            requestTitleEl.innerText = humanRequestTitle(req.method);
+            requestDetailsEl.innerText = `Methode: ${req.method}\nParameter: ${formatRequestParams(req)}`;
+            setRequestDetailsVisible(false);
 
             document.getElementById("overlay").style.display = "block";
             document.getElementById("auth-modal").style.display = "block";
             scheduleFrameSizeNotification(true);
+
+            toggleDetailsBtn.onclick = () => {
+                setRequestDetailsVisible(requestDetailsEl.classList.contains("collapsed"));
+                scheduleFrameSizeNotification(true);
+            };
 
             document.getElementById("allow-once-btn").onclick = () => {
                 hideModal();
@@ -3181,6 +3197,15 @@ import { createSignerAttentionManager } from "./signer-ui.js";
          * Versteckt das Modal-Fenster und Overlay.
          */
         function hideModal() {
+            const requestDetailsEl = document.getElementById("request-details");
+            const toggleDetailsBtn = document.getElementById("toggle-request-details-btn");
+            if (requestDetailsEl) requestDetailsEl.classList.add("collapsed");
+            if (toggleDetailsBtn) {
+                toggleDetailsBtn.classList.remove("active");
+                toggleDetailsBtn.onclick = null;
+                toggleDetailsBtn.setAttribute("aria-pressed", "false");
+                toggleDetailsBtn.title = "Event-Details anzeigen";
+            }
             document.getElementById("overlay").style.display = "none";
             document.getElementById("auth-modal").style.display = "none";
             signerAttention.resolvePermissionRequest();

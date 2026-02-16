@@ -25,6 +25,8 @@ export function createSignerAttentionManager(options = {}) {
     let blinkTitle = "Neue Signier-Anfrage";
     let pendingAttentionCount = 0;
     let audioContext = null;
+    let badgeSupported = typeof navigator !== "undefined" &&
+        (typeof navigator.setAppBadge === "function" || typeof navigator.clearAppBadge === "function");
 
     const settings = loadSettings();
 
@@ -118,11 +120,13 @@ export function createSignerAttentionManager(options = {}) {
         }
         blinkState = false;
         document.title = baseTitle;
+        setInlineAttention(false);
     }
 
     function startTitleBlink(nextBlinkTitle) {
         if (!settings.titleBlinkEnabled) return;
         blinkTitle = nextBlinkTitle || blinkTitle;
+        setInlineAttention(true);
 
         if (blinkTimer) return;
 
@@ -130,6 +134,12 @@ export function createSignerAttentionManager(options = {}) {
             blinkState = !blinkState;
             document.title = blinkState ? blinkTitle : baseTitle;
         }, 900);
+    }
+
+    function setInlineAttention(active) {
+        const appTitle = document.getElementById("app-title");
+        if (!appTitle) return;
+        appTitle.classList.toggle("attention-pulse", Boolean(active));
     }
 
     async function playSignalTone() {
@@ -163,7 +173,7 @@ export function createSignerAttentionManager(options = {}) {
         }
     }
 
-    function sendNotification({ method = "", pubkey = "" } = {}) {
+    async function sendNotification({ method = "", pubkey = "" } = {}) {
         if (!settings.notificationsEnabled) return;
         if (!isNotificationSupported()) return;
         if (notificationPermissionValue() !== "granted") return;
@@ -171,20 +181,47 @@ export function createSignerAttentionManager(options = {}) {
         const shortPubkey = pubkey ? `${String(pubkey).slice(0, 12)}...` : "unbekannt";
         const title = `NIP-46 Anfrage: ${method || "unknown"}`;
         const body = `Client: ${shortPubkey}`;
+        const notificationOptions = {
+            body,
+            tag: "nip46-permission-request",
+            renotify: true,
+            requireInteraction: true,
+            icon: "./icons/icon-192.png",
+            badge: "./icons/icon-192.png"
+        };
 
         try {
-            const notif = new Notification(title, {
-                body,
-                tag: "nip46-permission-request",
-                renotify: true,
-                requireInteraction: false
-            });
+            if (navigator.serviceWorker && typeof navigator.serviceWorker.getRegistration === "function") {
+                const registration = await navigator.serviceWorker.getRegistration();
+                if (registration && typeof registration.showNotification === "function") {
+                    await registration.showNotification(title, notificationOptions);
+                    return;
+                }
+            }
+
+            const notif = new Notification(title, notificationOptions);
             notif.onclick = () => {
                 window.focus();
                 notif.close();
             };
         } catch (_err) {
             // Ignore notification runtime errors.
+        }
+    }
+
+    async function updateAppBadge(count) {
+        if (!badgeSupported) return;
+        try {
+            const n = Number(count) || 0;
+            if (n > 0 && typeof navigator.setAppBadge === "function") {
+                await navigator.setAppBadge(n);
+                return;
+            }
+            if (typeof navigator.clearAppBadge === "function") {
+                await navigator.clearAppBadge();
+            }
+        } catch (_err) {
+            // Ignore badge runtime errors.
         }
     }
 
@@ -195,11 +232,13 @@ export function createSignerAttentionManager(options = {}) {
 
         startTitleBlink(`Neue Anfrage: ${method}`);
         void playSignalTone();
-        sendNotification({ method, pubkey });
+        void sendNotification({ method, pubkey });
+        void updateAppBadge(pendingAttentionCount);
     }
 
     function resolvePermissionRequest() {
         pendingAttentionCount = Math.max(0, pendingAttentionCount - 1);
+        void updateAppBadge(pendingAttentionCount);
         if (pendingAttentionCount === 0) {
             stopTitleBlink();
         }
@@ -207,6 +246,7 @@ export function createSignerAttentionManager(options = {}) {
 
     function clearAttention() {
         pendingAttentionCount = 0;
+        void updateAppBadge(0);
         stopTitleBlink();
     }
 
@@ -265,11 +305,13 @@ export function createSignerAttentionManager(options = {}) {
     }
 
     window.addEventListener("focus", () => {
-        stopTitleBlink();
+        if (pendingAttentionCount === 0) {
+            stopTitleBlink();
+        }
     });
 
     document.addEventListener("visibilitychange", () => {
-        if (!document.hidden) {
+        if (!document.hidden && pendingAttentionCount === 0) {
             stopTitleBlink();
         }
     });
