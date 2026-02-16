@@ -35,6 +35,7 @@ export function createSignerAttentionManager(options = {}) {
         titleToggle: null,
         soundToggle: null,
         requestPermissionBtn: null,
+        testNotificationBtn: null,
         permissionState: null
     };
 
@@ -87,8 +88,12 @@ export function createSignerAttentionManager(options = {}) {
     }
 
     function renderButtonState() {
-        if (!dom.requestPermissionBtn) return;
-        dom.requestPermissionBtn.disabled = !isNotificationSupported() || notificationPermissionValue() === "granted";
+        if (dom.requestPermissionBtn) {
+            dom.requestPermissionBtn.disabled = !isNotificationSupported() || notificationPermissionValue() === "granted";
+        }
+        if (dom.testNotificationBtn) {
+            dom.testNotificationBtn.disabled = !isNotificationSupported();
+        }
     }
 
     function renderFormState() {
@@ -174,9 +179,9 @@ export function createSignerAttentionManager(options = {}) {
     }
 
     async function sendNotification({ method = "", pubkey = "" } = {}) {
-        if (!settings.notificationsEnabled) return;
-        if (!isNotificationSupported()) return;
-        if (notificationPermissionValue() !== "granted") return;
+        if (!settings.notificationsEnabled) return false;
+        if (!isNotificationSupported()) return false;
+        if (notificationPermissionValue() !== "granted") return false;
 
         const shortPubkey = pubkey ? `${String(pubkey).slice(0, 12)}...` : "unbekannt";
         const title = `NIP-46 Anfrage: ${method || "unknown"}`;
@@ -195,7 +200,7 @@ export function createSignerAttentionManager(options = {}) {
                 const registration = await navigator.serviceWorker.getRegistration();
                 if (registration && typeof registration.showNotification === "function") {
                     await registration.showNotification(title, notificationOptions);
-                    return;
+                    return true;
                 }
             }
 
@@ -204,8 +209,57 @@ export function createSignerAttentionManager(options = {}) {
                 window.focus();
                 notif.close();
             };
+            return true;
         } catch (_err) {
             // Ignore notification runtime errors.
+            return false;
+        }
+    }
+
+    async function runNotificationTest() {
+        if (!settings.notificationsEnabled) {
+            renderPermissionState();
+            if (dom.permissionState) {
+                dom.permissionState.textContent = "Windows-Benachrichtigung ist deaktiviert. Aktiviere zuerst die Checkbox.";
+                dom.permissionState.style.color = "#ffb4b4";
+            }
+            return;
+        }
+
+        let permission = notificationPermissionValue();
+        if (permission === "default") {
+            permission = await requestNotificationPermission();
+        }
+
+        if (permission !== "granted") {
+            renderPermissionState();
+            return;
+        }
+
+        const delivered = await sendNotification({
+            method: "test_notification",
+            pubkey: "lokaler-test"
+        });
+        if (!delivered) {
+            if (dom.permissionState) {
+                dom.permissionState.textContent = "Test fehlgeschlagen: Notification konnte nicht angezeigt werden.";
+                dom.permissionState.style.color = "#ffb4b4";
+            }
+            return;
+        }
+
+        if (pendingAttentionCount === 0 && settings.titleBlinkEnabled) {
+            startTitleBlink("Test: Neue Signier-Anfrage");
+            window.setTimeout(() => {
+                if (pendingAttentionCount === 0) {
+                    stopTitleBlink();
+                }
+            }, 2400);
+        }
+
+        if (dom.permissionState) {
+            dom.permissionState.textContent = "Test-Benachrichtigung gesendet.";
+            dom.permissionState.style.color = "#9ad1ff";
         }
     }
 
@@ -291,6 +345,12 @@ export function createSignerAttentionManager(options = {}) {
                 await requestNotificationPermission();
             });
         }
+
+        if (dom.testNotificationBtn) {
+            dom.testNotificationBtn.addEventListener("click", async () => {
+                await runNotificationTest();
+            });
+        }
     }
 
     function initSettingsUi() {
@@ -298,6 +358,7 @@ export function createSignerAttentionManager(options = {}) {
         dom.titleToggle = document.getElementById("attention-title-toggle");
         dom.soundToggle = document.getElementById("attention-sound-toggle");
         dom.requestPermissionBtn = document.getElementById("attention-request-permission-btn");
+        dom.testNotificationBtn = document.getElementById("attention-test-notification-btn");
         dom.permissionState = document.getElementById("attention-notification-state");
 
         renderFormState();

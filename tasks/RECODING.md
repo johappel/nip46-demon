@@ -23,6 +23,7 @@ Refactoring von `signer.html` in wartbare Module plus neue Aufmerksamkeits-Featu
 - [x] 13. Cleanup/Checks: JS-Syntax-Check mit `node --check` fuer neue Module.
 - [x] 14. Dokumentation aktualisiert (`README.md`, `SIGNER_DOKU.md`).
 - [x] 15. Archiv-Datei-Entscheidung: `tests/signer-archived.html` bleibt als Legacy-Referenz bestehen.
+- [x] 16. Test-Benachrichtigung fuer PWA/Desktop-Debugging hinzugefuegt.
 
 ## Umgesetzte Aenderungen
 
@@ -34,6 +35,7 @@ Refactoring von `signer.html` in wartbare Module plus neue Aufmerksamkeits-Featu
   - `attention-title-toggle`
   - `attention-sound-toggle`
   - `attention-request-permission-btn`
+  - `attention-test-notification-btn`
   - `attention-notification-state`
 
 2. `signer-ui.css`
@@ -46,6 +48,7 @@ Refactoring von `signer.html` in wartbare Module plus neue Aufmerksamkeits-Featu
   - Settings laden/speichern (`nip46_attention_settings_v1`)
   - Notification-Permission-Handling
   - Notification senden bei neuen Requests
+  - Test-Flow fuer Notification/Blink via UI-Button
   - Titel-Blink starten/stoppen
   - Signalton ueber Web Audio API
 
