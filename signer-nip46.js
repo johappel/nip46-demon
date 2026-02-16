@@ -1468,6 +1468,31 @@ import { createSignerAttentionManager } from "./signer-ui.js";
             scheduleFrameSizeNotification(true);
         }
 
+        function renderStandaloneConnectionInfo() {
+            const box = document.getElementById("standalone-connection-box");
+            const bunkerInput = document.getElementById("standalone-bunker-uri");
+            const nostrconnectInput = document.getElementById("standalone-nostrconnect-uri");
+            if (!box || !bunkerInput || !nostrconnectInput) return;
+
+            if (
+                isEmbeddedContext ||
+                !connectionInfo ||
+                typeof connectionInfo.bunkerUri !== "string" ||
+                typeof connectionInfo.nostrconnectUri !== "string"
+            ) {
+                box.hidden = true;
+                bunkerInput.value = "";
+                nostrconnectInput.value = "";
+                scheduleFrameSizeNotification(false);
+                return;
+            }
+
+            bunkerInput.value = connectionInfo.bunkerUri;
+            nostrconnectInput.value = connectionInfo.nostrconnectUri;
+            box.hidden = false;
+            scheduleFrameSizeNotification(false);
+        }
+
         function showUnlockPanel(options) {
             const panel = document.getElementById("unlock-panel");
             const unlockOverlay = document.getElementById("unlock-overlay");
@@ -2226,6 +2251,10 @@ import { createSignerAttentionManager } from "./signer-ui.js";
             const permissionSelect = document.getElementById("permission-manager-select");
             const revokeSelectedPermissionBtn = document.getElementById("revoke-selected-permission-btn");
             const revokeAllPermissionsBtn = document.getElementById("revoke-all-permissions-btn");
+            const copyBunkerUriBtn = document.getElementById("copy-bunker-uri-btn");
+            const copyNostrconnectUriBtn = document.getElementById("copy-nostrconnect-uri-btn");
+            const bunkerUriInput = document.getElementById("standalone-bunker-uri");
+            const nostrconnectUriInput = document.getElementById("standalone-nostrconnect-uri");
 
             setupSecretInputControls("unlock-nsec-input", "unlock-nsec-visibility-btn", "unlock-nsec-copy-btn", "Einrichtungs-nsec");
             setupSecretInputControls("new-key-nsec-input", "new-key-nsec-visibility-btn", "new-key-nsec-copy-btn", "nsec");
@@ -2240,6 +2269,28 @@ import { createSignerAttentionManager } from "./signer-ui.js";
             };
 
             newPasswordInput.addEventListener("input", validateChangePasswordFeedback);
+
+            if (copyBunkerUriBtn && bunkerUriInput) {
+                copyBunkerUriBtn.addEventListener("click", async () => {
+                    try {
+                        await copyTextToClipboard(bunkerUriInput.value);
+                        appendRequestLog("Bunker URI in Zwischenablage kopiert.");
+                    } catch (err) {
+                        appendRequestLog(`Bunker URI konnte nicht kopiert werden: ${err.message}`);
+                    }
+                });
+            }
+
+            if (copyNostrconnectUriBtn && nostrconnectUriInput) {
+                copyNostrconnectUriBtn.addEventListener("click", async () => {
+                    try {
+                        await copyTextToClipboard(nostrconnectUriInput.value);
+                        appendRequestLog("Nostrconnect URI in Zwischenablage kopiert.");
+                    } catch (err) {
+                        appendRequestLog(`Nostrconnect URI konnte nicht kopiert werden: ${err.message}`);
+                    }
+                });
+            }
 
             document.getElementById("switch-key-btn").addEventListener("click", async () => {
                 try {
@@ -3028,6 +3079,7 @@ import { createSignerAttentionManager } from "./signer-ui.js";
             renderKeyManager();
             setActiveTab("signer");
             setCompactConnectedMode(isEmbeddedContext);
+            renderStandaloneConnectionInfo();
 
             const nip46Backend = new NDKNip46Backend(
                 ndk,
@@ -3152,6 +3204,7 @@ import { createSignerAttentionManager } from "./signer-ui.js";
         startSigner().catch((err) => {
             console.error(err);
             setCompactConnectedMode(false);
+            renderStandaloneConnectionInfo();
             document.getElementById("status").innerText = `🔴 Fehler: ${err.message}`;
         });
 

@@ -26,6 +26,19 @@
 
     <section class="tab-panel active" id="tab-signer">
         <div id="user-info">Starte Signer...</div>
+        <div id="standalone-connection-box" hidden>
+            <h4>Sofort verbinden (Standalone)</h4>
+            <label for="standalone-bunker-uri">Bunker URI</label>
+            <div class="uri-row">
+                <input id="standalone-bunker-uri" readonly />
+                <button class="btn-allow-temporary" id="copy-bunker-uri-btn" type="button">Kopieren</button>
+            </div>
+            <label for="standalone-nostrconnect-uri">Nostrconnect URI</label>
+            <div class="uri-row">
+                <input id="standalone-nostrconnect-uri" readonly />
+                <button class="btn-allow-temporary" id="copy-nostrconnect-uri-btn" type="button">Kopieren</button>
+            </div>
+        </div>
     </section>
 
     <section class="tab-panel" id="tab-info">

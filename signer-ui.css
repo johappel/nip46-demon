@@ -49,6 +49,38 @@
             border: 1px solid #333;
             border-radius: 8px;
         }
+        #standalone-connection-box {
+            margin-top: 10px;
+            padding: 10px;
+            border: 1px solid #333;
+            border-radius: 8px;
+            background: #131313;
+        }
+        #standalone-connection-box h4 {
+            margin: 0 0 8px 0;
+            color: #9ad1ff;
+        }
+        #standalone-connection-box input {
+            width: 100%;
+            box-sizing: border-box;
+            margin: 0;
+            padding: 8px 10px;
+            border-radius: 6px;
+            border: 1px solid #444;
+            background: #0f0f0f;
+            color: #fff;
+            font-family: "Courier New", Courier, monospace;
+        }
+        .uri-row {
+            display: flex;
+            gap: 8px;
+            align-items: stretch;
+            margin: 6px 0 10px 0;
+        }
+        .uri-row button {
+            margin: 0 !important;
+            white-space: nowrap;
+        }
         #connection-info {
             margin-top: 0;
             padding: 12px;
@@ -267,6 +299,9 @@
         body.compact-connected #user-info {
             font-size: 12px;
             color: #bbb;
+        }
+        body.compact-connected #standalone-connection-box {
+            display: none !important;
         }
         body.compact-connected #auth-modal {
             max-width: 420px;
