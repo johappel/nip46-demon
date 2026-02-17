@@ -360,6 +360,7 @@ Ergebnis:
 - aktuelle Demo-Variante: Genehmigungen laufen direkt im iframe-Signer (`showUnlockRequestDialog: false`, `showApprovalRequestDialog: false`)
 - beim Absenden wird der Setup-Dialog automatisch geoeffnet, damit die Signer-Buttons sichtbar und klickbar sind
 - der `Signer`-Button zeigt den Zustand per Statuspunkt: gelb (`verbindet`), gruen (`bereit`), rot (`Fehler`)
+- die Demo-UI hat keinen separaten `Public Key laden`-Button mehr; der Key wird intern nur bei Bedarf im Submit-Flow geladen
 - im Setup-Dialog wechselt der Titel auf `NIP-46 Signer` sobald verbunden; rechts oben oeffnet ein Link-Icon den Signer in einem eigenen Browser-Tab
 - im Setup-Dialog gibt es rechts oben zusaetzlich einen `X`-Button zum manuellen Schliessen des Dialogs
 - im eingebetteten `compact-connected` Modus blendet die Demo den inneren Signer-Titel aus, um doppelte Ueberschriften zu vermeiden
@@ -611,8 +612,10 @@ Der dedizierte Adapter `democlient/forms/kind-adapters/nip52.js` erzwingt fuer `
   - entweder ueber optionale Felder `lat/lon` (in Custom-Schemata)
   - oder direkt aus `location` im Format `lat,lon` (z. B. `52.5200, 13.4050`)
   - reine Ortsnamen ohne Koordinaten erzeugen ohne Geocoding-Service keinen `g`-Tag
+  - falls externes Geocoding aktiviert wird, nur ueber offene APIs (keine proprietaeren Pflichtdienste)
 
 Das Beispiel-Schema `democlient/forms/schemas/nip52-calendar.json` zeigt den vereinfachten Input ohne manuelle TZID-/Geohash-Felder.
+Die RSVP-spezifischen Felder (`a`-Referenz, `status`) sind im Default-Schema bewusst ausgeblendet, um die Basis-UI einfach zu halten; fuer RSVP nutze ein erweitertes Custom-Schema.
 
 ### 13.6 NIP-23 Optional Tags und Editability
 

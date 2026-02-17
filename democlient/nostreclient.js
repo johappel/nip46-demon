@@ -10,7 +10,6 @@ const APPROVAL_BUTTON_FIND_TIMEOUT_MS = 2500;
 const APPROVAL_BUTTON_FIND_POLL_MS = 80;
 const REQUEST_PREVIEW_MAX_LEN = 100;
 const REQUIRED_ELEMENT_ROLES = [
-    "pubkey-btn",
     "send-btn",
     "signer-frame",
     "signer-setup-dialog",
@@ -52,7 +51,6 @@ function getElementByRole(role) {
     return null;
 }
 
-const pubkeyBtn = getElementByRole("pubkey-btn");
 const sendBtn = getElementByRole("send-btn");
 const signerFrame = /** @type {HTMLIFrameElement|null} */ (getElementByRole("signer-frame"));
 const signerSetupDialogEl = /** @type {HTMLDialogElement|null} */ (getElementByRole("signer-setup-dialog"));
@@ -872,7 +870,6 @@ function hideConnectionInfoForBoilerplate() {
  */
 function setBusy(isBusy) {
     sendBtn.disabled = isBusy || !currentConnection;
-    pubkeyBtn.disabled = isBusy || !currentConnection;
 }
 
 /**
@@ -962,22 +959,6 @@ async function startAutoSignerFlow() {
 }
 
 /**
- * Loads pubkey from active provider.
- */
-async function onGetPubkeyClicked() {
-    setBusy(true);
-    try {
-        const client = getBunkerClientOrThrow();
-        const pubkey = await client.getPublicKey();
-        setResult(`nostrclient.getPublicKey() => ${pubkey}`);
-    } catch (err) {
-        setResult(`Fehler: ${err.message}`);
-    } finally {
-        setBusy(false);
-    }
-}
-
-/**
  * Handles post submit including validation and publish workflow.
  * @param {SubmitEvent} event - Form submit event.
  */
@@ -1030,7 +1011,6 @@ async function onPostSubmit(event) {
  */
 function refreshActionButtons() {
     sendBtn.disabled = !currentConnection;
-    pubkeyBtn.disabled = !currentConnection;
 }
 
 /**
@@ -1047,7 +1027,6 @@ async function bootstrap() {
         requestAllowOnceBtn.addEventListener("click", onRequestAllowOnceClicked);
         requestAllowAlwaysBtn.addEventListener("click", onRequestAllowAlwaysClicked);
         requestRejectBtn.addEventListener("click", onRequestRejectClicked);
-        pubkeyBtn.addEventListener("click", onGetPubkeyClicked);
         postForm.addEventListener("submit", onPostSubmit);
         setSignerButtonState("connecting", "Signer: verbindet");
         setSetupDialogMode(false);
@@ -1187,3 +1166,4 @@ export const nostreclient = {
 };
 
 export const nostrclient = nostreclient;
+

@@ -272,3 +272,19 @@ Refactoring von `signer.html` in wartbare Module plus neue Aufmerksamkeits-Featu
 - [x] `democlient/forms/schemas/nip52-calendar.json`: manuelle Felder `startTzid`, `endTzid`, `geohash` entfernt.
 - [x] `SIGNER_DOKU.md`: NIP-52 Verhalten fuer automatische TZID/Geohash-Ableitung dokumentiert.
 
+## Fortschritt 2026-02-17 (NIP-52 Summary + Open-API Vorgabe)
+
+- [x] `democlient/forms/schemas/nip52-calendar.json`: Feld `summary` auf `textarea` (mehrzeilig) umgestellt.
+- [x] `SIGNER_DOKU.md`: Geocoding-Hinweis um Open-API-Vorgabe ergaenzt.
+
+## Fortschritt 2026-02-17 (NIP-52 RSVP-Felder aus Default-UI entfernt)
+
+- [x] `democlient/forms/schemas/nip52-calendar.json`: Felder `calendarReference` und `rsvpStatus` entfernt (weniger Verwirrung im Standardformular).
+- [x] `SIGNER_DOKU.md`: Hinweis ergaenzt, dass RSVP-Felder ueber Custom-Schema eingebracht werden koennen.
+
+## Fortschritt 2026-02-17 (Demo-UI ohne Public-Key-Button)
+
+- [x] `democlient/index.html`: Button `Public Key laden` aus der Standard-UI entfernt.
+- [x] `democlient/nostreclient.js`: Abhaengigkeiten zu `pubkey-btn` entfernt (Required-Roles, Listener, Busy/Enable-State).
+- [x] `SIGNER_DOKU.md`: Verhalten dokumentiert (Public Key wird intern bei Bedarf geladen).
+

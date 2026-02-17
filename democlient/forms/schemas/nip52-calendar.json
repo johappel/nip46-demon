@@ -38,9 +38,10 @@
     {
       "name": "summary",
       "label": "Kurzbeschreibung (summary)",
-      "type": "text",
+      "type": "textarea",
       "required": false,
-      "maxLength": 280
+      "maxLength": 280,
+      "rows": 3
     },
     {
       "name": "identifier",
@@ -78,25 +79,6 @@
       "placeholder": "https://..."
     },
     {
-      "name": "calendarReference",
-      "label": "Kalender/Event Referenz (a-Tag, fuer RSVP)",
-      "type": "text",
-      "required": false,
-      "placeholder": "31924:<pubkey>:<identifier>"
-    },
-    {
-      "name": "rsvpStatus",
-      "label": "RSVP Status",
-      "type": "select",
-      "required": false,
-      "defaultValue": "accepted",
-      "options": [
-        { "label": "accepted", "value": "accepted" },
-        { "label": "declined", "value": "declined" },
-        { "label": "tentative", "value": "tentative" }
-      ]
-    },
-    {
       "name": "description",
       "label": "Beschreibung",
       "type": "textarea",
@@ -106,4 +88,6 @@
     }
   ]
 }
+
+
 
