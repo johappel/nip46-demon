@@ -591,4 +591,4 @@ Beispiel-Schemata im Repo:
 
 - `democlient/forms/schemas/kind1.json`
 - `democlient/forms/schemas/kind30023.json` (NIP-23 Publish/Draft via `kindSelectorMap`)
-- `democlient/forms/schemas/nip52-calendar.json` (Multi-Kind Beispiel fuer 31922-31925)
+- `democlient/forms/schemas/nip52-calendar.json` (Multi-Kind + dedizierter `nip-52` Adapter)

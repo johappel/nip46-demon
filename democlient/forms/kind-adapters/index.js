@@ -180,6 +180,63 @@ function buildKind30023UnsignedEvent(context) {
 }
 
 /**
+ * Adds one tag only when value is present.
+ * @param {string[][]} tags - Mutable tag array.
+ * @param {string} tagName - Tag name.
+ * @param {unknown} tagValue - Tag value.
+ */
+function pushOptionalTag(tags, tagName, tagValue) {
+    const value = normalizeTagValue(tagValue);
+    if (!value) return;
+    tags.push([tagName, value]);
+}
+
+/**
+ * Builds a NIP-52 calendar-related event.
+ * This adapter is intentionally explicit so the mapping logic is visible.
+ * @param {BuildEventContext} context - Build context.
+ * @returns {object} Unsigned nostr event.
+ */
+function buildNip52UnsignedEvent(context) {
+    const schema = context.schema;
+    const values = context.values;
+    const kind = resolveKindWithSelector(schema, values);
+
+    const title = String(values.title || "").trim();
+    const description = String(values.description || "").trim();
+    const identifier = String(values.identifier || values.slug || title || "calendar-entry").trim();
+    const location = String(values.location || "").trim();
+    const image = String(values.image || "").trim();
+    const calendarReference = String(values.calendarReference || "").trim();
+    const rsvpStatus = String(values.rsvpStatus || "").trim();
+    const startUnix = toUnixSeconds(values.start || "");
+    const endUnix = toUnixSeconds(values.end || "");
+
+    const tags = [];
+    pushOptionalTag(tags, "d", identifier);
+    pushOptionalTag(tags, "title", title);
+    pushOptionalTag(tags, "location", location);
+    pushOptionalTag(tags, "image", image);
+
+    if (startUnix) pushOptionalTag(tags, "start", String(startUnix));
+    if (endUnix) pushOptionalTag(tags, "end", String(endUnix));
+
+    if (kind === 31925) {
+        // RSVP entries should point to a calendar/event reference when available.
+        pushOptionalTag(tags, "a", calendarReference);
+        pushOptionalTag(tags, "status", rsvpStatus);
+    }
+
+    return {
+        kind,
+        created_at: Math.floor(Date.now() / 1000),
+        tags,
+        content: description,
+        pubkey: context.pubkey
+    };
+}
+
+/**
  * Registers one custom kind adapter.
  * @param {string} adapterId - Adapter id.
  * @param {(context: BuildEventContext) => object} builder - Adapter builder function.
@@ -208,6 +265,7 @@ function resolveAdapterId(schema) {
 registerKindAdapter("generic-kind", buildGenericUnsignedEvent);
 registerKindAdapter("kind-1", buildKind1UnsignedEvent);
 registerKindAdapter("kind-30023", buildKind30023UnsignedEvent);
+registerKindAdapter("nip-52", buildNip52UnsignedEvent);
 
 /**
  * Builds an unsigned event using the resolved adapter.

@@ -2,9 +2,9 @@
   "version": "nostr-form-v1",
   "id": "nip52-calendar-example",
   "title": "NIP-52 Kalender (Beispiel)",
-  "description": "Beispielhaftes Multi-Kind-Schema mit Kind-Selector.",
+  "description": "Beispielhaftes Multi-Kind-Schema mit dediziertem NIP-52 Adapter.",
   "kind": 31922,
-  "adapter": "generic-kind",
+  "adapter": "nip-52",
   "kindSelectorField": "calendarKind",
   "kindSelectorMap": {
     "dateBased": 31922,
@@ -14,12 +14,6 @@
   },
   "submitLabel": "Kalender-Event signieren + senden",
   "contentField": "description",
-  "tagMappings": [
-    { "field": "title", "tag": "title" },
-    { "field": "start", "tag": "start" },
-    { "field": "end", "tag": "end" },
-    { "field": "location", "tag": "location" }
-  ],
   "fields": [
     {
       "name": "calendarKind",
@@ -42,6 +36,14 @@
       "maxLength": 160
     },
     {
+      "name": "identifier",
+      "label": "Identifier (d-Tag)",
+      "type": "text",
+      "required": false,
+      "maxLength": 120,
+      "placeholder": "calendar-entry-1"
+    },
+    {
       "name": "start",
       "label": "Start",
       "type": "datetime-local",
@@ -59,6 +61,32 @@
       "type": "text",
       "required": false,
       "maxLength": 220
+    },
+    {
+      "name": "image",
+      "label": "Bild URL",
+      "type": "url",
+      "required": false,
+      "placeholder": "https://..."
+    },
+    {
+      "name": "calendarReference",
+      "label": "Kalender/Event Referenz (a-Tag, fuer RSVP)",
+      "type": "text",
+      "required": false,
+      "placeholder": "31924:<pubkey>:<identifier>"
+    },
+    {
+      "name": "rsvpStatus",
+      "label": "RSVP Status",
+      "type": "select",
+      "required": false,
+      "defaultValue": "accepted",
+      "options": [
+        { "label": "accepted", "value": "accepted" },
+        { "label": "declined", "value": "declined" },
+        { "label": "tentative", "value": "tentative" }
+      ]
     },
     {
       "name": "description",
