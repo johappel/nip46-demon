@@ -214,3 +214,10 @@ Refactoring von `signer.html` in wartbare Module plus neue Aufmerksamkeits-Featu
 
 - [x] `SIGNER_DOKU.md`: neue API-Referenz fuer `democlient/nostreclient.js` ergaenzt (Import, Config, Methoden, Rueckgaben, Verhalten).
 - [x] `democlient/nostreclient.js`: Alias-Export `nostrclient` hinzugefuegt (identisch zu `nostreclient`) fuer klarere Benennung im Client-Code.
+
+## Fortschritt 2026-02-17 (DOM-Rollen mit data-nostr)
+
+- [x] `democlient/nostreclient.js`: DOM-Resolution auf semantische Rollen erweitert (`data-nostr="<rolle>"` mit `id`-Fallback).
+- [x] `democlient/index.html`: zentrale Elemente mit `data-nostr` versehen (u. a. `post-form`, `post-content`, `send-btn`, Dialog-Elemente).
+- [x] `SIGNER_DOKU.md`: API-Doku praezisiert (`nostrclient.<methode>()` statt globalen Einzel-Funktionen).
+- [x] `SIGNER_DOKU.md`: DOM-Binding fuer CMS-Integrationen dokumentiert (inkl. Post-Flow-Mapping).

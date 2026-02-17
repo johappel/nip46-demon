@@ -1,37 +1,12 @@
 ﻿import { createBunkerConnectClient } from "./nostr.js";
 
-const pubkeyBtn = document.getElementById("pubkey-btn");
-const sendBtn = document.getElementById("send-btn");
-const signerFrame = document.getElementById("signer-frame");
-const signerSetupDialogEl = document.getElementById("signer-setup-dialog");
-const setupCardEl = document.querySelector(".setup-card");
-const setupDialogTitleEl = document.getElementById("setup-dialog-title");
-const setupDialogHintEl = document.getElementById("setup-dialog-hint");
-const openSignerExternalBtn = document.getElementById("open-signer-external-btn");
-const closeSignerDialogBtn = document.getElementById("close-signer-dialog-btn");
-const showSignerBtn = document.getElementById("show-signer-btn");
-const showSignerLabel = document.getElementById("show-signer-label");
-const statusEl = document.getElementById("status");
-const resultEl = document.getElementById("result");
-const connectionInfoEl = document.getElementById("connection-info");
-const approvalPreviewEl = document.getElementById("approval-preview");
-const approvalPreviewMethodEl = document.getElementById("approval-preview-method");
-const approvalPreviewContentEl = document.getElementById("approval-preview-content");
-const postForm = document.getElementById("post-form");
-const postContent = document.getElementById("post-content");
-const contentCountEl = document.getElementById("content-count");
-const requestDialogEl = document.getElementById("signer-request-dialog");
-const requestTitleEl = document.getElementById("signer-request-title");
-const requestDetailsEl = document.getElementById("signer-request-details");
-const requestAllowOnceBtn = document.getElementById("request-allow-once-btn");
-const requestAllowAlwaysBtn = document.getElementById("request-allow-always-btn");
-const requestRejectBtn = document.getElementById("request-reject-btn");
+const NOSTR_DATA_ATTRIBUTE = "data-nostr";
 
 const DEFAULT_SIGNER_IFRAME_URI = "../signer.html";
 const APPROVAL_BUTTON_FIND_TIMEOUT_MS = 2500;
 const APPROVAL_BUTTON_FIND_POLL_MS = 80;
 const REQUEST_PREVIEW_MAX_LEN = 100;
-const REQUIRED_ELEMENT_IDS = [
+const REQUIRED_ELEMENT_ROLES = [
     "pubkey-btn",
     "send-btn",
     "signer-frame",
@@ -54,6 +29,52 @@ const REQUIRED_ELEMENT_IDS = [
     "request-allow-always-btn",
     "request-reject-btn"
 ];
+
+/**
+ * Resolves one DOM element by semantic role.
+ * Lookup order: `data-nostr="<role>"` first, then `id="<role>"`.
+ * @param {string} role - Semantic role of the element.
+ * @returns {HTMLElement|null} Matching element or null.
+ */
+function getElementByRole(role) {
+    const safeRole = String(role || "").trim();
+    if (!safeRole) return null;
+
+    const byDataRole = document.querySelector(`[${NOSTR_DATA_ATTRIBUTE}="${safeRole}"]`);
+    if (byDataRole instanceof HTMLElement) return byDataRole;
+
+    const byId = document.getElementById(safeRole);
+    if (byId instanceof HTMLElement) return byId;
+
+    return null;
+}
+
+const pubkeyBtn = getElementByRole("pubkey-btn");
+const sendBtn = getElementByRole("send-btn");
+const signerFrame = /** @type {HTMLIFrameElement|null} */ (getElementByRole("signer-frame"));
+const signerSetupDialogEl = /** @type {HTMLDialogElement|null} */ (getElementByRole("signer-setup-dialog"));
+const setupCardEl = getElementByRole("setup-card") || document.querySelector(".setup-card");
+const setupDialogTitleEl = getElementByRole("setup-dialog-title");
+const setupDialogHintEl = getElementByRole("setup-dialog-hint");
+const openSignerExternalBtn = getElementByRole("open-signer-external-btn");
+const closeSignerDialogBtn = getElementByRole("close-signer-dialog-btn");
+const showSignerBtn = getElementByRole("show-signer-btn");
+const showSignerLabel = getElementByRole("show-signer-label");
+const statusEl = getElementByRole("status");
+const resultEl = getElementByRole("result");
+const connectionInfoEl = getElementByRole("connection-info");
+const approvalPreviewEl = getElementByRole("approval-preview");
+const approvalPreviewMethodEl = getElementByRole("approval-preview-method");
+const approvalPreviewContentEl = getElementByRole("approval-preview-content");
+const postForm = /** @type {HTMLFormElement|null} */ (getElementByRole("post-form"));
+const postContent = /** @type {HTMLTextAreaElement|null} */ (getElementByRole("post-content"));
+const contentCountEl = getElementByRole("content-count");
+const requestDialogEl = /** @type {HTMLDialogElement|null} */ (getElementByRole("signer-request-dialog"));
+const requestTitleEl = getElementByRole("signer-request-title");
+const requestDetailsEl = getElementByRole("signer-request-details");
+const requestAllowOnceBtn = /** @type {HTMLButtonElement|null} */ (getElementByRole("request-allow-once-btn"));
+const requestAllowAlwaysBtn = /** @type {HTMLButtonElement|null} */ (getElementByRole("request-allow-always-btn"));
+const requestRejectBtn = /** @type {HTMLButtonElement|null} */ (getElementByRole("request-reject-btn"));
 
 /**
  * @typedef {object} NostreClientConfig
@@ -93,13 +114,13 @@ let runtimeConfig = {
 };
 
 /**
- * Resolves and validates required DOM elements by id.
+ * Resolves and validates required DOM elements by role.
  * @throws {Error} If one or more required elements are missing.
  */
 function ensureRequiredDemoElements() {
-    const missingIds = REQUIRED_ELEMENT_IDS.filter((id) => !document.getElementById(id));
-    if (missingIds.length === 0) return;
-    throw new Error(`Fehlende Demo-Elemente: ${missingIds.join(", ")}`);
+    const missingRoles = REQUIRED_ELEMENT_ROLES.filter((role) => !getElementByRole(role));
+    if (missingRoles.length === 0) return;
+    throw new Error(`Fehlende Demo-Elemente (data-nostr oder id): ${missingRoles.join(", ")}`);
 }
 
 /**
@@ -155,7 +176,7 @@ function normalizeInitConfig(rawConfig = {}) {
  */
 function getBunkerClientOrThrow() {
     if (!bunkerClient) {
-        throw new Error("nostreclient.init(...) wurde noch nicht ausgefuehrt.");
+        throw new Error("nostrclient.init(...) wurde noch nicht ausgefuehrt.");
     }
     return bunkerClient;
 }

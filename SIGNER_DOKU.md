@@ -283,7 +283,7 @@ Use-Case: Multi-User-Systeme (z. B. WordPress), in denen pro App-User ein eigene
 - `democlient/index.html` (Boilerplate UI fuer eigene Clients)
 - `democlient/index.css` (ausgelagerte Demo-Styles)
 - `democlient/nostr.js` (gekapselte Bunkerconnect-Lib mit Auto-Connect + Dialog-Mirroring)
-- `democlient/nostreclient.js` (High-Level Wrapper mit `nostreclient.init(...)`)
+- `democlient/nostreclient.js` (High-Level Wrapper mit `nostrclient.init(...)`)
 - `democlient/index.js` (minimaler Entry-Point mit einer Init-Config)
 
 ## 11. Manual: Nostr Client mit Bunkerconnect in 2 Minuten
@@ -307,7 +307,7 @@ Die Demo trennt bewusst:
 ### Schritt 2: Ein Kommando fuer Einbettung + Auto-Connect
 
 ```js
-import { nostreclient } from "./nostreclient.js";
+import { nostrclient } from "./nostreclient.js";
 
 const config = {
   signer_iframe_uri: "../signer.html",
@@ -315,16 +315,16 @@ const config = {
   allow_nip07: false
 };
 
-await nostreclient.init({ config });
+await nostrclient.init({ config });
 ```
 
 Optional verfuegbare Methoden nach dem Init:
 
 ```js
-const pubkey = await nostreclient.getPublicKey();
-const signedEvent = await nostreclient.signEvent(unsignedEvent);
-const relayUrls = await nostreclient.publishSignedEvent(signedEvent);
-const response = await nostreclient.publishTextNote("Hallo von meinem Client");
+const pubkey = await nostrclient.getPublicKey();
+const signedEvent = await nostrclient.signEvent(unsignedEvent);
+const relayUrls = await nostrclient.publishSignedEvent(signedEvent);
+const response = await nostrclient.publishTextNote("Hallo von meinem Client");
 console.log(pubkey, relayUrls, response);
 ```
 
@@ -358,15 +358,15 @@ Ergebnis:
 ### Schritt 3: Event absenden
 
 ```js
-const response = await nostreclient.publishTextNote("Hallo von meinem Client");
+const response = await nostrclient.publishTextNote("Hallo von meinem Client");
 console.log(response.signedEvent, response.publishedRelayUrls);
 ```
 
 Alternativ granular:
 
-1. `await nostreclient.getPublicKey()`
-2. `await nostreclient.signEvent(unsignedEvent)`
-3. `await nostreclient.publishSignedEvent(signedEvent)`
+1. `await nostrclient.getPublicKey()`
+2. `await nostrclient.signEvent(unsignedEvent)`
+3. `await nostrclient.publishSignedEvent(signedEvent)`
 
 ### Schritt 4: Eigene App-Logik erweitern
 
@@ -383,7 +383,8 @@ Wichtig:
 
 - Die API ist ein ES-Modul-Export, kein globales `window`-Objekt.
 - In `index.html` wird sie ueber `democlient/index.js` importiert und gestartet.
-- Export-Namen: `nostreclient` und Alias `nostrclient` (beide identisch).
+- App-Aufrufe immer namespaced: `nostrclient.getPublicKey()` statt globalem `getPublicKey()`.
+- Export-Namen: `nostreclient` und Alias `nostrclient` (beide identisch, empfohlen: `nostrclient`).
 
 ### 12.1 Import
 
@@ -391,7 +392,7 @@ Wichtig:
 import { nostrclient } from "./nostreclient.js";
 ```
 
-oder:
+Optional (Alias):
 
 ```js
 import { nostreclient } from "./nostreclient.js";
@@ -496,3 +497,31 @@ const config = {
 
 await nostrclient.init({ config });
 ```
+
+### 12.10 DOM-Binding mit `data-nostr`
+
+Die Demo-UI wird ueber semantische Rollen gebunden:
+
+- zuerst ueber `data-nostr="<rolle>"`
+- fallback-kompatibel ueber `id="<rolle>"`
+
+Dadurch ist klar dokumentiert, welches Feld welche API-Funktion verwendet.
+
+Beispiel fuer den Post-Flow:
+
+- `data-nostr="post-form"`: Formular-Submit wird als Publish-Trigger genutzt
+- `data-nostr="post-content"`: dieses Feld liefert den Event-`content` fuer `publishTextNote(...)`
+- `data-nostr="send-btn"`: Submit-Button fuer den Post-Flow
+- `data-nostr="content-count"`: Zeichenzaehler
+
+Minimalbeispiel:
+
+```html
+<form data-nostr="post-form" novalidate>
+  <textarea data-nostr="post-content" maxlength="280"></textarea>
+  <button data-nostr="send-btn" type="submit">Signieren + senden</button>
+  <span data-nostr="content-count">0 / 280</span>
+</form>
+```
+
+Wenn du Felder erweiterst, vergib neue `data-nostr` Rollen und dokumentiere sie hier, damit das Mapping fuer CMS-Integrationen eindeutig bleibt.
