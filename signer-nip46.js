@@ -2912,15 +2912,18 @@ import { createSignerAttentionManager } from "./signer-ui.js";
             if (data.type === "wp-ensure-user-key") {
                 const requestId = typeof data?.payload?.requestId === "string" ? data.payload.requestId : "";
                 const userId = data?.payload?.userId;
+                appendRequestLog(`Bridge: wp-ensure-user-key empfangen (${String(userId || "").slice(0, 48) || "?"})`);
                 (async () => {
                     try {
                         const ensured = await ensureWpUserKey(userId);
+                        appendRequestLog(`Bridge: wp-user-key-result ok (${ensured?.keyName || "key"})`);
                         postBridgeMessage("wp-user-key-result", {
                             requestId,
                             ok: true,
                             ...ensured
                         });
                     } catch (err) {
+                        appendRequestLog(`Bridge: wp-user-key-result error (${err?.message || "unbekannt"})`);
                         postBridgeMessage("wp-user-key-result", {
                             requestId,
                             ok: false,
