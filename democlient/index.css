@@ -228,6 +228,10 @@ button[disabled] {
     margin: 0;
 }
 
+.setup-card.compact-connected-view .setup-dialog-head {
+    margin-bottom: 1rem;
+}
+
 .setup-dialog-actions {
     display: inline-flex;
     align-items: center;

@@ -197,3 +197,7 @@ Refactoring von `signer.html` in wartbare Module plus neue Aufmerksamkeits-Featu
 - [x] `democlient/index.html`: Header-Actions um `close-signer-dialog-btn` (`X`) neben `open-signer-external-btn` erweitert.
 - [x] `democlient/index.css`: gemeinsame Icon-Button-Styles auf Link- und Close-Button angewendet.
 - [x] `democlient/index.js`: Click-Handler `onCloseSignerDialogClicked()` hinzugefuegt und im Bootstrap verdrahtet.
+
+## Fortschritt 2026-02-17 (Setup-Dialog Spacing-Fix)
+
+- [x] `democlient/index.css`: im `compact-connected` Zustand unteren Abstand des `setup-dialog-head` auf `1rem` gesetzt, damit oberer Dialograndabstand und Abstand zum iframe optisch gleich wirken.
