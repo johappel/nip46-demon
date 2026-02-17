@@ -1,0 +1,56 @@
+﻿{
+  "version": "nostr-form-v1",
+  "id": "kind30023-longform",
+  "title": "Long Form (kind:30023)",
+  "description": "Beispielschema fuer Long-Form-Posts.",
+  "kind": 30023,
+  "adapter": "kind-30023",
+  "submitLabel": "Long Form signieren + senden",
+  "fields": [
+    {
+      "name": "identifier",
+      "label": "Identifier (d-Tag)",
+      "type": "text",
+      "required": true,
+      "maxLength": 80,
+      "placeholder": "mein-erster-longform-post"
+    },
+    {
+      "name": "title",
+      "label": "Titel",
+      "type": "text",
+      "required": true,
+      "maxLength": 140,
+      "placeholder": "Mein Long Form Beitrag"
+    },
+    {
+      "name": "summary",
+      "label": "Kurzfassung",
+      "type": "textarea",
+      "required": false,
+      "maxLength": 500,
+      "rows": 3
+    },
+    {
+      "name": "image",
+      "label": "Titelbild URL",
+      "type": "url",
+      "required": false,
+      "placeholder": "https://..."
+    },
+    {
+      "name": "publishedAt",
+      "label": "Publiziert am",
+      "type": "datetime-local",
+      "required": false
+    },
+    {
+      "name": "content",
+      "label": "Inhalt",
+      "type": "textarea",
+      "required": true,
+      "maxLength": 20000,
+      "rows": 14
+    }
+  ]
+}

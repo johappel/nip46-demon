@@ -1,4 +1,7 @@
 ﻿import { createBunkerConnectClient } from "./nostr.js";
+import { bindCharacterCounter, collectFormValues, renderFormSchema, validateFormValues } from "./forms/form-generator.js";
+import { buildUnsignedEventFromForm } from "./forms/kind-adapters/index.js";
+import { isSupportedSchemaVersion, loadFormSchema } from "./forms/schema-loader.js";
 
 const NOSTR_DATA_ATTRIBUTE = "data-nostr";
 
@@ -20,7 +23,7 @@ const REQUIRED_ELEMENT_ROLES = [
     "approval-preview-method",
     "approval-preview-content",
     "post-form",
-    "post-content",
+    "form-fields",
     "content-count",
     "signer-request-dialog",
     "signer-request-title",
@@ -67,7 +70,7 @@ const approvalPreviewEl = getElementByRole("approval-preview");
 const approvalPreviewMethodEl = getElementByRole("approval-preview-method");
 const approvalPreviewContentEl = getElementByRole("approval-preview-content");
 const postForm = /** @type {HTMLFormElement|null} */ (getElementByRole("post-form"));
-const postContent = /** @type {HTMLTextAreaElement|null} */ (getElementByRole("post-content"));
+const formFieldsEl = getElementByRole("form-fields");
 const contentCountEl = getElementByRole("content-count");
 const requestDialogEl = /** @type {HTMLDialogElement|null} */ (getElementByRole("signer-request-dialog"));
 const requestTitleEl = getElementByRole("signer-request-title");
@@ -85,6 +88,8 @@ const requestRejectBtn = /** @type {HTMLButtonElement|null} */ (getElementByRole
  * @property {boolean=} allowNip07 - camelCase alias for NIP-07 exposure.
  * @property {string=} custom_bunker_uri - Optional fixed bunker URI fallback.
  * @property {string=} customBunkerUri - camelCase alias for bunker URI fallback.
+ * @property {string=} form_uri - Optional JSON form schema URI.
+ * @property {string=} formUri - camelCase alias for schema URI.
  */
 
 /**
@@ -98,6 +103,7 @@ const requestRejectBtn = /** @type {HTMLButtonElement|null} */ (getElementByRole
  * @property {string[]} relays - Optional relay override list.
  * @property {boolean} allowNip07 - Expose NIP-07 compatible API on window.
  * @property {string} customBunkerUri - Optional bunker URI fallback.
+ * @property {string} formUri - Optional form schema URI.
  */
 
 let currentConnection = null;
@@ -105,12 +111,15 @@ let signerFrameUiObserver = null;
 let signerFrameUiSyncScheduled = false;
 let bunkerClient = null;
 let hiddenConnectionUriInput = null;
+let activeFormSchema = null;
+let formCounterCleanup = null;
 let bootstrapStarted = false;
 let runtimeConfig = {
     signerIframeUri: DEFAULT_SIGNER_IFRAME_URI,
     relays: [],
     allowNip07: true,
-    customBunkerUri: ""
+    customBunkerUri: "",
+    formUri: ""
 };
 
 /**
@@ -160,12 +169,18 @@ function normalizeInitConfig(rawConfig = {}) {
         config.customBunkerUri ||
         ""
     ).trim();
+    const formUri = String(
+        config.form_uri ||
+        config.formUri ||
+        ""
+    ).trim();
 
     return {
         signerIframeUri,
         relays,
         allowNip07,
-        customBunkerUri
+        customBunkerUri,
+        formUri
     };
 }
 
@@ -861,26 +876,52 @@ function setBusy(isBusy) {
 }
 
 /**
- * Updates post content counter.
+ * Removes form-specific listeners from previous schema render.
  */
-function updateContentCounter() {
-    const len = (postContent.value || "").length;
-    contentCountEl.textContent = `${len} / 280`;
+function cleanupFormRuntime() {
+    if (typeof formCounterCleanup === "function") {
+        formCounterCleanup();
+    }
+    formCounterCleanup = null;
 }
 
 /**
- * Validates post form content.
- * @returns {{ok:boolean, message:string}} Validation result.
+ * Applies one normalized form schema to the UI.
+ * @param {object} schema - Normalized form schema.
  */
-function validatePostContent() {
-    const content = String(postContent.value || "").trim();
-    if (!content) {
-        return { ok: false, message: "Bitte Event-Content eingeben." };
+function applyFormSchemaToUi(schema) {
+    if (!(postForm instanceof HTMLFormElement)) {
+        throw new Error("post-form fehlt.");
     }
-    if (content.length > 280) {
-        return { ok: false, message: "Maximal 280 Zeichen erlaubt." };
+    if (!(formFieldsEl instanceof HTMLElement)) {
+        throw new Error("form-fields fehlt.");
     }
-    return { ok: true, message: "" };
+
+    cleanupFormRuntime();
+    renderFormSchema({ containerEl: formFieldsEl, schema });
+
+    if (sendBtn instanceof HTMLButtonElement && schema.submitLabel) {
+        sendBtn.textContent = schema.submitLabel;
+    }
+
+    formCounterCleanup = bindCharacterCounter({
+        formEl: postForm,
+        schema,
+        counterEl: contentCountEl
+    });
+}
+
+/**
+ * Loads form schema and renders it into the current form container.
+ */
+async function initializeFormRuntime() {
+    const loadedSchema = await loadFormSchema({ formUri: runtimeConfig.formUri });
+    if (!isSupportedSchemaVersion(loadedSchema)) {
+        setResult("Hinweis: Unbekannte Formular-Version geladen. Es wird versucht, kompatibel zu rendern.");
+    }
+
+    activeFormSchema = loadedSchema;
+    applyFormSchemaToUi(loadedSchema);
 }
 
 /**
@@ -928,7 +969,7 @@ async function onGetPubkeyClicked() {
     try {
         const client = getBunkerClientOrThrow();
         const pubkey = await client.getPublicKey();
-        setResult(`window.nostr.getPublicKey() => ${pubkey}`);
+        setResult(`nostrclient.getPublicKey() => ${pubkey}`);
     } catch (err) {
         setResult(`Fehler: ${err.message}`);
     } finally {
@@ -943,7 +984,13 @@ async function onGetPubkeyClicked() {
 async function onPostSubmit(event) {
     event.preventDefault();
 
-    const validation = validatePostContent();
+    if (!(postForm instanceof HTMLFormElement) || !activeFormSchema) {
+        setResult("Formular ist noch nicht bereit.");
+        return;
+    }
+
+    const formValues = collectFormValues(postForm, activeFormSchema);
+    const validation = validateFormValues(activeFormSchema, formValues);
     if (!validation.ok) {
         setResult(validation.message);
         return;
@@ -956,10 +1003,17 @@ async function onPostSubmit(event) {
         if (!setupDialogWasOpenBeforeSubmit) {
             openSignerSetupDialog();
         }
-        const response = await client.publishTextNote(postContent.value.trim());
+        const pubkey = currentConnection?.pubkey || await client.getPublicKey();
+        const unsignedEvent = buildUnsignedEventFromForm({
+            schema: activeFormSchema,
+            values: formValues,
+            pubkey
+        });
+        const signedEvent = await client.signEvent(unsignedEvent);
+        const publishedRelayUrls = await client.publishSignedEvent(signedEvent);
         setResult(
-            `Signiert:\n${JSON.stringify(response.signedEvent, null, 2)}\n\n` +
-            `Veroeffentlicht an:\n${response.publishedRelayUrls.join("\n") || "(unbekannt)"}`
+            `Signiert:\n${JSON.stringify(signedEvent, null, 2)}\n\n` +
+            `Veroeffentlicht an:\n${publishedRelayUrls.join("\n") || "(unbekannt)"}`
         );
     } catch (err) {
         setResult(`Senden fehlgeschlagen: ${err.message}`);
@@ -995,9 +1049,6 @@ async function bootstrap() {
         requestRejectBtn.addEventListener("click", onRequestRejectClicked);
         pubkeyBtn.addEventListener("click", onGetPubkeyClicked);
         postForm.addEventListener("submit", onPostSubmit);
-        postContent.addEventListener("input", updateContentCounter);
-
-        updateContentCounter();
         setSignerButtonState("connecting", "Signer: verbindet");
         setSetupDialogMode(false);
         hideConnectionInfoForBoilerplate();
@@ -1005,6 +1056,7 @@ async function bootstrap() {
         bootstrapStarted = true;
     }
 
+    await initializeFormRuntime();
     refreshActionButtons();
 
     await startAutoSignerFlow();
@@ -1029,6 +1081,14 @@ function getState() {
         initialized: Boolean(bunkerClient),
         runtimeConfig: { ...runtimeConfig, relays: [...runtimeConfig.relays] },
         connection: currentConnection ? { ...currentConnection } : null,
+        activeFormSchema: activeFormSchema
+            ? {
+                id: activeFormSchema.id,
+                title: activeFormSchema.title,
+                kind: activeFormSchema.kind,
+                adapter: activeFormSchema.adapter
+            }
+            : null,
         bunker: bunkerClient && typeof bunkerClient.getState === "function"
             ? bunkerClient.getState()
             : null
@@ -1042,11 +1102,13 @@ function destroy() {
     if (bunkerClient && typeof bunkerClient.destroy === "function") {
         bunkerClient.destroy();
     }
+    cleanupFormRuntime();
     if (signerFrameUiObserver) {
         signerFrameUiObserver.disconnect();
         signerFrameUiObserver = null;
     }
     bunkerClient = null;
+    activeFormSchema = null;
     currentConnection = null;
     removeHiddenConnectionUriInput();
 }

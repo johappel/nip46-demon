@@ -115,6 +115,14 @@ label {
     font-weight: 650;
 }
 
+.nostr-form-field {
+    margin-bottom: 0.72rem;
+}
+
+.nostr-form-field:last-child {
+    margin-bottom: 0;
+}
+
 input,
 textarea,
 button {

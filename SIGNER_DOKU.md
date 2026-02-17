@@ -285,6 +285,10 @@ Use-Case: Multi-User-Systeme (z. B. WordPress), in denen pro App-User ein eigene
 - `democlient/nostr.js` (gekapselte Bunkerconnect-Lib mit Auto-Connect + Dialog-Mirroring)
 - `democlient/nostreclient.js` (High-Level Wrapper mit `nostrclient.init(...)`)
 - `democlient/index.js` (minimaler Entry-Point mit einer Init-Config)
+- `democlient/forms/schema-loader.js` (laedt und normalisiert JSON-Form-Schemata)
+- `democlient/forms/form-generator.js` (rendert Felder + sammelt/validiert Formwerte)
+- `democlient/forms/kind-adapters/index.js` (mappt Formwerte auf unsigned Nostr-Events)
+- `democlient/forms/schemas/kind1.json` (lokales Default-Schema)
 
 ## 11. Manual: Nostr Client mit Bunkerconnect in 2 Minuten
 
@@ -311,6 +315,7 @@ import { nostrclient } from "./nostreclient.js";
 
 const config = {
   signer_iframe_uri: "../signer.html",
+  form_uri: "./forms/schemas/kind1.json",
   relays: [],
   allow_nip07: false
 };
@@ -333,6 +338,7 @@ console.log(pubkey, relayUrls, response);
 ```js
 {
   signer_iframe_uri: "../signer.html", // oder signerIframeUri
+  form_uri: "./forms/schemas/kind1.json", // oder formUri
   relays: ["wss://relay.damus.io"],    // optional, leer => Demo-Defaults
   allow_nip07: true,                   // oder allowNip07
   custom_bunker_uri: ""                // oder customBunkerUri
@@ -408,6 +414,7 @@ Signatur:
 init(options?: {
   config?: {
     signer_iframe_uri?: string; // Alias: signerIframeUri
+    form_uri?: string;          // Alias: formUri
     relays?: string[];
     allow_nip07?: boolean;      // Alias: allowNip07
     custom_bunker_uri?: string; // Alias: customBunkerUri
@@ -418,6 +425,7 @@ init(options?: {
 Config-Felder:
 
 - `signer_iframe_uri`: Pfad zur Signer-Seite. Default: `../signer.html`
+- `form_uri`: URI zu einem JSON-Form-Schema. Leer => lokales Default-Schema (`kind1.json`)
 - `relays`: optionale Relay-Liste fuer den Client. Leer = interne Defaults
 - `allow_nip07`: wenn `true`, kann intern `window.nostr` bereitgestellt werden
 - `custom_bunker_uri`: optionaler fixer Fallback auf eine `bunker://...` URI
@@ -491,6 +499,7 @@ import { nostrclient } from "./nostreclient.js";
 
 const config = {
   signer_iframe_uri: "../signer.html",
+  form_uri: "./forms/schemas/kind1.json",
   relays: [],
   allow_nip07: false
 };
@@ -510,7 +519,7 @@ Dadurch ist klar dokumentiert, welches Feld welche API-Funktion verwendet.
 Beispiel fuer den Post-Flow:
 
 - `data-nostr="post-form"`: Formular-Submit wird als Publish-Trigger genutzt
-- `data-nostr="post-content"`: dieses Feld liefert den Event-`content` fuer `publishTextNote(...)`
+- `data-nostr="form-fields"`: Container, in den Felder aus dem geladenen Schema gerendert werden
 - `data-nostr="send-btn"`: Submit-Button fuer den Post-Flow
 - `data-nostr="content-count"`: Zeichenzaehler
 
@@ -518,10 +527,67 @@ Minimalbeispiel:
 
 ```html
 <form data-nostr="post-form" novalidate>
-  <textarea data-nostr="post-content" maxlength="280"></textarea>
+  <div data-nostr="form-fields"></div>
   <button data-nostr="send-btn" type="submit">Signieren + senden</button>
   <span data-nostr="content-count">0 / 280</span>
 </form>
 ```
 
 Wenn du Felder erweiterst, vergib neue `data-nostr` Rollen und dokumentiere sie hier, damit das Mapping fuer CMS-Integrationen eindeutig bleibt.
+
+## 13. Form-Architektur: NIP, Kind, Schema, Adapter
+
+### 13.1 Unterschied NIP vs Kind
+
+- `NIP` = Spezifikation (Regeln/Verhalten)
+- `kind` = numerischer Eventtyp im Event (`event.kind`)
+
+Darum kann ein NIP mehrere Kinds nutzen (z. B. NIP-52 mit mehreren 3192x-Kinds).
+
+### 13.2 Unterschied Schema vs Adapter
+
+- `Schema` beschreibt die UI:
+  - Felder, Label, Typen, Required, Defaults, Reihenfolge
+- `Adapter` beschreibt das Mapping zur Nostr-Event-Struktur:
+  - wie aus Formwerten `kind`, `tags`, `content` entstehen
+
+### 13.3 Aktueller Laufzeit-Flow
+
+1. `nostrclient.init({ config })` laedt `form_uri` (oder fallback `kind1.json`)
+2. `form-generator.js` rendert Felder in `data-nostr="form-fields"`
+3. Beim Submit:
+   - Werte sammeln + validieren
+   - Adapter erzeugt unsigned Event
+   - `nostrclient.signEvent(...)` + `nostrclient.publishSignedEvent(...)`
+
+### 13.4 Schema-Format (JSON)
+
+Minimal:
+
+```json
+{
+  "version": "nostr-form-v1",
+  "id": "kind1-default",
+  "kind": 1,
+  "adapter": "kind-1",
+  "submitLabel": "Signieren + senden",
+  "contentField": "content",
+  "fields": [
+    { "name": "content", "label": "Content", "type": "textarea", "required": true, "maxLength": 280 }
+  ]
+}
+```
+
+Erweiterungen fuer Multi-Kind/NIP-Setups:
+
+- `kindSelectorField`: Feldname, dessen Wert den Kind waehlt
+- `kindSelectorMap`: Mapping von Feldwert -> Kindnummer
+- `tagMappings`: Mapping von Feld -> Tagname
+
+Damit kann ein einziges Schema auch NIPs mit mehreren Kinds abbilden.
+
+Beispiel-Schemata im Repo:
+
+- `democlient/forms/schemas/kind1.json`
+- `democlient/forms/schemas/kind30023.json`
+- `democlient/forms/schemas/nip52-calendar.json` (Multi-Kind Beispiel fuer 31922-31925)

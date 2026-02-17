@@ -1,0 +1,72 @@
+﻿{
+  "version": "nostr-form-v1",
+  "id": "nip52-calendar-example",
+  "title": "NIP-52 Kalender (Beispiel)",
+  "description": "Beispielhaftes Multi-Kind-Schema mit Kind-Selector.",
+  "kind": 31922,
+  "adapter": "generic-kind",
+  "kindSelectorField": "calendarKind",
+  "kindSelectorMap": {
+    "dateBased": 31922,
+    "timeBased": 31923,
+    "calendar": 31924,
+    "rsvp": 31925
+  },
+  "submitLabel": "Kalender-Event signieren + senden",
+  "contentField": "description",
+  "tagMappings": [
+    { "field": "title", "tag": "title" },
+    { "field": "start", "tag": "start" },
+    { "field": "end", "tag": "end" },
+    { "field": "location", "tag": "location" }
+  ],
+  "fields": [
+    {
+      "name": "calendarKind",
+      "label": "Kalender-Kind",
+      "type": "select",
+      "required": true,
+      "defaultValue": "dateBased",
+      "options": [
+        { "label": "Date based (31922)", "value": "dateBased" },
+        { "label": "Time based (31923)", "value": "timeBased" },
+        { "label": "Calendar (31924)", "value": "calendar" },
+        { "label": "RSVP (31925)", "value": "rsvp" }
+      ]
+    },
+    {
+      "name": "title",
+      "label": "Titel",
+      "type": "text",
+      "required": true,
+      "maxLength": 160
+    },
+    {
+      "name": "start",
+      "label": "Start",
+      "type": "datetime-local",
+      "required": false
+    },
+    {
+      "name": "end",
+      "label": "Ende",
+      "type": "datetime-local",
+      "required": false
+    },
+    {
+      "name": "location",
+      "label": "Ort",
+      "type": "text",
+      "required": false,
+      "maxLength": 220
+    },
+    {
+      "name": "description",
+      "label": "Beschreibung",
+      "type": "textarea",
+      "required": false,
+      "maxLength": 5000,
+      "rows": 8
+    }
+  ]
+}

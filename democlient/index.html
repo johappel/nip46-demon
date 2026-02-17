@@ -27,8 +27,10 @@
             </div>
 
             <form id="post-form" data-nostr="post-form" novalidate>
-                <label for="post-content">Content (kind:1)</label>
-                <textarea id="post-content" data-nostr="post-content" maxlength="280" placeholder="Hallo von meinem eigenen Nostr Client"></textarea>
+                <div id="form-fields" data-nostr="form-fields">
+                    <label for="post-content">Content (kind:1)</label>
+                    <textarea id="post-content" data-nostr="post-content" maxlength="280" placeholder="Hallo von meinem eigenen Nostr Client"></textarea>
+                </div>
                 <button id="send-btn" data-nostr="send-btn" type="submit" disabled>Signieren + senden</button>
             </form>
 

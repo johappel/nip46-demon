@@ -221,3 +221,16 @@ Refactoring von `signer.html` in wartbare Module plus neue Aufmerksamkeits-Featu
 - [x] `democlient/index.html`: zentrale Elemente mit `data-nostr` versehen (u. a. `post-form`, `post-content`, `send-btn`, Dialog-Elemente).
 - [x] `SIGNER_DOKU.md`: API-Doku praezisiert (`nostrclient.<methode>()` statt globalen Einzel-Funktionen).
 - [x] `SIGNER_DOKU.md`: DOM-Binding fuer CMS-Integrationen dokumentiert (inkl. Post-Flow-Mapping).
+
+## Fortschritt 2026-02-17 (Forms Modulbau + Schema/Adapter-Architektur)
+
+- [x] Neuer Ordner `democlient/forms/` angelegt.
+- [x] `democlient/forms/schema-loader.js` implementiert (Schema-Laden + Normalisierung + Fallback auf lokales Default-Schema).
+- [x] `democlient/forms/form-generator.js` implementiert (Felder rendern, Werte sammeln, Validierung, Live-Zeichenzaehler).
+- [x] `democlient/forms/kind-adapters/index.js` implementiert (Adapter-Registry + `kind-1`, `kind-30023`, `generic-kind`).
+- [x] `democlient/forms/schemas/kind1.json` als lokales Default-Schema angelegt.
+- [x] Beispiel-Schemata angelegt: `kind30023.json` und `nip52-calendar.json` (Kind-Selector 31922-31925).
+- [x] `democlient/nostreclient.js` auf dynamischen Submit-Flow umgestellt (`collect -> validate -> adapter -> sign -> publish`).
+- [x] `democlient/index.html` um `data-nostr=\"form-fields\"` als Render-Container erweitert.
+- [x] `democlient/index.js` um `config.form_uri` erweitert.
+- [x] `SIGNER_DOKU.md` um Architektur-Abschnitt (NIP vs Kind, Schema vs Adapter, Schema-Format) erweitert.
