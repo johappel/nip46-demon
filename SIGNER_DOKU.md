@@ -374,3 +374,125 @@ Empfehlung:
 
 - `democlient/nostreclient.js` als stabilen Wrapper nutzen
 - bei tieferer Kontrolle direkt `democlient/nostr.js` nutzen
+
+## 12. API-Doku: `democlient/nostreclient.js`
+
+Diese API ist fuer den Einsatz im Demo-HTML (`democlient/index.html`) gedacht.
+
+Wichtig:
+
+- Die API ist ein ES-Modul-Export, kein globales `window`-Objekt.
+- In `index.html` wird sie ueber `democlient/index.js` importiert und gestartet.
+- Export-Namen: `nostreclient` und Alias `nostrclient` (beide identisch).
+
+### 12.1 Import
+
+```js
+import { nostrclient } from "./nostreclient.js";
+```
+
+oder:
+
+```js
+import { nostreclient } from "./nostreclient.js";
+```
+
+### 12.2 `init(options)`
+
+Startet den kompletten Signer-Flow (iframe laden, Verbindung herstellen, UI-Events verdrahten).
+
+Signatur:
+
+```ts
+init(options?: {
+  config?: {
+    signer_iframe_uri?: string; // Alias: signerIframeUri
+    relays?: string[];
+    allow_nip07?: boolean;      // Alias: allowNip07
+    custom_bunker_uri?: string; // Alias: customBunkerUri
+  }
+}): Promise<void>
+```
+
+Config-Felder:
+
+- `signer_iframe_uri`: Pfad zur Signer-Seite. Default: `../signer.html`
+- `relays`: optionale Relay-Liste fuer den Client. Leer = interne Defaults
+- `allow_nip07`: wenn `true`, kann intern `window.nostr` bereitgestellt werden
+- `custom_bunker_uri`: optionaler fixer Fallback auf eine `bunker://...` URI
+
+Verhalten:
+
+- Bei erneutem `init(...)` wird die bestehende Verbindung sauber ersetzt (Re-Init).
+- Wenn erforderliche Demo-Elemente in der HTML fehlen, wird ein Fehler geworfen.
+
+### 12.3 `getPublicKey()`
+
+Liest den aktiven Public Key ueber die bestehende Verbindung.
+
+```ts
+getPublicKey(): Promise<string>
+```
+
+### 12.4 `signEvent(unsignedEvent)`
+
+Signiert ein unsigniertes Nostr-Event ueber den verbundenen Signer.
+
+```ts
+signEvent(unsignedEvent: object): Promise<object>
+```
+
+### 12.5 `publishSignedEvent(signedEvent)`
+
+Publiziert ein bereits signiertes Event an die aktiven Relays.
+
+```ts
+publishSignedEvent(signedEvent: object): Promise<string[]>
+```
+
+### 12.6 `publishTextNote(content, tags?)`
+
+Komfort-Methode fuer `kind:1`:
+Public Key lesen, signieren, publizieren.
+
+```ts
+publishTextNote(content: string, tags?: string[][]): Promise<{
+  signedEvent: object;
+  publishedRelayUrls: string[];
+}>
+```
+
+### 12.7 `getState()`
+
+Liefert einen Snapshot des aktuellen Wrapper-/Verbindungszustands.
+
+```ts
+getState(): {
+  initialized: boolean;
+  runtimeConfig: object;
+  connection: object | null;
+  bunker: object | null;
+}
+```
+
+### 12.8 `destroy()`
+
+Entfernt Listener/Observer und beendet die aktive Wrapper-Instanz.
+
+```ts
+destroy(): void
+```
+
+### 12.9 Beispiel fuer `index.html`/`index.js`
+
+```js
+import { nostrclient } from "./nostreclient.js";
+
+const config = {
+  signer_iframe_uri: "../signer.html",
+  relays: [],
+  allow_nip07: false
+};
+
+await nostrclient.init({ config });
+```

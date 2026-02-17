@@ -209,3 +209,8 @@ Refactoring von `signer.html` in wartbare Module plus neue Aufmerksamkeits-Featu
 - [x] `democlient/index.js` auf minimalen Entry-Point reduziert (nur Config + `nostreclient.init(...)`).
 - [x] Wrapper-Methoden ergaenzt: `getPublicKey`, `signEvent`, `publishSignedEvent`, `publishTextNote`, `getState`, `destroy`.
 - [x] `SIGNER_DOKU.md` auf den neuen Integrationsweg aktualisiert.
+
+## Fortschritt 2026-02-17 (API-Doku nostrclient/nostreclient)
+
+- [x] `SIGNER_DOKU.md`: neue API-Referenz fuer `democlient/nostreclient.js` ergaenzt (Import, Config, Methoden, Rueckgaben, Verhalten).
+- [x] `democlient/nostreclient.js`: Alias-Export `nostrclient` hinzugefuegt (identisch zu `nostreclient`) fuer klarere Benennung im Client-Code.
