@@ -721,6 +721,62 @@ async function waitForSignerBridgeReady(timeoutMs = 20000, pollMs = 500) {
 }
 
 /**
+ * Builds one signer result object from bridge connection info.
+ * @param {any} connectionInfo - Bridge connection payload.
+ * @returns {SignerEnsureResult|null} Normalized signer result or null.
+ */
+function signerResultFromBridgeConnectionInfo(connectionInfo) {
+    const pubkey = normalizePubkey(String(connectionInfo?.pubkey || ""));
+    if (!isPubkeyHex(pubkey)) return null;
+    const npub = String(connectionInfo?.npub || "").trim();
+    const keyName = String(connectionInfo?.keyName || "Aktiver Signer-Key").trim() || "Aktiver Signer-Key";
+    return {
+        userId: "",
+        keyId: "",
+        keyName,
+        pubkey,
+        npub,
+        existed: true,
+        active: true
+    };
+}
+
+/**
+ * Resolves signer pubkey from bridge without triggering wp-ensure.
+ * @param {number} timeoutMs - Maximum wait time in ms.
+ * @returns {Promise<SignerEnsureResult>} Signer result based on active bridge key.
+ */
+async function resolveSignerResultFromBridge(timeoutMs = 12000) {
+    if (!state.bunkerClient) {
+        throw new Error("Signer-Bridge ist nicht initialisiert.");
+    }
+    await waitForSignerBridgeReady(timeoutMs, 400);
+
+    let connectionInfo = null;
+    if (typeof state.bunkerClient.syncConnectionInfo === "function") {
+        try {
+            connectionInfo = await state.bunkerClient.syncConnectionInfo();
+        } catch (_err) {
+            // Fallback to state snapshot below.
+        }
+    }
+
+    if (!connectionInfo && typeof state.bunkerClient.getState === "function") {
+        const snapshot = state.bunkerClient.getState();
+        connectionInfo = snapshot?.lastBridgeConnectionInfo || snapshot?.activeConnection || null;
+    }
+
+    const signerResult = signerResultFromBridgeConnectionInfo(connectionInfo);
+    if (!signerResult) {
+        throw new Error("Signer liefert keinen gueltigen Bridge-Pubkey.");
+    }
+
+    state.lastEnsureResult = signerResult;
+    renderSignerResult(signerResult);
+    return signerResult;
+}
+
+/**
  * Ensures a signer key for the currently active identity.
  * @returns {Promise<SignerEnsureResult>} Ensure result.
  */
@@ -745,6 +801,23 @@ async function ensureSignerKeyForActiveIdentity() {
         closeSignerDialog();
     }
     return ensureResult;
+}
+
+/**
+ * Resolves signer result for current identity with compare-first strategy.
+ * Uses bridge pubkey when backend is already bound, wp-ensure only when needed.
+ * @returns {Promise<SignerEnsureResult>} Signer result for reconciliation.
+ */
+async function resolveSignerResultForActiveIdentity() {
+    if (!state.activeIdentity) throw new Error("Identity ist noch nicht geladen.");
+    const expectedPubkey = normalizePubkey(state.activeIdentity.expectedPubkey);
+    const isBackendBound = isPubkeyHex(expectedPubkey);
+
+    if (isBackendBound) {
+        return resolveSignerResultFromBridge(15000);
+    }
+
+    return ensureSignerKeyForActiveIdentity();
 }
 
 /**
@@ -804,7 +877,7 @@ async function runFullSync() {
 
     try {
         await loadIdentityFromBackend();
-        await ensureSignerKeyForActiveIdentity();
+        await resolveSignerResultForActiveIdentity();
         await reconcileBindingState();
     } catch (error) {
         const message = String(error?.message || "Unbekannter Fehler.");
@@ -856,13 +929,13 @@ async function refreshIdentityOnly() {
 async function onEnsureLinkClicked() {
     if (state.isBusy) return;
     setBusyState(true);
-    setStatusText(overallStatusEl, "Fordere Signer-Key an ...", "idle");
+    setStatusText(overallStatusEl, "Pruefe Signer-Key und Zuordnung ...", "idle");
 
     try {
         if (!state.activeIdentity) {
             await loadIdentityFromBackend();
         }
-        await ensureSignerKeyForActiveIdentity();
+        await resolveSignerResultForActiveIdentity();
         await reconcileBindingState();
     } catch (error) {
         const message = String(error?.message || "Unbekannter Fehler.");

@@ -792,6 +792,8 @@ Hinweis zur Frontend-Integration:
 - Wenn fuer `wp-ensure-user-key` kein Session-Passwort verfuegbar ist, startet der Signer jetzt die Passwort-Bestaetigung aktiv (statt sofort abzubrechen); der Identity-Link-Client wartet dafuer laenger (120s).
 - Der Identity-Link-Client wartet vor `wp-ensure-user-key` explizit auf `connection-info` der Bridge (Race-Condition-Fix zwischen iframe-Init und erster Ensure-Anfrage).
 - Nach erfolgreicher Entsperrung im eingebetteten Signer kann der Identity-Link-Client automatisch einen erneuten Sync anstossen, damit ein frueher Lock-Fehlerzustand sofort aufgeloest wird.
+- Compare-First-Flow: Wenn das Backend bereits einen `expectedPubkey` hat, vergleicht der Identity-Link-Client standardmaessig nur den aktiven Signer-Pubkey aus `connection-info` (ohne `wp-ensure-user-key` und ohne Passwortabfrage).
+- `wp-ensure-user-key` wird damit primaer fuer den ungebundenen Erstzuordnungsfall verwendet.
 
 Beispiel:
 

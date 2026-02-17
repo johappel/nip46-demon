@@ -333,16 +333,6 @@ function closeSignerDialog() {
 }
 
 /**
- * Checks whether the signer dialog is currently open.
- * @returns {boolean} True when signer dialog is visible.
- */
-function isSignerDialogOpen() {
-    if (!(signerDialogEl instanceof HTMLDialogElement)) return false;
-    if (typeof signerDialogEl.open === "boolean") return signerDialogEl.open;
-    return signerDialogEl.hasAttribute("open");
-}
-
-/**
  * Sets general busy state and toggles action buttons.
  * @param {boolean} isBusy - Busy flag.
  */
@@ -727,12 +717,6 @@ async function waitForSignerBridgeReady(timeoutMs = 20000, pollMs = 500) {
 async function ensureSignerKeyForActiveIdentity() {
     if (!state.activeIdentity) throw new Error("Identity ist noch nicht geladen.");
 
-    const dialogWasOpen = isSignerDialogOpen();
-    if (!dialogWasOpen) {
-        state.signerUnlockFlowActive = true;
-        openSignerDialog();
-    }
-
     await waitForSignerBridgeReady(25000, 500);
     const adapter = resolveProviderAdapter(state.activeIdentity.provider);
     const bridgeUserId = adapter.toBridgeUserId(state.activeIdentity);
@@ -740,10 +724,6 @@ async function ensureSignerKeyForActiveIdentity() {
     state.lastEnsureResult = ensureResult;
     renderSignerResult(ensureResult);
     appendResultLine(`Signer-Key bereit: ${ensureResult.pubkey.slice(0, 16)}... (${ensureResult.keyName})`);
-    if (!dialogWasOpen && state.signerUnlockFlowActive) {
-        state.signerUnlockFlowActive = false;
-        closeSignerDialog();
-    }
     return ensureResult;
 }
 

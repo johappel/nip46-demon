@@ -490,3 +490,15 @@ Refactoring von `signer.html` in wartbare Module plus neue Aufmerksamkeits-Featu
   - `integrations/wordpress/nostr-identity-link/public/identity-link/index.html` -> `index.js?v=20260217i`
   - `integrations/wordpress/nostr-identity-link/public/signer/sw.js` -> `CACHE_VERSION = "nip46-signer-v9"`
 
+## Fortschritt 2026-02-17 (Compare-First statt Always-Ensure)
+
+- [x] `embedclients/identity-link/index.js`: Compare-First-Strategie eingefuehrt.
+  - Bei bereits gebundenem Backend (`expectedPubkey` vorhanden) wird der aktive Signer-Pubkey direkt ueber Bridge gelesen (`connection-info`) und nur verglichen.
+  - `wp-ensure-user-key` wird nur noch bei ungebundenem Backend aufgerufen (Erstzuordnung).
+- [x] `integrations/wordpress/nostr-identity-link/public/identity-link/index.js`: identische Compare-First-Logik im Plugin-Bundle.
+- [x] Neue Bridge-Helfer hinzugefuegt (`signerResultFromBridgeConnectionInfo`, `resolveSignerResultFromBridge`, `resolveSignerResultForActiveIdentity`).
+- [x] `runFullSync()` und `onEnsureLinkClicked()` auf Compare-First umgestellt.
+- [x] UX-Text angepasst: "Pruefe Signer-Key und Zuordnung ..." statt pauschal "Fordere Signer-Key an ...".
+- [x] Cache-Busting aktualisiert:
+  - `integrations/wordpress/nostr-identity-link/public/identity-link/index.html` -> `index.js?v=20260217k`
+
