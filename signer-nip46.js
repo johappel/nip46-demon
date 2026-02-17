@@ -15,6 +15,8 @@ import { createSignerAttentionManager } from "./signer-ui.js";
         const UNLOCK_CACHE_TTL_KEY = "nip46_unlock_cache_ttl_v1";
         // Merkt die zuletzt gewählte "Entsperrt bleiben"-Option im UI
         const UNLOCK_REMEMBER_PREF_STORAGE_KEY = "nip46_unlock_remember_pref_v1";
+        // Oeffentliche Metadaten des zuletzt aktiven Schluessels (pubkey/npub), nutzbar fuer Compare-Only Flows ohne Entsperrung
+        const PUBLIC_CONNECTION_INFO_CACHE_KEY = "nip46_public_connection_info_v1";
         // Speichert Genehmigungen für Anfragen (pubkey:method -> TTL oder PERMISSION_FOREVER)
         const PERMISSION_STORAGE_KEY = "nip46_permissions_v1";
         // Optionale Metadaten zu Genehmigungen (z.B. aktiver Schlüsselname beim Erteilen)
@@ -816,6 +818,56 @@ import { createSignerAttentionManager } from "./signer-ui.js";
             localStorage.setItem(WP_USER_BINDINGS_STORAGE_KEY, JSON.stringify(bindings));
         }
 
+        /**
+         * Speichert oeffentliche Verbindungsdaten des aktiven Schluessels fuer spaetere Compare-Only Abfragen.
+         * Es werden absichtlich nur nicht-sensitive Felder persistiert.
+         *
+         * @param {{pubkey:string,npub:string,keyName:string}=} info - Oeffentliche Schluesselinfos.
+         * @returns {void}
+         */
+        function savePublicConnectionInfoCache(info) {
+            try {
+                const pubkey = normalizePubkey(String(info?.pubkey || ""));
+                const npub = String(info?.npub || "").trim();
+                const keyName = String(info?.keyName || "").trim();
+                if (!isPubkeyHex(pubkey) || !npub) return;
+                localStorage.setItem(
+                    PUBLIC_CONNECTION_INFO_CACHE_KEY,
+                    JSON.stringify({
+                        v: 1,
+                        pubkey,
+                        npub,
+                        keyName,
+                        savedAt: Date.now()
+                    })
+                );
+            } catch (_err) {
+                // Ignore storage failures.
+            }
+        }
+
+        /**
+         * Laedt oeffentliche Verbindungsdaten aus dem Cache.
+         *
+         * @returns {{pubkey:string,npub:string,keyName:string,savedAt:number}|null} Cache-Eintrag oder null.
+         */
+        function loadPublicConnectionInfoCache() {
+            try {
+                const raw = localStorage.getItem(PUBLIC_CONNECTION_INFO_CACHE_KEY);
+                if (!raw) return null;
+                const parsed = JSON.parse(raw);
+                const pubkey = normalizePubkey(String(parsed?.pubkey || ""));
+                const npub = String(parsed?.npub || "").trim();
+                const keyName = String(parsed?.keyName || "").trim();
+                const savedAt = Number(parsed?.savedAt || 0);
+                if (parsed?.v !== 1) return null;
+                if (!isPubkeyHex(pubkey) || !npub) return null;
+                return { pubkey, npub, keyName, savedAt: Number.isFinite(savedAt) ? savedAt : 0 };
+            } catch (_err) {
+                return null;
+            }
+        }
+
         // ===== Unlock-Cache (Session und TTL-basiert) =====
         // Speichert einen abgeleiteten Schlüssel (nicht das Klartext-Passwort)
         
@@ -1387,7 +1439,7 @@ import { createSignerAttentionManager } from "./signer-ui.js";
                     askName: false,
                     askKey: true,
                     askRemember: true,
-                    defaultRememberMode: "none",
+                    defaultRememberMode: "session",
                     keyOptions: keyring.keys.map((entry, index) => ({
                         id: entry.id,
                         label: keyDisplayName(entry, index)
@@ -1446,7 +1498,7 @@ import { createSignerAttentionManager } from "./signer-ui.js";
                     askName: false,
                     askKey: false,
                     askRemember: true,
-                    defaultRememberMode: "none",
+                    defaultRememberMode: "session",
                     submitLabel: "Entsperren & migrieren"
                 });
                 if (!unlock.password) throw new Error("Kein Passwort angegeben.");
@@ -1487,7 +1539,7 @@ import { createSignerAttentionManager } from "./signer-ui.js";
                     askName: true,
                     askKey: false,
                     askRemember: true,
-                    defaultRememberMode: "none",
+                    defaultRememberMode: "session",
                     submitLabel: "Migrieren"
                 });
                 if (!unlock.password) throw new Error("Kein Passwort angegeben.");
@@ -1521,7 +1573,7 @@ import { createSignerAttentionManager } from "./signer-ui.js";
                 askName: true,
                 askKey: false,
                 askRemember: true,
-                defaultRememberMode: "none",
+                defaultRememberMode: "session",
                 allowGenerate: true,
                 submitLabel: "Speichern & entsperren"
             });
@@ -2523,6 +2575,7 @@ import { createSignerAttentionManager } from "./signer-ui.js";
             localStorage.removeItem(PERMISSION_STORAGE_KEY);
             localStorage.removeItem(PERMISSION_META_STORAGE_KEY);
             localStorage.removeItem(WP_USER_BINDINGS_STORAGE_KEY);
+            localStorage.removeItem(PUBLIC_CONNECTION_INFO_CACHE_KEY);
             localStorage.removeItem(UNLOCK_REMEMBER_PREF_STORAGE_KEY);
             localStorage.removeItem(RELAYS_STORAGE_KEY);
 
@@ -2838,6 +2891,7 @@ import { createSignerAttentionManager } from "./signer-ui.js";
          * - "ready": Signer hat erfolgreich initialisiert (payload: connectionInfo)
          * - "locked": Signer benötigt Entsperrrung (payload: { reason: string })
          * - "connection-info": Response auf connection-info Anfrage
+         * - "public-connection-info": Oeffentliche Key-Info (auch wenn Signer gesperrt)
          * - "frame-size": Meldet aktuelle iframe Höhe (payload: { height: number })
          * - "wp-user-key-result": Response auf wp-ensure-user-key Anfrage
          * 
@@ -2870,6 +2924,7 @@ import { createSignerAttentionManager } from "./signer-ui.js";
          * Unterstützte Anfragen:
          * - "ping": Prüfe ob Signer ready ist → antworte mit connectionInfo oder "locked"
          * - "get-connection-info": Wie ping
+         * - "get-public-connection-info": Liefert oeffentliche Key-Info (auch bei Lock)
          * - "request-frame-size": Parent fragt nach neuer Höhe → antworte mit frame-size
          * - "show-management": Signer aus Compact-Mode holen und Management-Tab zeigen
          * - "wp-ensure-user-key": {userId} → erstelle/lade WP User Key → antworte mit wp-user-key-result
@@ -2899,6 +2954,31 @@ import { createSignerAttentionManager } from "./signer-ui.js";
                 } else {
                     postBridgeMessage("locked", { reason: "Signer ist noch gesperrt." });
                 }
+                return;
+            }
+
+            if (data.type === "get-public-connection-info") {
+                if (connectionInfo?.pubkey && connectionInfo?.npub) {
+                    postBridgeMessage("public-connection-info", {
+                        pubkey: connectionInfo.pubkey,
+                        npub: connectionInfo.npub,
+                        keyName: connectionInfo.keyName || "",
+                        locked: false
+                    });
+                    return;
+                }
+                const cachedInfo = loadPublicConnectionInfoCache();
+                if (cachedInfo?.pubkey && cachedInfo?.npub) {
+                    postBridgeMessage("public-connection-info", {
+                        pubkey: cachedInfo.pubkey,
+                        npub: cachedInfo.npub,
+                        keyName: cachedInfo.keyName || "",
+                        locked: true,
+                        cached: true
+                    });
+                    return;
+                }
+                postBridgeMessage("locked", { reason: "Kein oeffentlicher Schluessel im Cache." });
                 return;
             }
 
@@ -3416,6 +3496,7 @@ import { createSignerAttentionManager } from "./signer-ui.js";
                 bunkerUri,
                 nostrconnectUri
             };
+            savePublicConnectionInfoCache(connectionInfo);
 
             document.getElementById("status").innerText = "bereit";
             document.getElementById("user-info").innerText =

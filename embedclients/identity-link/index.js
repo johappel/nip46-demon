@@ -104,7 +104,7 @@ function isLockedSignerMessage(message) {
 function isReadySignerMessage(message) {
     const text = String(message || "").toLowerCase();
     if (!text) return false;
-    return text.includes("signer bereit");
+    return text.includes("signer bereit") || text.includes("bridge bereit") || text.includes("verbunden. signer ist bereit");
 }
 
 /**
@@ -698,6 +698,7 @@ async function waitForSignerBridgeReady(timeoutMs = 20000, pollMs = 500) {
     if (!state.bunkerClient || typeof state.bunkerClient.syncConnectionInfo !== "function") return;
     const deadline = Date.now() + Math.max(1000, Number(timeoutMs) || 20000);
     let lastErrorMessage = "";
+    let signerDialogRequested = false;
 
     while (Date.now() < deadline) {
         try {
@@ -705,9 +706,12 @@ async function waitForSignerBridgeReady(timeoutMs = 20000, pollMs = 500) {
             return;
         } catch (error) {
             lastErrorMessage = String(error?.message || "");
-            if (isLockedSignerMessage(lastErrorMessage)) {
+            if (!signerDialogRequested) {
                 state.signerUnlockFlowActive = true;
                 openSignerDialog();
+                requestSignerManagementView();
+                signerDialogRequested = true;
+            } else if (isLockedSignerMessage(lastErrorMessage)) {
                 requestSignerManagementView();
             }
             await new Promise((resolve) => setTimeout(resolve, Math.max(100, Number(pollMs) || 500)));
@@ -750,30 +754,40 @@ async function resolveSignerResultFromBridge(timeoutMs = 12000) {
     if (!state.bunkerClient) {
         throw new Error("Signer-Bridge ist nicht initialisiert.");
     }
-    await waitForSignerBridgeReady(timeoutMs, 400);
+    const deadline = Date.now() + Math.max(1000, Number(timeoutMs) || 12000);
+    let lastErrorMessage = "";
 
-    let connectionInfo = null;
-    if (typeof state.bunkerClient.syncConnectionInfo === "function") {
+    while (Date.now() < deadline) {
+        let connectionInfo = null;
         try {
-            connectionInfo = await state.bunkerClient.syncConnectionInfo();
-        } catch (_err) {
-            // Fallback to state snapshot below.
+            if (typeof state.bunkerClient.syncPublicConnectionInfo === "function") {
+                connectionInfo = await state.bunkerClient.syncPublicConnectionInfo();
+            } else if (typeof state.bunkerClient.syncConnectionInfo === "function") {
+                connectionInfo = await state.bunkerClient.syncConnectionInfo();
+            }
+        } catch (error) {
+            lastErrorMessage = String(error?.message || "");
         }
+
+        if (!connectionInfo && typeof state.bunkerClient.getState === "function") {
+            const snapshot = state.bunkerClient.getState();
+            connectionInfo = snapshot?.lastBridgeConnectionInfo || snapshot?.activeConnection || null;
+        }
+
+        const signerResult = signerResultFromBridgeConnectionInfo(connectionInfo);
+        if (signerResult) {
+            state.lastEnsureResult = signerResult;
+            renderSignerResult(signerResult);
+            return signerResult;
+        }
+
+        if (!lastErrorMessage) {
+            lastErrorMessage = "Signer liefert keinen gueltigen Bridge-Pubkey.";
+        }
+        await new Promise((resolve) => setTimeout(resolve, 350));
     }
 
-    if (!connectionInfo && typeof state.bunkerClient.getState === "function") {
-        const snapshot = state.bunkerClient.getState();
-        connectionInfo = snapshot?.lastBridgeConnectionInfo || snapshot?.activeConnection || null;
-    }
-
-    const signerResult = signerResultFromBridgeConnectionInfo(connectionInfo);
-    if (!signerResult) {
-        throw new Error("Signer liefert keinen gueltigen Bridge-Pubkey.");
-    }
-
-    state.lastEnsureResult = signerResult;
-    renderSignerResult(signerResult);
-    return signerResult;
+    throw new Error(lastErrorMessage || "Signer liefert keinen gueltigen Bridge-Pubkey.");
 }
 
 /**
@@ -813,10 +827,19 @@ async function resolveSignerResultForActiveIdentity() {
     const expectedPubkey = normalizePubkey(state.activeIdentity.expectedPubkey);
     const isBackendBound = isPubkeyHex(expectedPubkey);
 
-    if (isBackendBound) {
-        return resolveSignerResultFromBridge(15000);
+    try {
+        const bridgeResult = await resolveSignerResultFromBridge(15000);
+        appendResultLine(`Signer-Bridge-Pubkey genutzt: ${bridgeResult.pubkey.slice(0, 16)}...`);
+        return bridgeResult;
+    } catch (bridgeError) {
+        const bridgeMessage = String(bridgeError?.message || "Bridge-Pubkey nicht verfuegbar.");
+        appendResultLine(`Bridge-Pubkey nicht verfuegbar: ${bridgeMessage}`);
+        if (isBackendBound) {
+            throw bridgeError;
+        }
     }
 
+    appendResultLine("Backend ungebunden: Fallback auf wp-ensure-user-key.");
     return ensureSignerKeyForActiveIdentity();
 }
 

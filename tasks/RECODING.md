@@ -502,3 +502,37 @@ Refactoring von `signer.html` in wartbare Module plus neue Aufmerksamkeits-Featu
 - [x] Cache-Busting aktualisiert:
   - `integrations/wordpress/nostr-identity-link/public/identity-link/index.html` -> `index.js?v=20260217k`
 
+## Fortschritt 2026-02-17 (Reload-UX / weniger Passwort-Overhead)
+
+- [x] `embedclients/identity-link/index.js`: `waitForSignerBridgeReady(...)` oeffnet den Signer-Dialog jetzt bereits beim ersten Bridge-Fehler (nicht nur bei explizitem `gesperrt`-Text), damit die Passwortabfrage bei Reload sofort sichtbar wird.
+- [x] `integrations/wordpress/nostr-identity-link/public/identity-link/index.js`: gleicher Fix im Plugin-Bundle.
+- [x] `signer-nip46.js`: Standard fuer `Entsperrt bleiben` bei Unlock auf `session` gestellt (statt `none`), um wiederholte Passwortabfragen bei einfachem Reload zu reduzieren.
+- [x] `integrations/wordpress/nostr-identity-link/public/signer/signer-nip46.js`: gleiche Default-Umstellung im Plugin-Bundle.
+- [x] Cache-Busting aktualisiert:
+  - `integrations/wordpress/nostr-identity-link/public/identity-link/index.html` -> `index.js?v=20260217m`
+  - `integrations/wordpress/nostr-identity-link/public/signer/index.html` -> `signer-nip46.js?v=20260217m`
+  - `integrations/wordpress/nostr-identity-link/public/signer/sw.js` -> `CACHE_VERSION = "nip46-signer-v10"`
+
+## Fortschritt 2026-02-17 (Plugin-Bundle Sync-Fix Identity-Link)
+
+- [x] `integrations/wordpress/nostr-identity-link/public/identity-link/index.js` erneut 1:1 mit `embedclients/identity-link/index.js` synchronisiert (nur Plugin-spezifische Pfade angepasst), damit Compare-First/Bridge-First und neue UX-Fixes auch im WordPress-Bundle aktiv sind.
+- [x] Verifiziert: `runFullSync()` und `onEnsureLinkClicked()` nutzen jetzt `resolveSignerResultForActiveIdentity()` statt direktem Always-Ensure.
+- [x] Cache-Busting fuer Plugin-Identity-Link erneut erhoeht:
+  - `integrations/wordpress/nostr-identity-link/public/identity-link/index.html` -> `index.js?v=20260217o`
+
+## Fortschritt 2026-02-17 (Fast-Path: nur Pubkey-Vergleich)
+
+- [x] `democlient/nostr.js`: Bridge-Read-Only-Abfrage hinzugefuegt (`get-public-connection-info`), damit oeffentliche Signer-Key-Infos ohne `wp-ensure-user-key` geholt werden koennen.
+- [x] `democlient/nostr.js`: neue API `syncPublicConnectionInfo()` exportiert; `applyConnectionInfo()` merged Teilpayloads statt sie hart zu ueberschreiben.
+- [x] `democlient/nostr.js`: Status-Texte entkoppelt von Auto-Connect. Bei `autoConnect=false` jetzt klar: `Signer-Bridge bereit. Pubkey kann verglichen werden.`
+- [x] `embedclients/identity-link/index.js`: `resolveSignerResultFromBridge()` nutzt zuerst `syncPublicConnectionInfo()` (Fallback: `syncConnectionInfo()`), mit Retry-Loop statt fruehem Lock-Abbruch.
+- [x] `embedclients/identity-link/index.js`: Ready-Erkennung erweitert (`bridge bereit`/`verbunden`) fuer stabileren Unlock-Flow.
+- [x] Plugin-Bundle erneut synchronisiert:
+  - `integrations/wordpress/nostr-identity-link/public/democlient/nostr.js`
+  - `integrations/wordpress/nostr-identity-link/public/identity-link/index.js`
+  - `integrations/wordpress/nostr-identity-link/public/signer/signer-nip46.js` (enthaelt nun ebenfalls `public-connection-info`/Cache-Logik)
+- [x] Cache-Busting aktualisiert:
+  - `integrations/wordpress/nostr-identity-link/public/identity-link/index.html` -> `index.js?v=20260217p`
+  - `integrations/wordpress/nostr-identity-link/public/signer/index.html` -> `signer-nip46.js?v=20260217p`
+  - `integrations/wordpress/nostr-identity-link/public/signer/sw.js` -> `CACHE_VERSION = "nip46-signer-v11"`
+

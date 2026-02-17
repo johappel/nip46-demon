@@ -453,14 +453,28 @@ export function createBunkerConnectClient(options = {}) {
      */
     function applyConnectionInfo(info) {
         if (!info || typeof info !== "object") return;
-        state.lastBridgeConnectionInfo = info;
+        state.lastBridgeConnectionInfo = {
+            ...(state.lastBridgeConnectionInfo || {}),
+            ...info
+        };
+        const effectiveInfo = state.lastBridgeConnectionInfo;
         if (
             config.connectionUriInputEl &&
-            typeof info.nostrconnectUri === "string" &&
-            info.nostrconnectUri.startsWith("nostrconnect://")
+            typeof effectiveInfo.nostrconnectUri === "string" &&
+            effectiveInfo.nostrconnectUri.startsWith("nostrconnect://")
         ) {
-            config.connectionUriInputEl.value = info.nostrconnectUri;
+            config.connectionUriInputEl.value = effectiveInfo.nostrconnectUri;
         }
+    }
+
+    /**
+     * Builds one human-readable status once bridge info is available.
+     * @returns {string} Status text for host UI.
+     */
+    function bridgeReadyStatusText() {
+        if (state.activeConnection?.pubkey) return "Verbunden. Signer ist bereit.";
+        if (config.autoConnect && state.autoConnectArmed) return "Signer bereit. Auto-Connect laeuft ...";
+        return "Signer-Bridge bereit. Pubkey kann verglichen werden.";
     }
 
     /**
@@ -802,6 +816,73 @@ export function createBunkerConnectClient(options = {}) {
     }
 
     /**
+     * Requests public connection info from signer iframe.
+     * This endpoint can return cached pubkey info even when signer is locked.
+     * @param {number} timeoutMs - Request timeout in ms.
+     * @returns {Promise<any>} Public connection payload.
+     */
+    function requestPublicConnectionInfoFromIframe(timeoutMs = 3000) {
+        return new Promise((resolve, reject) => {
+            if (!config.signerFrameEl.contentWindow) {
+                reject(new Error("Signer iframe ist nicht bereit."));
+                return;
+            }
+            if (!state.signerFrameOrigin) {
+                reject(new Error("Signer Origin ist unbekannt."));
+                return;
+            }
+
+            const timeout = setTimeout(() => {
+                window.removeEventListener("message", onMessage);
+                reject(new Error("Keine oeffentliche Bridge-Antwort vom Signer iframe."));
+            }, timeoutMs);
+
+            /**
+             * Handles request-response bridge messages.
+             * @param {MessageEvent} event - Browser message event.
+             */
+            function onMessage(event) {
+                if (event.origin !== state.signerFrameOrigin) return;
+                const data = event.data;
+                if (!data || data.source !== BRIDGE_SOURCE) return;
+
+                if (data.type === "frame-size") {
+                    applySignerFrameHeight(data?.payload?.height);
+                    return;
+                }
+
+                if (data.type === "locked") {
+                    clearTimeout(timeout);
+                    window.removeEventListener("message", onMessage);
+                    state.bridgeLocked = true;
+                    reject(new Error(data?.payload?.reason || "Signer ist gesperrt."));
+                    return;
+                }
+
+                if (data.type !== "public-connection-info" && data.type !== "ready" && data.type !== "connection-info") {
+                    return;
+                }
+
+                clearTimeout(timeout);
+                window.removeEventListener("message", onMessage);
+                const payload = data.payload || null;
+                if (data.type === "public-connection-info" && payload?.locked === true) {
+                    state.bridgeLocked = true;
+                } else {
+                    state.bridgeLocked = false;
+                }
+                resolve(payload);
+            }
+
+            window.addEventListener("message", onMessage);
+            config.signerFrameEl.contentWindow.postMessage(
+                { source: BRIDGE_SOURCE, type: "get-public-connection-info" },
+                state.signerFrameOrigin
+            );
+        });
+    }
+
+    /**
      * Resolves relay list and bunker URI from bridge info or manual input.
      * @returns {{relays:string[], bunkerUri:string}} Connect target.
      */
@@ -905,11 +986,25 @@ export function createBunkerConnectClient(options = {}) {
             return;
         }
 
+        if (data.type === "public-connection-info") {
+            applyConnectionInfo(data.payload || null);
+            if (data?.payload?.locked) {
+                state.bridgeLocked = true;
+                setStatus("Signer gesperrt. Oeffentlicher Pubkey aus Cache verfuegbar.", false);
+            } else {
+                state.bridgeLocked = false;
+                state.dismissedUnlockDialog = false;
+                setStatus(bridgeReadyStatusText(), false);
+            }
+            scheduleSignerDomSync();
+            return;
+        }
+
         if (data.type === "ready" || data.type === "connection-info") {
             state.bridgeLocked = false;
             state.dismissedUnlockDialog = false;
             applyConnectionInfo(data.payload || null);
-            setStatus("Signer bereit. Verbindung wird vorbereitet ...", false);
+            setStatus(bridgeReadyStatusText(), false);
             scheduleSignerDomSync();
 
             if (config.autoConnect && state.autoConnectArmed && !state.activeConnection && !state.isConnecting) {
@@ -997,6 +1092,16 @@ export function createBunkerConnectClient(options = {}) {
      */
     async function syncConnectionInfo() {
         const info = await requestConnectionInfoFromIframe(3000);
+        applyConnectionInfo(info);
+        return info;
+    }
+
+    /**
+     * Fetches public connection info from iframe manually.
+     * @returns {Promise<any>} Public bridge info payload.
+     */
+    async function syncPublicConnectionInfo() {
+        const info = await requestPublicConnectionInfoFromIframe(3000);
         applyConnectionInfo(info);
         return info;
     }
@@ -1104,6 +1209,7 @@ export function createBunkerConnectClient(options = {}) {
         installSignerAndAutoConnect,
         connectNow,
         syncConnectionInfo,
+        syncPublicConnectionInfo,
         getPublicKey,
         signEvent,
         publishSignedEvent,

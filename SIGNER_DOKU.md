@@ -794,6 +794,12 @@ Hinweis zur Frontend-Integration:
 - Nach erfolgreicher Entsperrung im eingebetteten Signer kann der Identity-Link-Client automatisch einen erneuten Sync anstossen, damit ein frueher Lock-Fehlerzustand sofort aufgeloest wird.
 - Compare-First-Flow: Wenn das Backend bereits einen `expectedPubkey` hat, vergleicht der Identity-Link-Client standardmaessig nur den aktiven Signer-Pubkey aus `connection-info` (ohne `wp-ensure-user-key` und ohne Passwortabfrage).
 - `wp-ensure-user-key` wird damit primaer fuer den ungebundenen Erstzuordnungsfall verwendet.
+- Fuer Reload-UX oeffnet der Identity-Link-Client den Signer-Dialog bereits beim ersten Bridge-Ready-Fehler, damit eine ggf. noetige Entsperrung direkt sichtbar ist.
+- Default fuer `Entsperrt bleiben` im Signer-Unlock wurde auf `session` gesetzt, um Passwortabfragen bei einfachem Reload zu reduzieren (Sicherheit/Komfort-Tradeoff).
+- Der Signer stellt fuer Embed-Clients zusaetzlich `get-public-connection-info` bereit: oeffentliche Key-Infos (`pubkey`, `npub`, `keyName`) koennen dadurch auch im Lock-Zustand aus Cache gelesen werden.
+- Der Identity-Link-Client nutzt fuer den Standardfall jetzt diesen Read-Only-Bridge-Pfad und vergleicht primär nur `expectedPubkey` gegen `signerPubkey`.
+- `wp-ensure-user-key` wird im Alltag damit nur noch fuer den ungebundenen Erstzuordnungsfall benoetigt.
+- Die Host-Statusanzeige ist fuer den Compare-Only-Fall jetzt explizit: `Signer-Bridge bereit. Pubkey kann verglichen werden.` (statt unklarem `Verbindung wird vorbereitet ...`).
 
 Beispiel:
 

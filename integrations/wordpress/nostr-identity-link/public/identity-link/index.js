@@ -1,8 +1,8 @@
-﻿import { createBunkerConnectClient } from "../democlient/nostr.js";
+﻿import { createBunkerConnectClient } from "../../democlient/nostr.js";
 
 const BRIDGE_SOURCE = "nip46-signer-bridge";
 const DEFAULT_PROVIDER = "wordpress";
-const DEFAULT_SIGNER_URI = "../signer/";
+const DEFAULT_SIGNER_URI = "../../signer.html";
 const DEFAULT_IDENTITY_ENDPOINT = "/wp-json/identity-link/v1/session";
 const DEFAULT_BIND_ENDPOINT = "/wp-json/identity-link/v1/bind";
 const DEFAULT_REBIND_ENDPOINT = "/wp-json/identity-link/v1/rebind";
@@ -104,7 +104,7 @@ function isLockedSignerMessage(message) {
 function isReadySignerMessage(message) {
     const text = String(message || "").toLowerCase();
     if (!text) return false;
-    return text.includes("signer bereit");
+    return text.includes("signer bereit") || text.includes("bridge bereit") || text.includes("verbunden. signer ist bereit");
 }
 
 /**
@@ -330,6 +330,16 @@ function closeSignerDialog() {
         return;
     }
     signerDialogEl.removeAttribute("open");
+}
+
+/**
+ * Checks whether the signer dialog is currently open.
+ * @returns {boolean} True when signer dialog is visible.
+ */
+function isSignerDialogOpen() {
+    if (!(signerDialogEl instanceof HTMLDialogElement)) return false;
+    if (typeof signerDialogEl.open === "boolean") return signerDialogEl.open;
+    return signerDialogEl.hasAttribute("open");
 }
 
 /**
@@ -688,6 +698,7 @@ async function waitForSignerBridgeReady(timeoutMs = 20000, pollMs = 500) {
     if (!state.bunkerClient || typeof state.bunkerClient.syncConnectionInfo !== "function") return;
     const deadline = Date.now() + Math.max(1000, Number(timeoutMs) || 20000);
     let lastErrorMessage = "";
+    let signerDialogRequested = false;
 
     while (Date.now() < deadline) {
         try {
@@ -695,9 +706,12 @@ async function waitForSignerBridgeReady(timeoutMs = 20000, pollMs = 500) {
             return;
         } catch (error) {
             lastErrorMessage = String(error?.message || "");
-            if (isLockedSignerMessage(lastErrorMessage)) {
+            if (!signerDialogRequested) {
                 state.signerUnlockFlowActive = true;
                 openSignerDialog();
+                requestSignerManagementView();
+                signerDialogRequested = true;
+            } else if (isLockedSignerMessage(lastErrorMessage)) {
                 requestSignerManagementView();
             }
             await new Promise((resolve) => setTimeout(resolve, Math.max(100, Number(pollMs) || 500)));
@@ -711,11 +725,83 @@ async function waitForSignerBridgeReady(timeoutMs = 20000, pollMs = 500) {
 }
 
 /**
+ * Builds one signer result object from bridge connection info.
+ * @param {any} connectionInfo - Bridge connection payload.
+ * @returns {SignerEnsureResult|null} Normalized signer result or null.
+ */
+function signerResultFromBridgeConnectionInfo(connectionInfo) {
+    const pubkey = normalizePubkey(String(connectionInfo?.pubkey || ""));
+    if (!isPubkeyHex(pubkey)) return null;
+    const npub = String(connectionInfo?.npub || "").trim();
+    const keyName = String(connectionInfo?.keyName || "Aktiver Signer-Key").trim() || "Aktiver Signer-Key";
+    return {
+        userId: "",
+        keyId: "",
+        keyName,
+        pubkey,
+        npub,
+        existed: true,
+        active: true
+    };
+}
+
+/**
+ * Resolves signer pubkey from bridge without triggering wp-ensure.
+ * @param {number} timeoutMs - Maximum wait time in ms.
+ * @returns {Promise<SignerEnsureResult>} Signer result based on active bridge key.
+ */
+async function resolveSignerResultFromBridge(timeoutMs = 12000) {
+    if (!state.bunkerClient) {
+        throw new Error("Signer-Bridge ist nicht initialisiert.");
+    }
+    const deadline = Date.now() + Math.max(1000, Number(timeoutMs) || 12000);
+    let lastErrorMessage = "";
+
+    while (Date.now() < deadline) {
+        let connectionInfo = null;
+        try {
+            if (typeof state.bunkerClient.syncPublicConnectionInfo === "function") {
+                connectionInfo = await state.bunkerClient.syncPublicConnectionInfo();
+            } else if (typeof state.bunkerClient.syncConnectionInfo === "function") {
+                connectionInfo = await state.bunkerClient.syncConnectionInfo();
+            }
+        } catch (error) {
+            lastErrorMessage = String(error?.message || "");
+        }
+
+        if (!connectionInfo && typeof state.bunkerClient.getState === "function") {
+            const snapshot = state.bunkerClient.getState();
+            connectionInfo = snapshot?.lastBridgeConnectionInfo || snapshot?.activeConnection || null;
+        }
+
+        const signerResult = signerResultFromBridgeConnectionInfo(connectionInfo);
+        if (signerResult) {
+            state.lastEnsureResult = signerResult;
+            renderSignerResult(signerResult);
+            return signerResult;
+        }
+
+        if (!lastErrorMessage) {
+            lastErrorMessage = "Signer liefert keinen gueltigen Bridge-Pubkey.";
+        }
+        await new Promise((resolve) => setTimeout(resolve, 350));
+    }
+
+    throw new Error(lastErrorMessage || "Signer liefert keinen gueltigen Bridge-Pubkey.");
+}
+
+/**
  * Ensures a signer key for the currently active identity.
  * @returns {Promise<SignerEnsureResult>} Ensure result.
  */
 async function ensureSignerKeyForActiveIdentity() {
     if (!state.activeIdentity) throw new Error("Identity ist noch nicht geladen.");
+
+    const dialogWasOpen = isSignerDialogOpen();
+    if (!dialogWasOpen) {
+        state.signerUnlockFlowActive = true;
+        openSignerDialog();
+    }
 
     await waitForSignerBridgeReady(25000, 500);
     const adapter = resolveProviderAdapter(state.activeIdentity.provider);
@@ -724,7 +810,37 @@ async function ensureSignerKeyForActiveIdentity() {
     state.lastEnsureResult = ensureResult;
     renderSignerResult(ensureResult);
     appendResultLine(`Signer-Key bereit: ${ensureResult.pubkey.slice(0, 16)}... (${ensureResult.keyName})`);
+    if (!dialogWasOpen && state.signerUnlockFlowActive) {
+        state.signerUnlockFlowActive = false;
+        closeSignerDialog();
+    }
     return ensureResult;
+}
+
+/**
+ * Resolves signer result for current identity with compare-first strategy.
+ * Uses bridge pubkey when backend is already bound, wp-ensure only when needed.
+ * @returns {Promise<SignerEnsureResult>} Signer result for reconciliation.
+ */
+async function resolveSignerResultForActiveIdentity() {
+    if (!state.activeIdentity) throw new Error("Identity ist noch nicht geladen.");
+    const expectedPubkey = normalizePubkey(state.activeIdentity.expectedPubkey);
+    const isBackendBound = isPubkeyHex(expectedPubkey);
+
+    try {
+        const bridgeResult = await resolveSignerResultFromBridge(15000);
+        appendResultLine(`Signer-Bridge-Pubkey genutzt: ${bridgeResult.pubkey.slice(0, 16)}...`);
+        return bridgeResult;
+    } catch (bridgeError) {
+        const bridgeMessage = String(bridgeError?.message || "Bridge-Pubkey nicht verfuegbar.");
+        appendResultLine(`Bridge-Pubkey nicht verfuegbar: ${bridgeMessage}`);
+        if (isBackendBound) {
+            throw bridgeError;
+        }
+    }
+
+    appendResultLine("Backend ungebunden: Fallback auf wp-ensure-user-key.");
+    return ensureSignerKeyForActiveIdentity();
 }
 
 /**
@@ -784,7 +900,7 @@ async function runFullSync() {
 
     try {
         await loadIdentityFromBackend();
-        await ensureSignerKeyForActiveIdentity();
+        await resolveSignerResultForActiveIdentity();
         await reconcileBindingState();
     } catch (error) {
         const message = String(error?.message || "Unbekannter Fehler.");
@@ -836,13 +952,13 @@ async function refreshIdentityOnly() {
 async function onEnsureLinkClicked() {
     if (state.isBusy) return;
     setBusyState(true);
-    setStatusText(overallStatusEl, "Fordere Signer-Key an ...", "idle");
+    setStatusText(overallStatusEl, "Pruefe Signer-Key und Zuordnung ...", "idle");
 
     try {
         if (!state.activeIdentity) {
             await loadIdentityFromBackend();
         }
-        await ensureSignerKeyForActiveIdentity();
+        await resolveSignerResultForActiveIdentity();
         await reconcileBindingState();
     } catch (error) {
         const message = String(error?.message || "Unbekannter Fehler.");

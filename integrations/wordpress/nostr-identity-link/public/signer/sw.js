@@ -1,4 +1,4 @@
-﻿const CACHE_VERSION = "nip46-signer-v8";
+﻿const CACHE_VERSION = "nip46-signer-v11";
 const CORE_ASSETS = [
     "./",
     "./index.html",
