@@ -1,4 +1,4 @@
-﻿import NDK, { NDKNip46Backend, NDKPrivateKeySigner } from "./vendor/ndk-3.0.0.js";
+﻿import NDK, { NDKNip46Backend, NDKPrivateKeySigner } from "../vendor/ndk-3.0.0.js";
 import { createSignerAttentionManager } from "./signer-ui.js";
         // ===== Storage Keys =====
         // Älterer Speicherort für unverschlüsselte nsec (nur bei Migration relevant)

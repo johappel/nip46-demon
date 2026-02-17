@@ -800,6 +800,7 @@ Hinweis zur Frontend-Integration:
 - Der Identity-Link-Client nutzt fuer den Standardfall jetzt diesen Read-Only-Bridge-Pfad und vergleicht primär nur `expectedPubkey` gegen `signerPubkey`.
 - `wp-ensure-user-key` wird im Alltag damit nur noch fuer den ungebundenen Erstzuordnungsfall benoetigt.
 - Die Host-Statusanzeige ist fuer den Compare-Only-Fall jetzt explizit: `Signer-Bridge bereit. Pubkey kann verglichen werden.` (statt unklarem `Verbindung wird vorbereitet ...`).
+- Bei Bundle-Kopien in das WordPress-Plugin muessen relative Modulpfade plugin-spezifisch bleiben (`signer/signer-nip46.js` -> `../vendor/...`, `identity-link/index.js` -> `../democlient/...`), sonst laedt der Browser HTML statt Modul-JS.
 
 Beispiel:
 

@@ -536,3 +536,14 @@ Refactoring von `signer.html` in wartbare Module plus neue Aufmerksamkeits-Featu
   - `integrations/wordpress/nostr-identity-link/public/signer/index.html` -> `signer-nip46.js?v=20260217p`
   - `integrations/wordpress/nostr-identity-link/public/signer/sw.js` -> `CACHE_VERSION = "nip46-signer-v11"`
 
+## Fortschritt 2026-02-17 (Copy-Regression Fix: Plugin-Pfade)
+
+- [x] Kopierfehler im Plugin-Bundle behoben:
+  - `integrations/wordpress/nostr-identity-link/public/signer/signer-nip46.js`: Import korrigiert auf `../vendor/ndk-3.0.0.js`.
+  - `integrations/wordpress/nostr-identity-link/public/identity-link/index.js`: Import korrigiert auf `../democlient/nostr.js`.
+  - `integrations/wordpress/nostr-identity-link/public/identity-link/index.js`: `DEFAULT_SIGNER_URI` korrigiert auf `../signer/`.
+- [x] Cache-Busting nach Pfadfix:
+  - `integrations/wordpress/nostr-identity-link/public/identity-link/index.html` -> `index.js?v=20260217q`
+  - `integrations/wordpress/nostr-identity-link/public/signer/index.html` -> `signer-nip46.js?v=20260217q`
+  - `integrations/wordpress/nostr-identity-link/public/signer/sw.js` -> `CACHE_VERSION = "nip46-signer-v12"`
+

@@ -1,8 +1,8 @@
-﻿import { createBunkerConnectClient } from "../../democlient/nostr.js";
+﻿import { createBunkerConnectClient } from "../democlient/nostr.js";
 
 const BRIDGE_SOURCE = "nip46-signer-bridge";
 const DEFAULT_PROVIDER = "wordpress";
-const DEFAULT_SIGNER_URI = "../../signer.html";
+const DEFAULT_SIGNER_URI = "../signer/";
 const DEFAULT_IDENTITY_ENDPOINT = "/wp-json/identity-link/v1/session";
 const DEFAULT_BIND_ENDPOINT = "/wp-json/identity-link/v1/bind";
 const DEFAULT_REBIND_ENDPOINT = "/wp-json/identity-link/v1/rebind";
