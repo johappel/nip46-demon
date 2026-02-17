@@ -201,3 +201,11 @@ Refactoring von `signer.html` in wartbare Module plus neue Aufmerksamkeits-Featu
 ## Fortschritt 2026-02-17 (Setup-Dialog Spacing-Fix)
 
 - [x] `democlient/index.css`: im `compact-connected` Zustand unteren Abstand des `setup-dialog-head` auf `1rem` gesetzt, damit oberer Dialograndabstand und Abstand zum iframe optisch gleich wirken.
+
+## Fortschritt 2026-02-17 (One-Command Client Init API)
+
+- [x] Neues Modul `democlient/nostreclient.js` hinzugefuegt mit Public API `nostreclient.init({ config })`.
+- [x] Konfigurations-Schema eingefuehrt (snake_case + camelCase): `signer_iframe_uri`, `relays`, `allow_nip07`, `custom_bunker_uri`.
+- [x] `democlient/index.js` auf minimalen Entry-Point reduziert (nur Config + `nostreclient.init(...)`).
+- [x] Wrapper-Methoden ergaenzt: `getPublicKey`, `signEvent`, `publishSignedEvent`, `publishTextNote`, `getState`, `destroy`.
+- [x] `SIGNER_DOKU.md` auf den neuen Integrationsweg aktualisiert.

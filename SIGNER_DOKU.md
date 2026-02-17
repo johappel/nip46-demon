@@ -283,7 +283,8 @@ Use-Case: Multi-User-Systeme (z. B. WordPress), in denen pro App-User ein eigene
 - `democlient/index.html` (Boilerplate UI fuer eigene Clients)
 - `democlient/index.css` (ausgelagerte Demo-Styles)
 - `democlient/nostr.js` (gekapselte Bunkerconnect-Lib mit Auto-Connect + Dialog-Mirroring)
-- `democlient/index.js` (Client-spezifische Logik wie Formularvalidierung und Absenden)
+- `democlient/nostreclient.js` (High-Level Wrapper mit `nostreclient.init(...)`)
+- `democlient/index.js` (minimaler Entry-Point mit einer Init-Config)
 
 ## 11. Manual: Nostr Client mit Bunkerconnect in 2 Minuten
 
@@ -300,28 +301,45 @@ In deiner Client-Seite:
 Die Demo trennt bewusst:
 
 - `democlient/nostr.js`: wiederverwendbare NIP-46/Bunkerconnect Logik
-- `democlient/index.js`: nur app-spezifische Demo-Funktionen
+- `democlient/nostreclient.js`: High-Level Wrapper fuer One-Command-Setup
+- `democlient/index.js`: nur Konfiguration + Start
 
 ### Schritt 2: Ein Kommando fuer Einbettung + Auto-Connect
 
 ```js
-import { createBunkerConnectClient } from "./nostr.js";
+import { nostreclient } from "./nostreclient.js";
 
-const SIGNER_URL = "../signer.html"; // fest im Code
-// Optional spaeter per Settings:
-// const CUSTOM_BUNKER_URI = "bunker://<pubkey>?relay=...";
+const config = {
+  signer_iframe_uri: "../signer.html",
+  relays: [],
+  allow_nip07: false
+};
 
-const bunkerClient = createBunkerConnectClient({
-  signerFrameEl: document.getElementById("signer-frame"),
-  signerUrl: SIGNER_URL,
-  requestDialogEl: document.getElementById("signer-request-dialog"),
-  requestDialogTitleEl: document.getElementById("signer-request-title"),
-  requestDialogDetailsEl: document.getElementById("signer-request-details"),
-  autoConnect: true
-});
-
-await bunkerClient.installSignerAndAutoConnect();
+await nostreclient.init({ config });
 ```
+
+Optional verfuegbare Methoden nach dem Init:
+
+```js
+const pubkey = await nostreclient.getPublicKey();
+const signedEvent = await nostreclient.signEvent(unsignedEvent);
+const relayUrls = await nostreclient.publishSignedEvent(signedEvent);
+const response = await nostreclient.publishTextNote("Hallo von meinem Client");
+console.log(pubkey, relayUrls, response);
+```
+
+`config` unterstuetzt jeweils `snake_case` und `camelCase`:
+
+```js
+{
+  signer_iframe_uri: "../signer.html", // oder signerIframeUri
+  relays: ["wss://relay.damus.io"],    // optional, leer => Demo-Defaults
+  allow_nip07: true,                   // oder allowNip07
+  custom_bunker_uri: ""                // oder customBunkerUri
+}
+```
+
+`allow_nip07` steuert nur das Exposing von `window.nostr`. Der interne Demo-Flow (Connect, Sign, Publish via Buttons) funktioniert weiterhin.
 
 Ergebnis:
 
@@ -340,19 +358,19 @@ Ergebnis:
 ### Schritt 3: Event absenden
 
 ```js
-const response = await bunkerClient.publishTextNote("Hallo von meinem Client");
+const response = await nostreclient.publishTextNote("Hallo von meinem Client");
 console.log(response.signedEvent, response.publishedRelayUrls);
 ```
 
 Alternativ granular:
 
-1. `await bunkerClient.getPublicKey()`
-2. `await bunkerClient.signEvent(unsignedEvent)`
-3. `await bunkerClient.publishSignedEvent(signedEvent)`
+1. `await nostreclient.getPublicKey()`
+2. `await nostreclient.signEvent(unsignedEvent)`
+3. `await nostreclient.publishSignedEvent(signedEvent)`
 
 ### Schritt 4: Eigene App-Logik erweitern
 
 Empfehlung:
 
-- `democlient/nostr.js` unveraendert als technische Basis behalten
-- eigene Business/UI-Logik in einem separaten Modul nach Vorbild `democlient/index.js` halten
+- `democlient/nostreclient.js` als stabilen Wrapper nutzen
+- bei tieferer Kontrolle direkt `democlient/nostr.js` nutzen
