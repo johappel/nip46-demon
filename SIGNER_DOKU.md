@@ -287,7 +287,12 @@ Use-Case: Multi-User-Systeme (z. B. WordPress), in denen pro App-User ein eigene
 - `democlient/index.js` (minimaler Entry-Point mit einer Init-Config)
 - `democlient/forms/schema-loader.js` (laedt und normalisiert JSON-Form-Schemata)
 - `democlient/forms/form-generator.js` (rendert Felder + sammelt/validiert Formwerte)
-- `democlient/forms/kind-adapters/index.js` (mappt Formwerte auf unsigned Nostr-Events)
+- `democlient/forms/kind-adapters/index.js` (Registry + Dispatch fuer Adapter)
+- `democlient/forms/kind-adapters/shared.js` (gemeinsame Hilfsfunktionen)
+- `democlient/forms/kind-adapters/generic.js` (Fallback-Adapter)
+- `democlient/forms/kind-adapters/kind1.js` (kind:1 Adapter)
+- `democlient/forms/kind-adapters/nip23.js` (NIP-23 Adapter)
+- `democlient/forms/kind-adapters/nip52.js` (NIP-52 Adapter)
 - `democlient/forms/schemas/kind1.json` (lokales Default-Schema)
 
 ## 11. Manual: Nostr Client mit Bunkerconnect in 2 Minuten
@@ -592,3 +597,37 @@ Beispiel-Schemata im Repo:
 - `democlient/forms/schemas/kind1.json`
 - `democlient/forms/schemas/kind30023.json` (NIP-23 Publish/Draft via `kindSelectorMap`)
 - `democlient/forms/schemas/nip52-calendar.json` (Multi-Kind + dedizierter `nip-52` Adapter)
+
+### 13.5 NIP-52 Adapter-Details (31923 Time-Based)
+
+Der dedizierte Adapter `democlient/forms/kind-adapters/nip52.js` erzwingt fuer `kind:31923` folgende Regeln:
+
+- `start` ist Pflicht (Unix-Sekunden-Tag `start`).
+- `end` ist optional, muss aber groesser als `start` sein.
+- `D`-Tags werden automatisch erzeugt (`floor(unix_seconds / 86400)`), bei Zeitraeumen als mehrere `D`-Tags.
+- optionale TZID-Tags: `start_tzid`, `end_tzid`.
+- `content` bleibt vorhanden (Beschreibung), darf aber leer sein.
+
+Das Beispiel-Schema `democlient/forms/schemas/nip52-calendar.json` stellt dafuer passende Felder bereit (`summary`, `startTzid`, `endTzid`, `geohash`).
+
+### 13.6 NIP-23 Optional Tags und Editability
+
+Der Adapter `democlient/forms/kind-adapters/nip23.js` setzt die ueblichen optionalen NIP-23 Tags:
+
+- `title`
+- `image`
+- `summary`
+- `published_at` (stringifizierte Unix-Sekunden)
+
+Zusaetzlich unterstuetzt das Schema `democlient/forms/schemas/kind30023.json`:
+
+- `topics` -> erzeugt mehrere `t`-Tags (Komma-/Zeilenliste)
+- `tagsJson` -> rohe zusaetzliche Tags (z. B. `e`/`a` Referenzen)
+
+Editability:
+
+- NIP-23 ist addressable.
+- Fuer Updates musst du denselben `d`-Identifier mit demselben `pubkey` und demselben `kind` wiederverwenden.
+- `30023` (publish) und `30024` (draft) sind unterschiedliche Kinds und damit unterschiedliche adressierbare Streams.
+
+

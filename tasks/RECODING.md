@@ -234,7 +234,27 @@ Refactoring von `signer.html` in wartbare Module plus neue Aufmerksamkeits-Featu
 - [x] `kind-30023` Adapter aktualisiert: nutzt jetzt selektierten Kind statt festem `30023`.
 - [x] Dedizierten `nip-52` Adapter implementiert (`democlient/forms/kind-adapters/index.js`).
 - [x] `nip52-calendar.json` von `generic-kind` auf `adapter: \"nip-52\"` umgestellt und um RSVP-relevante Felder erweitert.
+- [x] Adapter-Refactor: `kind-adapters/index.js` auf Registry/Dispatch reduziert.
+- [x] Adapter in eigene Dateien ausgelagert: `generic.js`, `kind1.js`, `nip23.js`, `nip52.js`, `shared.js`.
 - [x] `democlient/nostreclient.js` auf dynamischen Submit-Flow umgestellt (`collect -> validate -> adapter -> sign -> publish`).
 - [x] `democlient/index.html` um `data-nostr=\"form-fields\"` als Render-Container erweitert.
 - [x] `democlient/index.js` um `config.form_uri` erweitert.
 - [x] `SIGNER_DOKU.md` um Architektur-Abschnitt (NIP vs Kind, Schema vs Adapter, Schema-Format) erweitert.
+
+## Fortschritt 2026-02-17 (NIP-52 31923 Spezifikation geschaerft)
+
+- [x] `democlient/forms/kind-adapters/nip52.js`: `kind:31923` validiert (`start` Pflicht, `end > start`).
+- [x] `democlient/forms/kind-adapters/nip52.js`: automatische `D`-Tag-Generierung (Tag-granular ueber Event-Zeitraum).
+- [x] `democlient/forms/kind-adapters/nip52.js`: Unterstuetzung fuer `start_tzid`/`end_tzid`, `summary`, `g` (geohash).
+- [x] `democlient/forms/schemas/nip52-calendar.json`: Felder fuer TZID/Summary/Geohash ergaenzt und Default auf `timeBased` gesetzt.
+- [x] `SIGNER_DOKU.md`: Adapter-Regeln fuer NIP-52 `31923` dokumentiert.
+
+## Fortschritt 2026-02-17 (NIP-23 Tags + Editability)
+
+- [x] `democlient/forms/kind-adapters/nip23.js`: `published_at` robuster gemacht (Unix-Sekunden oder Datumswert).
+- [x] `democlient/forms/kind-adapters/nip23.js`: `topics` -> wiederholte `t`-Tags umgesetzt.
+- [x] `democlient/forms/kind-adapters/nip23.js`: `tagsJson` als Durchreiche fuer zusaetzliche Tags (`e`/`a` etc.) eingebaut.
+- [x] `democlient/forms/schemas/kind30023.json`: Felder fuer `published_at`, `topics`, `tagsJson` ergaenzt.
+- [x] `SIGNER_DOKU.md`: NIP-23 Abschnitt zu optionalen Tags und Editability hinzugefuegt.
+
+

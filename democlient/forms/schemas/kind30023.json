@@ -2,7 +2,7 @@
   "version": "nostr-form-v1",
   "id": "kind30023-longform",
   "title": "Long Form (NIP-23)",
-  "description": "Beispielschema fuer NIP-23 Long-Form-Posts mit Draft/Publish Auswahl.",
+  "description": "Beispielschema fuer NIP-23 Long-Form-Posts mit Draft/Publish Auswahl und optionalen Tags.",
   "kind": 30023,
   "adapter": "kind-30023",
   "kindSelectorField": "publishMode",
@@ -61,10 +61,32 @@
       "placeholder": "https://..."
     },
     {
+      "name": "published_at",
+      "label": "published_at (Unix Sekunden)",
+      "type": "text",
+      "required": false,
+      "placeholder": "1296962229"
+    },
+    {
       "name": "publishedAt",
-      "label": "Publiziert am",
+      "label": "Publiziert am (Datum/Uhrzeit)",
       "type": "datetime-local",
       "required": false
+    },
+    {
+      "name": "topics",
+      "label": "Themen (t-Tags, Komma oder Zeilen)",
+      "type": "text",
+      "required": false,
+      "placeholder": "nostr, longform, tutorial"
+    },
+    {
+      "name": "tagsJson",
+      "label": "Weitere Tags (JSON, optional)",
+      "type": "textarea",
+      "required": false,
+      "rows": 4,
+      "placeholder": "[[\"e\",\"<eventId>\",\"wss://relay.example.com\"],[\"a\",\"30023:<pubkey>:<d>\",\"wss://relay.nostr.org\"]]"
     },
     {
       "name": "content",
@@ -76,3 +98,4 @@
     }
   ]
 }
+
