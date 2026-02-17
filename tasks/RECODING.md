@@ -300,3 +300,41 @@ Refactoring von `signer.html` in wartbare Module plus neue Aufmerksamkeits-Featu
 
 - [x] `democlient/index.css`: globale Regel `[hidden] { display: none !important; }` hinzugefuegt, damit per JS ausgeblendete Bereiche (z. B. `content-count`-Zeile) nicht durch `.row { display: grid; }` sichtbar bleiben.
 
+## Fortschritt 2026-02-17 (Neuer Embed-Client fuer Flotilla)
+
+- [x] Neuer Ordner `embedclients/flotilla/` erstellt.
+- [x] `embedclients/flotilla/index.html` angelegt (Wizard + Flotilla-iframe + Signer-Dialog).
+- [x] `embedclients/flotilla/index.css` angelegt (responsive Layout, Guide- und Dialog-Styles).
+- [x] `embedclients/flotilla/index.js` angelegt:
+  - nutzt `createBunkerConnectClient(...)` aus `democlient/nostr.js`
+  - startet Signer-Autoconnect
+  - zeigt `bunker://...` an und bietet Copy-/Refresh-Buttons
+  - fuehrt User manuell durch den Flotilla-Loginflow
+- [x] `SIGNER_DOKU.md` um Abschnitt zum Flotilla-Embed-Client erweitert.
+
+## Fortschritt 2026-02-17 (Flotilla Embed: Bridge-only Bunker-Link)
+
+- [x] `embedclients/flotilla/index.js`: Flow auf Bridge-only umgestellt (`autoConnect: false`), damit Relay-Timeouts im Parent den Login-Wizard nicht blockieren.
+- [x] `embedclients/flotilla/index.js`: Bunker-Link-Ableitung erweitert (`activeConnection.bunkerUri` -> `lastBridgeConnectionInfo.bunkerUri` -> Konvertierung aus `nostrconnect://`).
+- [x] `embedclients/flotilla/index.js`: Relay-Timeout-Status entdramatisiert (Hinweis statt harter Fehler), solange der Bunker-Link verfuegbar ist.
+
+## Fortschritt 2026-02-17 (Flotilla Embed: Lock-Dialog Auto-Open)
+
+- [x] `embedclients/flotilla/index.js`: Locked-Signer-Erkennung hinzugefuegt (`isLockedSignerMessage`).
+- [x] `embedclients/flotilla/index.js`: Bei gesperrtem Signer wird der Signer-Dialog automatisch geoeffnet, damit die Passwortabfrage direkt sichtbar ist.
+- [x] `embedclients/flotilla/index.js`: Refresh-Fehler bei Lock-Status zeigen nun gezielten Hinweis statt generischem Fehler.
+
+## Fortschritt 2026-02-17 (Flotilla Embed: Unlock Auto-Close + Status-Fix)
+
+- [x] `embedclients/flotilla/index.js`: Unlock-Flow-State (`signerUnlockFlowActive`) eingefuehrt.
+- [x] `embedclients/flotilla/index.js`: Nach verfuegbarem Bunker-Link wird der fuer Unlock geoeffnete Signer-Dialog automatisch geschlossen.
+- [x] `embedclients/flotilla/index.js`: Stale Header-Status `Verbindung wird vorbereitet ...` wird nach erfolgreicher Entsperrung auf `Signer bereit. Bunker Link ist bereit.` aktualisiert.
+
+## Fortschritt 2026-02-17 (Embed-Client abstrahiert)
+
+- [x] `embedclients/flotilla/index.js`: auf app-agnostische Runtime-Config umgestellt (`data-app-name`, `data-app-url`, `data-signer-uri` statt Flotilla-Hardcodes).
+- [x] `embedclients/flotilla/index.js`: generische UI-IDs genutzt (`open-app-tab-btn`, `embedded-app-frame`) fuer wiederverwendbare Embeds.
+- [x] `embedclients/flotilla/index.html`: Data-Attribute am Root hinzugefuegt, damit Ziel-App und Signer ohne JS-Edit konfigurierbar sind.
+- [x] `embedclients/flotilla/index.html`: CSP `frame-src` auf generisches Embed-Profil (`'self' https: http:`) erweitert.
+- [x] `SIGNER_DOKU.md`: Abschnitt 14 um die neue app-agnostische Konfiguration ergaenzt.
+

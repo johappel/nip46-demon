@@ -294,6 +294,9 @@ Use-Case: Multi-User-Systeme (z. B. WordPress), in denen pro App-User ein eigene
 - `democlient/forms/kind-adapters/nip23.js` (NIP-23 Adapter)
 - `democlient/forms/kind-adapters/nip52.js` (NIP-52 Adapter)
 - `democlient/forms/schemas/kind1.json` (lokales Default-Schema)
+- `embedclients/flotilla/index.html` (Wizard-UI + Flotilla-iframe + Signer-Dialog)
+- `embedclients/flotilla/index.css` (Styles fuer den Flotilla-Embed-Client)
+- `embedclients/flotilla/index.js` (Bunker-Link-Flow mit `createBunkerConnectClient`)
 
 ## 11. Manual: Nostr Client mit Bunkerconnect in 2 Minuten
 
@@ -645,4 +648,38 @@ Editability:
 - NIP-23 ist addressable.
 - Fuer Updates musst du denselben `d`-Identifier mit demselben `pubkey` und demselben `kind` wiederverwenden.
 - `30023` (publish) und `30024` (draft) sind unterschiedliche Kinds und damit unterschiedliche adressierbare Streams.
+
+## 14. Embed-Client fuer Flotilla
+
+Der Prototyp unter `embedclients/flotilla/` ist kein klassischer Posting-Client, sondern ein Login-Assistent:
+
+- Rechts wird `https://app.flotilla.social/` in einem iframe geladen.
+- Links fuehrt ein Wizard den User durch die Flotilla-Login-Schritte.
+- Der Signer wird ueber `createBunkerConnectClient(...)` gestartet.
+- Sobald verbunden, wird der `bunker://...` Link angezeigt und kann kopiert werden.
+- Im Flotilla-Embed ist der Parent absichtlich im Bridge-only Modus (`autoConnect: false`): der Parent muss nicht selbst per NDK zu Relays verbinden, um den Bunker-Link bereitzustellen.
+
+Seit dem Refactor ist `embedclients/flotilla/index.js` app-agnostisch:
+
+- kein Flotilla-Hardcode mehr in der JS-Logik
+- Ziel-App wird ueber HTML-Config gesetzt:
+  - `#embed-root[data-app-name]`
+  - `#embed-root[data-app-url]`
+  - `#embed-root[data-signer-uri]`
+- dadurch reicht fuer neue Embeds in der Regel eine Anpassung von `index.html` (Guide-Texte + Data-Attribute)
+
+### 14.1 Ziel-Flow
+
+1. In Flotilla: `Log in`
+2. In Flotilla: `Log in with Remote Signer`
+3. Im Embed-Client: `Bunker Link kopieren`
+4. In Flotilla: Link einfuegen und `Next`
+
+### 14.2 Wichtige Grenzen
+
+- Der Flotilla-iframe ist Cross-Origin. Der Parent kann die Flotilla-UI nicht fernsteuern.
+- Deshalb bleibt die Bedienung in Flotilla manuell; der Embed-Client liefert nur Fuehrung + Copy-Flow.
+- Falls eine Ziel-App iframe-Einbettung spaeter blockiert, nutze den Button `Flotilla im Tab oeffnen`.
+- Wenn der Signer gesperrt ist, oeffnet der Embed-Client den Signer-Dialog automatisch, damit die Passwortabfrage direkt sichtbar ist.
+- Nach erfolgreicher Entsperrung (Bunker-Link verfuegbar) schliesst der Signer-Dialog automatisch und der Status springt von `Verbindung wird vorbereitet ...` auf `Bunker Link ist bereit`.
 
