@@ -38,8 +38,19 @@
 
     <dialog id="signer-setup-dialog" class="setup-dialog">
         <section class="card setup-card">
-            <h2>Signer Setup</h2>
-            <p class="muted">Bitte Signer entsperren. Danach wird die Verbindung automatisch aufgebaut.</p>
+            <div class="setup-dialog-head">
+                <h2 id="setup-dialog-title">Signer Setup</h2>
+                <button
+                    id="open-signer-external-btn"
+                    class="icon-link-btn"
+                    type="button"
+                    title="Signer im Browser-Tab oeffnen"
+                    aria-label="Signer im Browser-Tab oeffnen"
+                >
+                    ↗
+                </button>
+            </div>
+            <p id="setup-dialog-hint" class="muted">Bitte Signer entsperren. Danach wird die Verbindung automatisch aufgebaut.</p>
             <p id="status" class="status" data-state="idle">Noch nicht initialisiert.</p>
             <pre id="connection-info" class="output">Keine aktive Verbindung.</pre>
             <iframe id="signer-frame" title="NIP-46 Signer" src="about:blank"></iframe>
@@ -49,8 +60,13 @@
     <dialog id="signer-request-dialog" class="request-dialog request-dialog-compact">
         <h3 id="signer-request-title">Genehmigung erforderlich</h3>
         <p id="signer-request-details">Bitte Anfrage im Signer bestaetigen.</p>
+        <div class="request-actions">
+            <button id="request-allow-once-btn" type="button">Einmal erlauben</button>
+            <button id="request-allow-always-btn" type="button">Immer erlauben</button>
+            <button id="request-reject-btn" type="button">Ablehnen</button>
+        </div>
         <form method="dialog">
-            <button type="submit">Okay</button>
+            <button type="submit" class="btn-secondary">Schliessen</button>
         </form>
     </dialog>
 

@@ -126,3 +126,41 @@ Refactoring von `signer.html` in wartbare Module plus neue Aufmerksamkeits-Featu
 - [x] `democlient/index.js`: Status-Mapping ueber `onStatus`/Connection-State verdrahtet.
 - [x] `democlient/index.css`: Setup-Dialog-Overlay visuell angepasst (hellerer Backdrop mit leichtem Blur).
 - [x] `democlient/index.css`: `connection-info` Darstellung im Setup-Dialog farblich korrigiert (lesbarer Kontrast + Monospace).
+
+## Fortschritt 2026-02-16 (Dialog-Titel + externer Link)
+
+- [x] `democlient/index.html`: Setup-Dialog-Header mit dynamischem Titel + Link-Icon-Button hinzugefuegt.
+- [x] `democlient/index.js`: Titelwechsel `Signer Setup` -> `NIP-46 Signer` nach Verbindungsstatus umgesetzt.
+- [x] `democlient/index.js`: Link-Icon oeffnet `signer.html` in neuem Browser-Tab.
+- [x] `democlient/index.js`: im eingebetteten `compact-connected` Modus wird der innere Signer-Titel per Demo-Style ausgeblendet (keine doppelte Ueberschrift).
+
+## Fortschritt 2026-02-16 (Parent-Genehmigungsbuttons)
+
+- [x] `democlient/index.html`: Request-Dialog um direkte Buttons `Einmal erlauben`, `Immer erlauben`, `Ablehnen` erweitert.
+- [x] `democlient/index.js`: Parent-Buttons mit den echten Signer-Buttons im iframe verdrahtet (`allow-once-btn`, `allow-always-btn`, `reject-btn`).
+- [x] `democlient/index.css`: Actions-Layout fuer den kompakten Genehmigungsdialog umgesetzt (inkl. mobiler Darstellung).
+
+## Fortschritt 2026-02-16 (Praeziser Genehmigungstext)
+
+- [x] `democlient/nostr.js`: Anfrage-Text im Parent-Dialog auf methodenspezifische Kurztexte reduziert.
+- [x] `democlient/nostr.js`: bei `sign_event` und `nip04/nip44 encrypt` wird eine Vorschau der ersten 100 Zeichen angezeigt.
+- [x] `democlient/nostr.js`: bei `nip04/nip44 decrypt` nur konkrete Entschluesselungsanfrage ohne unnoetige Parameterdetails.
+- [x] `democlient/nostr.js`: robustere Methodenerkennung (auch bei schlecht formatiertem `request-details` Text).
+- [x] `democlient/nostr.js`: kein zusaetzlicher generischer Fallback-Dialog mehr waehrend `pendingUserApproval`, wenn kein Kontext vorliegt.
+- [x] `democlient/nostr.js`: Approval-Dialog durch Grace-Zeit stabilisiert, damit er nicht bei kurzen DOM-Wechseln sofort verschwindet.
+
+## Fortschritt 2026-02-16 (Approval-Button-Fix im Parent-Dialog)
+
+- [x] `democlient/index.js`: iframe-Button-Erkennung ohne `instanceof` (cross-frame kompatibel) umgesetzt.
+- [x] `democlient/index.js`: Retry/Polling beim Klicken der Signer-Approval-Buttons hinzugefuegt.
+- [x] `democlient/index.js`: Action-Buttons waehrend Pending-Klick kurz deaktiviert, um Doppelklick/Fehlzustand zu vermeiden.
+
+## Fortschritt 2026-02-16 (Rollback auf iframe-Genehmigung)
+
+- [x] `democlient/index.js`: Parent-Approvaldialog deaktiviert (`showApprovalRequestDialog: false`), Genehmigungen wieder direkt im iframe-Signer.
+- [x] `democlient/index.js`: Beim Post-Submit wird der Setup-Dialog automatisch geoeffnet und nach Abschluss wieder geschlossen.
+- [x] `democlient/index.js`: iframe-Auth-Modal in `compact-connected` per Demo-CSS auf reduzierte Ansicht (`Signieren und senden?` + Buttons) getrimmt.
+
+## Fortschritt 2026-02-16 (Result-UX aufgeraeumt)
+
+- [x] `democlient/index.js`: Setup-Hinweistext aus dem `result`-Bereich entfernt, damit dort nur Event-Output/Fehler angezeigt werden.

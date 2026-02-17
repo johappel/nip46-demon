@@ -328,9 +328,11 @@ Ergebnis:
 - Signer wird mit `parentOrigin` sicher eingebettet
 - nach Passwort-Eingabe im Signer verbindet der Client automatisch
 - URI-Sync (Bridge) passiert automatisch im Setup-Flow
-- empfohlenes UX-Muster: grosser Setup-Dialog (mit iframe) bis zur Verbindung, danach kleiner Dialog nur fuer Genehmigungen
-- im Demo-Client ist `showUnlockRequestDialog: false` und `showApprovalRequestDialog: true` gesetzt
+- aktuelle Demo-Variante: Genehmigungen laufen direkt im iframe-Signer (`showUnlockRequestDialog: false`, `showApprovalRequestDialog: false`)
+- beim Absenden wird der Setup-Dialog automatisch geoeffnet, damit die Signer-Buttons sichtbar und klickbar sind
 - der `Signer`-Button zeigt den Zustand per Statuspunkt: gelb (`verbindet`), gruen (`bereit`), rot (`Fehler`)
+- im Setup-Dialog wechselt der Titel auf `NIP-46 Signer` sobald verbunden; rechts oben oeffnet ein Link-Icon den Signer in einem eigenen Browser-Tab
+- im eingebetteten `compact-connected` Modus blendet die Demo den inneren Signer-Titel aus, um doppelte Ueberschriften zu vermeiden
 
 ### Schritt 3: Event absenden
 

@@ -216,6 +216,40 @@ button[disabled] {
     margin: 0;
 }
 
+.setup-dialog-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+}
+
+.setup-dialog-head h2 {
+    margin: 0;
+}
+
+.icon-link-btn {
+    width: 2rem;
+    height: 2rem;
+    border-radius: 9px;
+    border: 1px solid #3f6273;
+    background: #0d1e27;
+    color: #d6f2ff;
+    font-size: 1.2rem;
+    line-height: 1;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.icon-link-btn:hover {
+    filter: brightness(1.08);
+}
+
+.setup-card.compact-connected-view #setup-dialog-hint {
+    display: none;
+}
+
 .setup-card .output {
     color: #d6f2ff;
     background: #08141b;
@@ -244,6 +278,27 @@ button[disabled] {
     margin-top: 0.8rem;
 }
 
+.request-actions {
+    display: grid;
+    gap: 0.5rem;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.request-actions button {
+    margin-top: 0.35rem;
+    padding: 0.62rem 0.65rem;
+}
+
+.request-actions #request-reject-btn {
+    background: linear-gradient(160deg, #ffb3a6, #ff8f82);
+}
+
+.btn-secondary {
+    background: #0f2028;
+    color: #d0ecff;
+    border: 1px solid #365467;
+}
+
 @media (max-width: 780px) {
     .layout {
         width: calc(100% - 1rem);
@@ -251,6 +306,10 @@ button[disabled] {
     }
 
     .row {
+        grid-template-columns: 1fr;
+    }
+
+    .request-actions {
         grid-template-columns: 1fr;
     }
 }

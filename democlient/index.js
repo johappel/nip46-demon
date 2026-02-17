@@ -4,6 +4,10 @@ const pubkeyBtn = document.getElementById("pubkey-btn");
 const sendBtn = document.getElementById("send-btn");
 const signerFrame = document.getElementById("signer-frame");
 const signerSetupDialogEl = document.getElementById("signer-setup-dialog");
+const setupCardEl = document.querySelector(".setup-card");
+const setupDialogTitleEl = document.getElementById("setup-dialog-title");
+const setupDialogHintEl = document.getElementById("setup-dialog-hint");
+const openSignerExternalBtn = document.getElementById("open-signer-external-btn");
 const showSignerBtn = document.getElementById("show-signer-btn");
 const showSignerLabel = document.getElementById("show-signer-label");
 const statusEl = document.getElementById("status");
@@ -15,6 +19,9 @@ const contentCountEl = document.getElementById("content-count");
 const requestDialogEl = document.getElementById("signer-request-dialog");
 const requestTitleEl = document.getElementById("signer-request-title");
 const requestDetailsEl = document.getElementById("signer-request-details");
+const requestAllowOnceBtn = document.getElementById("request-allow-once-btn");
+const requestAllowAlwaysBtn = document.getElementById("request-allow-always-btn");
+const requestRejectBtn = document.getElementById("request-reject-btn");
 
 // Default: feste Signer-URL fuer Zero-Config.
 // Optional spaeter per Settings-UI austauschbar machen.
@@ -23,8 +30,11 @@ const SIGNER_URL = "../signer.html";
 // Optional spaeter per Settings-UI: eigene bunker:// oder nostrconnect:// URI erlauben.
 // Beispiel: const CUSTOM_BUNKER_URI = "bunker://<pubkey>?relay=...";
 const CUSTOM_BUNKER_URI = "";
+const APPROVAL_BUTTON_FIND_TIMEOUT_MS = 2500;
+const APPROVAL_BUTTON_FIND_POLL_MS = 80;
 
 let currentConnection = null;
+let signerFrameUiObserver = null;
 
 /**
  * Applies visual state and text to the signer button.
@@ -37,6 +47,218 @@ function setSignerButtonState(state, label) {
         showSignerLabel.textContent = label;
     } else {
         showSignerBtn.textContent = label;
+    }
+}
+
+/**
+ * Sets the setup dialog presentation for setup or connected mode.
+ * @param {boolean} isReady - True when signer is connected.
+ */
+function setSetupDialogMode(isReady) {
+    if (setupDialogTitleEl) {
+        setupDialogTitleEl.textContent = isReady ? "NIP-46 Signer" : "Signer Setup";
+    }
+    if (setupDialogHintEl) {
+        setupDialogHintEl.hidden = Boolean(isReady);
+    }
+    if (setupCardEl) {
+        setupCardEl.classList.toggle("compact-connected-view", Boolean(isReady));
+    }
+}
+
+/**
+ * Applies demo-specific compact embedded styling to the signer iframe.
+ * Hides duplicate app title when signer runs in compact-connected mode.
+ */
+function applyEmbeddedSignerCompactPresentation() {
+    let frameDoc = null;
+    try {
+        frameDoc = signerFrame.contentDocument;
+    } catch (_err) {
+        return;
+    }
+    if (!frameDoc?.body) return;
+
+    const isCompactConnected = frameDoc.body.classList.contains("compact-connected");
+    if (setupCardEl) {
+        setupCardEl.classList.toggle("compact-connected-view", isCompactConnected);
+    }
+
+    let styleEl = frameDoc.getElementById("demo-embed-style");
+    if (!styleEl) {
+        styleEl = frameDoc.createElement("style");
+        styleEl.id = "demo-embed-style";
+        frameDoc.head?.appendChild(styleEl);
+    }
+    styleEl.textContent =
+        "body.compact-connected #app-title{display:none !important;}" +
+        "body.compact-connected #status{margin-top:0 !important;}" +
+        "body.compact-connected #overlay{display:none !important;}" +
+        "body.compact-connected #auth-modal{position:static !important;top:auto !important;left:auto !important;transform:none !important;max-width:none !important;width:100% !important;margin:0 !important;padding:14px !important;border-radius:0 !important;border-left:none !important;border-right:none !important;background:#222 !important;}" +
+        "body.compact-connected #request-details{display:none !important;}" +
+        "body.compact-connected #toggle-request-details-btn{display:none !important;}" +
+        "body.compact-connected #auth-modal .button-row{gap:10px !important;justify-content:flex-start !important;}";
+}
+
+/**
+ * Installs iframe observer to react on compact-connected class changes.
+ */
+function installSignerFrameUiObserver() {
+    if (signerFrameUiObserver) {
+        signerFrameUiObserver.disconnect();
+        signerFrameUiObserver = null;
+    }
+
+    let frameDoc = null;
+    try {
+        frameDoc = signerFrame.contentDocument;
+    } catch (_err) {
+        return;
+    }
+    if (!frameDoc?.body) return;
+
+    signerFrameUiObserver = new MutationObserver(() => {
+        applyEmbeddedSignerCompactPresentation();
+    });
+    signerFrameUiObserver.observe(frameDoc.body, {
+        attributes: true,
+        attributeFilter: ["class"],
+        subtree: false
+    });
+
+    applyEmbeddedSignerCompactPresentation();
+}
+
+/**
+ * Handles signer iframe load event.
+ */
+function onSignerFrameLoad() {
+    installSignerFrameUiObserver();
+}
+
+/**
+ * Opens signer page in a separate browser tab.
+ */
+function openSignerInBrowserTab() {
+    const signerUrl = new URL(SIGNER_URL, window.location.href).toString();
+    window.open(signerUrl, "_blank", "noopener,noreferrer");
+}
+
+/**
+ * Waits for a specified amount of milliseconds.
+ * @param {number} ms - Wait duration in milliseconds.
+ * @returns {Promise<void>} Resolves after timeout.
+ */
+function waitMs(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Finds one approval button inside signer iframe.
+ * @param {"once"|"always"|"reject"} action - Target action.
+ * @returns {HTMLElement|null} Matching button element or null.
+ */
+function findSignerApprovalButton(action) {
+    let frameDoc = null;
+    try {
+        frameDoc = signerFrame.contentDocument;
+    } catch (_err) {
+        return null;
+    }
+    if (!frameDoc) return null;
+
+    const buttonIdByAction = {
+        once: "allow-once-btn",
+        always: "allow-always-btn",
+        reject: "reject-btn"
+    };
+
+    const targetButtonId = buttonIdByAction[action];
+    if (!targetButtonId) return null;
+    const button = frameDoc.getElementById(targetButtonId);
+    if (!button || typeof button.click !== "function") return null;
+    return button;
+}
+
+/**
+ * Triggers one approval action directly inside the signer iframe.
+ * @param {"once"|"always"|"reject"} action - Target action.
+ * @param {number=} timeoutMs - Max wait for button presence.
+ * @returns {boolean} True when the action button was found and clicked.
+ */
+async function triggerSignerApprovalAction(action, timeoutMs = APPROVAL_BUTTON_FIND_TIMEOUT_MS) {
+    const start = Date.now();
+    let button = null;
+
+    while (!button && (Date.now() - start) < timeoutMs) {
+        button = findSignerApprovalButton(action);
+        if (button) break;
+        await waitMs(APPROVAL_BUTTON_FIND_POLL_MS);
+    }
+
+    if (!button) return false;
+    button.click();
+    return true;
+}
+
+/**
+ * Enables or disables approval action buttons in request dialog.
+ * @param {boolean} isBusy - Busy state for action buttons.
+ */
+function setRequestActionButtonsBusy(isBusy) {
+    requestAllowOnceBtn.disabled = isBusy;
+    requestAllowAlwaysBtn.disabled = isBusy;
+    requestRejectBtn.disabled = isBusy;
+}
+
+/**
+ * Handles click on "Einmal erlauben" inside parent request dialog.
+ */
+async function onRequestAllowOnceClicked() {
+    setRequestActionButtonsBusy(true);
+    try {
+        const ok = await triggerSignerApprovalAction("once");
+        if (!ok) {
+            setResult("Genehmigungsbutton im Signer nicht gefunden. Bitte direkt im Signer bestaetigen.");
+            return;
+        }
+        if (requestDialogEl.open) requestDialogEl.close();
+    } finally {
+        setRequestActionButtonsBusy(false);
+    }
+}
+
+/**
+ * Handles click on "Immer erlauben" inside parent request dialog.
+ */
+async function onRequestAllowAlwaysClicked() {
+    setRequestActionButtonsBusy(true);
+    try {
+        const ok = await triggerSignerApprovalAction("always");
+        if (!ok) {
+            setResult("Genehmigungsbutton im Signer nicht gefunden. Bitte direkt im Signer bestaetigen.");
+            return;
+        }
+        if (requestDialogEl.open) requestDialogEl.close();
+    } finally {
+        setRequestActionButtonsBusy(false);
+    }
+}
+
+/**
+ * Handles click on "Ablehnen" inside parent request dialog.
+ */
+async function onRequestRejectClicked() {
+    setRequestActionButtonsBusy(true);
+    try {
+        const ok = await triggerSignerApprovalAction("reject");
+        if (!ok) {
+            setResult("Ablehnen-Button im Signer nicht gefunden. Bitte direkt im Signer ablehnen.");
+            return;
+        }
+        if (requestDialogEl.open) requestDialogEl.close();
+    } finally {
+        setRequestActionButtonsBusy(false);
     }
 }
 
@@ -63,13 +285,16 @@ function onSignerStatus(status) {
     const buttonState = deriveSignerButtonStateFromStatus(status);
     if (buttonState === "error") {
         setSignerButtonState("error", "Signer: Fehler");
+        setSetupDialogMode(false);
         return;
     }
     if (buttonState === "ready") {
         setSignerButtonState("ready", "Signer: bereit");
+        setSetupDialogMode(true);
         return;
     }
     setSignerButtonState("connecting", "Signer: verbindet");
+    setSetupDialogMode(Boolean(currentConnection));
 }
 
 /**
@@ -82,10 +307,13 @@ function onConnectionChanged(connection) {
     if (connection) {
         closeSignerSetupDialog();
         setSignerButtonState("ready", "Signer: bereit");
+        setSetupDialogMode(true);
     } else {
         openSignerSetupDialog();
         setSignerButtonState("connecting", "Signer: verbindet");
+        setSetupDialogMode(false);
     }
+    applyEmbeddedSignerCompactPresentation();
     refreshActionButtons();
 }
 
@@ -115,7 +343,7 @@ const bunkerClient = createBunkerConnectClient({
     autoConnect: true,
     exposeWindowNostr: true,
     showUnlockRequestDialog: false,
-    showApprovalRequestDialog: true,
+    showApprovalRequestDialog: false,
     onStatus: onSignerStatus,
     onConnectionChanged
 });
@@ -201,6 +429,17 @@ function setResult(text) {
 }
 
 /**
+ * Removes stale setup hints from the result area.
+ * Keeps the area focused on event output/errors only.
+ */
+function clearSetupResultHintIfPresent() {
+    const setupHint = "Signer eingebettet. Jetzt im iframe entsperren, Verbindung erfolgt automatisch.";
+    if (resultEl.textContent.trim() === setupHint) {
+        resultEl.textContent = "Noch kein Event gesendet.";
+    }
+}
+
+/**
  * Starts the fully automatic signer workflow.
  */
 async function startAutoSignerFlow() {
@@ -209,7 +448,7 @@ async function startAutoSignerFlow() {
     try {
         openSignerSetupDialog();
         await bunkerClient.installSignerAndAutoConnect();
-        setResult("Signer eingebettet. Jetzt im iframe entsperren, Verbindung erfolgt automatisch.");
+        clearSetupResultHintIfPresent();
     } catch (err) {
         setResult(`Fehler beim Setup: ${err.message}`);
     } finally {
@@ -246,7 +485,11 @@ async function onPostSubmit(event) {
     }
 
     setBusy(true);
+    const setupDialogWasOpenBeforeSubmit = Boolean(signerSetupDialogEl?.open);
     try {
+        if (!setupDialogWasOpenBeforeSubmit) {
+            openSignerSetupDialog();
+        }
         const response = await bunkerClient.publishTextNote(postContent.value.trim());
         setResult(
             `Signiert:\n${JSON.stringify(response.signedEvent, null, 2)}\n\n` +
@@ -255,6 +498,9 @@ async function onPostSubmit(event) {
     } catch (err) {
         setResult(`Senden fehlgeschlagen: ${err.message}`);
     } finally {
+        if (!setupDialogWasOpenBeforeSubmit && currentConnection) {
+            closeSignerSetupDialog();
+        }
         setBusy(false);
     }
 }
@@ -272,12 +518,18 @@ function refreshActionButtons() {
  */
 async function bootstrap() {
     showSignerBtn.addEventListener("click", openSignerSetupDialog);
+    signerFrame.addEventListener("load", onSignerFrameLoad);
+    openSignerExternalBtn.addEventListener("click", openSignerInBrowserTab);
+    requestAllowOnceBtn.addEventListener("click", onRequestAllowOnceClicked);
+    requestAllowAlwaysBtn.addEventListener("click", onRequestAllowAlwaysClicked);
+    requestRejectBtn.addEventListener("click", onRequestRejectClicked);
     pubkeyBtn.addEventListener("click", onGetPubkeyClicked);
     postForm.addEventListener("submit", onPostSubmit);
     postContent.addEventListener("input", updateContentCounter);
 
     updateContentCounter();
     setSignerButtonState("connecting", "Signer: verbindet");
+    setSetupDialogMode(false);
     refreshActionButtons();
 
     await startAutoSignerFlow();

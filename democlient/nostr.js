@@ -9,6 +9,7 @@ const DEFAULT_RELAYS = [
 ];
 const MIN_SIGNER_FRAME_HEIGHT = 110;
 const MAX_SIGNER_FRAME_HEIGHT = 1200;
+const APPROVAL_DIALOG_CLOSE_GRACE_MS = 12000;
 
 /**
  * @typedef {object} BunkerClientOptions
@@ -309,6 +310,8 @@ export function createBunkerConnectClient(options = {}) {
         dismissedUnlockDialog: false,
         activeDialogKind: "",
         pendingUserApproval: false,
+        lastApprovalSeenAt: 0,
+        lastApprovalDialogContent: null,
         autoConnectArmed: false,
         unsubscribers: []
     };
@@ -375,6 +378,9 @@ export function createBunkerConnectClient(options = {}) {
      */
     function closeRequestDialog() {
         if (!config.requestDialogEl) return;
+        if (state.activeDialogKind === "approval") {
+            state.lastApprovalSeenAt = 0;
+        }
         state.activeDialogKind = "";
         if (typeof config.requestDialogEl.close === "function" && config.requestDialogEl.open) {
             try {
@@ -452,6 +458,186 @@ export function createBunkerConnectClient(options = {}) {
     }
 
     /**
+     * Extracts method and parameter text from signer request details string.
+     * @param {string} requestDetailsText - Raw text from signer request-details element.
+     * @returns {{method: string, paramsText: string}} Parsed method and params text.
+     */
+    function parseSignerRequestDetailsText(requestDetailsText) {
+        const raw = String(requestDetailsText || "");
+        const knownMethodMatch = raw.match(/\b(sign_event|nip04_encrypt|nip04_decrypt|nip44_encrypt|nip44_decrypt|connect|get_public_key)\b/i);
+        const method = knownMethodMatch ? knownMethodMatch[1].toLowerCase() : "";
+
+        const paramMarkerMatch = raw.match(/Parameter:\s*/i);
+        if (!paramMarkerMatch || typeof paramMarkerMatch.index !== "number") {
+            return { method, paramsText: "" };
+        }
+
+        const paramStart = paramMarkerMatch.index + paramMarkerMatch[0].length;
+        const paramsText = raw.slice(paramStart).trim();
+        return { method, paramsText };
+    }
+
+    /**
+     * Maps signer request titles to method names when details parsing is incomplete.
+     * @param {string} requestTitleText - Raw signer request title.
+     * @returns {string} Guessed method name or empty string.
+     */
+    function methodFromSignerRequestTitle(requestTitleText) {
+        const title = String(requestTitleText || "").toLowerCase();
+        if (!title) return "";
+        if (title.includes("signieren")) return "sign_event";
+        if (title.includes("verschl")) return "nip44_encrypt";
+        if (title.includes("entschl")) return "nip44_decrypt";
+        if (title.includes("verbindung")) return "connect";
+        if (title.includes("öffentlichen schlüssel") || title.includes("oeffentlichen schluessel")) return "get_public_key";
+        return "";
+    }
+
+    /**
+     * Tries to parse signer params text as JSON object/array.
+     * @param {string} paramsText - Raw params text.
+     * @returns {any|null} Parsed JSON value or null.
+     */
+    function parseSignerParamsAsJson(paramsText) {
+        const text = String(paramsText || "").trim();
+        if (!text) return null;
+        if (!text.startsWith("{") && !text.startsWith("[")) return null;
+        try {
+            return JSON.parse(text);
+        } catch (_err) {
+            return null;
+        }
+    }
+
+    /**
+     * Tries to extract preview text from raw params when JSON parsing fails.
+     * @param {string} method - NIP-46 method name.
+     * @param {string} paramsText - Raw params text.
+     * @returns {string} Preview content or empty string.
+     */
+    function extractPreviewContentFromRawParams(method, paramsText) {
+        const text = String(paramsText || "");
+        if (!text) return "";
+
+        if (method === "sign_event") {
+            const contentMatch = text.match(/["']content["']\s*:\s*["']([\s\S]*?)["']/i);
+            if (contentMatch && contentMatch[1]) return normalizedPreviewText(contentMatch[1].replace(/\\n/g, " "));
+            return "";
+        }
+
+        if (method === "nip04_encrypt" || method === "nip44_encrypt") {
+            const plaintextMatch = text.match(/["']plaintext["']\s*:\s*["']([\s\S]*?)["']/i);
+            if (plaintextMatch && plaintextMatch[1]) return normalizedPreviewText(plaintextMatch[1].replace(/\\n/g, " "));
+
+            const arrayStyleMatch = text.match(/^\s*\[\s*["'][^"']*["']\s*,\s*["']([\s\S]*?)["']/);
+            if (arrayStyleMatch && arrayStyleMatch[1]) return normalizedPreviewText(arrayStyleMatch[1].replace(/\\n/g, " "));
+            return "";
+        }
+
+        return "";
+    }
+
+    /**
+     * Normalizes a content snippet for concise request previews.
+     * @param {string} text - Raw content text.
+     * @param {number} maxLen - Maximum preview length.
+     * @returns {string} Trimmed preview text.
+     */
+    function normalizedPreviewText(text, maxLen = 100) {
+        const raw = String(text || "").replace(/\s+/g, " ").trim();
+        if (!raw) return "";
+        if (raw.length <= maxLen) return raw;
+        return `${raw.slice(0, maxLen)}...`;
+    }
+
+    /**
+     * Extracts a relevant content preview from signer params by method.
+     * @param {string} method - NIP-46 method name.
+     * @param {any} parsedParams - Parsed params object/array.
+     * @returns {string} Preview content or empty string.
+     */
+    function extractPreviewContentForMethod(method, parsedParams) {
+        if (!parsedParams) return "";
+
+        if (method === "sign_event") {
+            if (typeof parsedParams?.content === "string") return normalizedPreviewText(parsedParams.content);
+            if (typeof parsedParams?.event?.content === "string") return normalizedPreviewText(parsedParams.event.content);
+            if (typeof parsedParams?.message === "string") return normalizedPreviewText(parsedParams.message);
+            return "";
+        }
+
+        if (method === "nip04_encrypt" || method === "nip44_encrypt") {
+            if (Array.isArray(parsedParams) && typeof parsedParams[1] === "string") {
+                return normalizedPreviewText(parsedParams[1]);
+            }
+            if (typeof parsedParams?.plaintext === "string") return normalizedPreviewText(parsedParams.plaintext);
+            if (typeof parsedParams?.content === "string") return normalizedPreviewText(parsedParams.content);
+            if (typeof parsedParams?.message === "string") return normalizedPreviewText(parsedParams.message);
+            return "";
+        }
+
+        return "";
+    }
+
+    /**
+     * Builds concise approval dialog text from signer request details.
+     * @param {string} requestTitleText - Raw signer request title text.
+     * @param {string} requestDetailsText - Raw signer request details text.
+     * @returns {{title: string, details: string}} Compact approval text.
+     */
+    function buildConciseApprovalDialogText(requestTitleText, requestDetailsText) {
+        const parsed = parseSignerRequestDetailsText(requestDetailsText);
+        const method = parsed.method || methodFromSignerRequestTitle(requestTitleText);
+        const jsonParams = parseSignerParamsAsJson(parsed.paramsText);
+        const previewContent =
+            extractPreviewContentForMethod(method, jsonParams) ||
+            extractPreviewContentFromRawParams(method, parsed.paramsText);
+
+        if (method === "sign_event") {
+            const details = previewContent
+                ? `Soll diese Nachricht signiert werden?\n\n"${previewContent}"`
+                : "Soll diese Nachricht signiert werden?";
+            return { title: "Signer Genehmigung", details };
+        }
+
+        if (method === "nip04_encrypt" || method === "nip44_encrypt") {
+            const details = previewContent
+                ? `Soll diese Nachricht verschluesselt werden?\n\n"${previewContent}"`
+                : "Soll diese Nachricht verschluesselt werden?";
+            return { title: "Signer Genehmigung", details };
+        }
+
+        if (method === "nip04_decrypt" || method === "nip44_decrypt") {
+            return {
+                title: "Signer Genehmigung",
+                details: "Soll diese Nachricht entschluesselt werden?"
+            };
+        }
+
+        if (method) {
+            return {
+                title: "Signer Genehmigung",
+                details: `Soll diese Anfrage ausgefuehrt werden?\n\nMethode: ${method}`
+            };
+        }
+
+        return {
+            title: "Signer Genehmigung",
+            details: "Bitte Anfrage im Signer bestaetigen oder ablehnen."
+        };
+    }
+
+    /**
+     * Checks whether a concise approval payload is still generic/fallback.
+     * @param {{title: string, details: string}} payload - Approval payload to classify.
+     * @returns {boolean} True when payload has no concrete request context.
+     */
+    function isGenericApprovalPayload(payload) {
+        const details = String(payload?.details || "").toLowerCase();
+        return details === "bitte anfrage im signer bestaetigen oder ablehnen.";
+    }
+
+    /**
      * Mirrors current signer request state from iframe DOM into host dialog.
      */
     function syncSignerDialogFromIframeDom() {
@@ -473,9 +659,18 @@ export function createBunkerConnectClient(options = {}) {
         }
 
         if (authVisible) {
-            const title = frameDoc.getElementById("request-title")?.textContent?.trim() || "Genehmigung erforderlich";
-            const details = frameDoc.getElementById("request-details")?.textContent?.trim() || "Bitte Anfrage im Signer bestaetigen.";
-            openRequestDialog(title, details, "approval");
+            const rawTitle = frameDoc.getElementById("request-title")?.textContent?.trim() || "";
+            const rawDetails = frameDoc.getElementById("request-details")?.textContent?.trim() || "";
+            const conciseDialog = buildConciseApprovalDialogText(rawTitle, rawDetails);
+            let dialogPayload = conciseDialog;
+            if (isGenericApprovalPayload(conciseDialog) && state.lastApprovalDialogContent) {
+                dialogPayload = state.lastApprovalDialogContent;
+            }
+            if (!isGenericApprovalPayload(dialogPayload)) {
+                state.lastApprovalDialogContent = dialogPayload;
+            }
+            state.lastApprovalSeenAt = Date.now();
+            openRequestDialog(dialogPayload.title, dialogPayload.details, "approval");
             return;
         }
 
@@ -491,8 +686,15 @@ export function createBunkerConnectClient(options = {}) {
         }
 
         if (state.pendingUserApproval) {
-            openRequestDialog("Signer Genehmigung", "Bitte Anfrage im Signer bestaetigen oder ablehnen.", "approval");
+            // Keep currently visible approval dialog open, but avoid reopening generic dialogs without context.
+            if (state.activeDialogKind === "approval") return;
             return;
+        }
+
+        if (state.activeDialogKind === "approval") {
+            const seenAgoMs = Date.now() - state.lastApprovalSeenAt;
+            if (seenAgoMs < APPROVAL_DIALOG_CLOSE_GRACE_MS) return;
+            state.lastApprovalDialogContent = null;
         }
 
         closeRequestDialog();
