@@ -8,6 +8,7 @@ const setupCardEl = document.querySelector(".setup-card");
 const setupDialogTitleEl = document.getElementById("setup-dialog-title");
 const setupDialogHintEl = document.getElementById("setup-dialog-hint");
 const openSignerExternalBtn = document.getElementById("open-signer-external-btn");
+const closeSignerDialogBtn = document.getElementById("close-signer-dialog-btn");
 const showSignerBtn = document.getElementById("show-signer-btn");
 const showSignerLabel = document.getElementById("show-signer-label");
 const statusEl = document.getElementById("status");
@@ -322,7 +323,10 @@ function syncSetupApprovalPreviewFromFrame() {
     }
 
     const authModal = frameDoc.getElementById("auth-modal");
-    if (!isFrameElementVisible(authModal)) {
+    const hasActiveRequest = isFrameElementVisible(authModal);
+    frameDoc.body?.classList.toggle("demo-has-request", hasActiveRequest);
+
+    if (!hasActiveRequest) {
         renderIdleApprovalPreview();
         return;
     }
@@ -372,11 +376,11 @@ function applyEmbeddedSignerCompactPresentation() {
     }
     styleEl.textContent =
         "body.compact-connected #app-title{display:none !important;}" +
-        "body.compact-connected #status{display:none !important;}" +
-        "body.compact-connected #user-info{display:none !important;}" +
+        "body.compact-connected.demo-has-request #status{display:none !important;}" +
+        "body.compact-connected.demo-has-request #user-info{display:none !important;}" +
         "body.compact-connected #overlay{display:none !important;}" +
         "body.compact-connected #auth-modal{position:static !important;top:auto !important;left:auto !important;transform:none !important;max-width:none !important;width:100% !important;margin:0 !important;padding:14px !important;border-radius:0 !important;border-left:none !important;border-right:none !important;background:#222 !important;}" +
-        "body.compact-connected #request-title{display:none !important;}" +
+        "body.compact-connected.demo-has-request #request-title{display:none !important;}" +
         "body.compact-connected #request-details{display:none !important;}" +
         "body.compact-connected #toggle-request-details-btn{display:none !important;}" +
         "body.compact-connected #auth-modal .button-row{gap:10px !important;justify-content:flex-start !important;}";
@@ -425,6 +429,13 @@ function onSignerFrameLoad() {
 function openSignerInBrowserTab() {
     const signerUrl = new URL(SIGNER_URL, window.location.href).toString();
     window.open(signerUrl, "_blank", "noopener,noreferrer");
+}
+
+/**
+ * Handles click on setup dialog close button.
+ */
+function onCloseSignerDialogClicked() {
+    closeSignerSetupDialog();
 }
 
 /**
@@ -814,6 +825,9 @@ async function bootstrap() {
     showSignerBtn.addEventListener("click", openSignerSetupDialog);
     signerFrame.addEventListener("load", onSignerFrameLoad);
     openSignerExternalBtn.addEventListener("click", openSignerInBrowserTab);
+    if (closeSignerDialogBtn) {
+        closeSignerDialogBtn.addEventListener("click", onCloseSignerDialogClicked);
+    }
     requestAllowOnceBtn.addEventListener("click", onRequestAllowOnceClicked);
     requestAllowAlwaysBtn.addEventListener("click", onRequestAllowAlwaysClicked);
     requestRejectBtn.addEventListener("click", onRequestRejectClicked);

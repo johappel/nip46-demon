@@ -185,3 +185,15 @@ Refactoring von `signer.html` in wartbare Module plus neue Aufmerksamkeits-Featu
 ## Fortschritt 2026-02-17 (Lint-Warnung theme-color entfernt)
 
 - [x] `signer.html`: `meta[name="theme-color"]` entfernt, um Browser-Kompatibilitaetswarnung in Firefox/Opera-Targets zu vermeiden.
+
+## Fortschritt 2026-02-17 (Dialog-Verhalten bei leerer Anfrage differenziert)
+
+- [x] `democlient/index.js`: iframe bekommt bei aktiver Anfrage die Klasse `demo-has-request`.
+- [x] `democlient/index.js`: Ausblendungen fuer `#status`, `#user-info` und `#request-title` greifen nur noch waehrend aktiver Anfrage.
+- [x] Ergebnis: Klick auf `Signer: bereit` zeigt im Leerlauf wieder sinnvolle Signer-Infos statt scheinbar leerem Dialog.
+
+## Fortschritt 2026-02-17 (Setup-Dialog Close-Button)
+
+- [x] `democlient/index.html`: Header-Actions um `close-signer-dialog-btn` (`X`) neben `open-signer-external-btn` erweitert.
+- [x] `democlient/index.css`: gemeinsame Icon-Button-Styles auf Link- und Close-Button angewendet.
+- [x] `democlient/index.js`: Click-Handler `onCloseSignerDialogClicked()` hinzugefuegt und im Bootstrap verdrahtet.

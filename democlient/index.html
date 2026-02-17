@@ -40,15 +40,26 @@
         <section class="card setup-card">
             <div class="setup-dialog-head">
                 <h2 id="setup-dialog-title">Signer Setup</h2>
-                <button
-                    id="open-signer-external-btn"
-                    class="icon-link-btn"
-                    type="button"
-                    title="Signer im Browser-Tab oeffnen"
-                    aria-label="Signer im Browser-Tab oeffnen"
-                >
-                    ↗
-                </button>
+                <div class="setup-dialog-actions">
+                    <button
+                        id="open-signer-external-btn"
+                        class="icon-link-btn"
+                        type="button"
+                        title="Signer im Browser-Tab oeffnen"
+                        aria-label="Signer im Browser-Tab oeffnen"
+                    >
+                        ↗
+                    </button>
+                    <button
+                        id="close-signer-dialog-btn"
+                        class="icon-close-btn"
+                        type="button"
+                        title="Dialog schliessen"
+                        aria-label="Dialog schliessen"
+                    >
+                        X
+                    </button>
+                </div>
             </div>
             <p id="setup-dialog-hint" class="muted">Bitte Signer entsperren. Danach wird die Verbindung automatisch aufgebaut.</p>
             <p id="status" class="status" data-state="idle">Noch nicht initialisiert.</p>

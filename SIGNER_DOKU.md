@@ -332,6 +332,7 @@ Ergebnis:
 - beim Absenden wird der Setup-Dialog automatisch geoeffnet, damit die Signer-Buttons sichtbar und klickbar sind
 - der `Signer`-Button zeigt den Zustand per Statuspunkt: gelb (`verbindet`), gruen (`bereit`), rot (`Fehler`)
 - im Setup-Dialog wechselt der Titel auf `NIP-46 Signer` sobald verbunden; rechts oben oeffnet ein Link-Icon den Signer in einem eigenen Browser-Tab
+- im Setup-Dialog gibt es rechts oben zusaetzlich einen `X`-Button zum manuellen Schliessen des Dialogs
 - im eingebetteten `compact-connected` Modus blendet die Demo den inneren Signer-Titel aus, um doppelte Ueberschriften zu vermeiden
 - technische `connection-info` ist in der Boilerplate-UI ausgeblendet; stattdessen zeigt `Aktuelle Anfrage` die relevante Genehmigungs-Kurzfassung (Methode + erste ~100 Zeichen Inhalt bei `sign_event`/`nip04|nip44_encrypt`)
 - bei aktiver Anfrage reduziert die Demo Dopplungen: die Vorschau-Card zeigt nur die wesentliche Aktion + Content-Kurztext; im iframe werden zusaetzlich `status`, `user-info` und `request-title` ausgeblendet, sodass der Fokus auf den Genehmigungsbuttons liegt

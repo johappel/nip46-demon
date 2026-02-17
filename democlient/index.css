@@ -228,7 +228,14 @@ button[disabled] {
     margin: 0;
 }
 
-.icon-link-btn {
+.setup-dialog-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.icon-link-btn,
+.icon-close-btn {
     width: 2rem;
     height: 2rem;
     border-radius: 9px;
@@ -243,7 +250,8 @@ button[disabled] {
     justify-content: center;
 }
 
-.icon-link-btn:hover {
+.icon-link-btn:hover,
+.icon-close-btn:hover {
     filter: brightness(1.08);
 }
 
