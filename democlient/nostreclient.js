@@ -9,8 +9,7 @@ const DEFAULT_SIGNER_IFRAME_URI = "../signer.html";
 const APPROVAL_BUTTON_FIND_TIMEOUT_MS = 2500;
 const APPROVAL_BUTTON_FIND_POLL_MS = 80;
 const REQUEST_PREVIEW_MAX_LEN = 100;
-const REQUIRED_ELEMENT_ROLES = [
-    "send-btn",
+const REQUIRED_BASE_ELEMENT_ROLES = [
     "signer-frame",
     "signer-setup-dialog",
     "open-signer-external-btn",
@@ -21,15 +20,18 @@ const REQUIRED_ELEMENT_ROLES = [
     "approval-preview",
     "approval-preview-method",
     "approval-preview-content",
-    "post-form",
-    "form-fields",
-    "content-count",
     "signer-request-dialog",
     "signer-request-title",
     "signer-request-details",
     "request-allow-once-btn",
     "request-allow-always-btn",
     "request-reject-btn"
+];
+const REQUIRED_FORM_ELEMENT_ROLES = [
+    "send-btn",
+    "post-form",
+    "form-fields",
+    "content-count"
 ];
 
 /**
@@ -121,11 +123,25 @@ let runtimeConfig = {
 };
 
 /**
+ * Checks whether the generated form mode is enabled.
+ * @param {NormalizedNostreClientConfig=} config - Effective runtime config.
+ * @returns {boolean} True when one form URI is configured.
+ */
+function isFormUiEnabled(config = runtimeConfig) {
+    return Boolean(String(config?.formUri || "").trim());
+}
+
+/**
  * Resolves and validates required DOM elements by role.
+ * @param {{requiresFormUi?: boolean}=} options - Validation options.
  * @throws {Error} If one or more required elements are missing.
  */
-function ensureRequiredDemoElements() {
-    const missingRoles = REQUIRED_ELEMENT_ROLES.filter((role) => !getElementByRole(role));
+function ensureRequiredDemoElements(options = {}) {
+    const requiresFormUi = Boolean(options.requiresFormUi);
+    const requiredRoles = requiresFormUi
+        ? [...REQUIRED_BASE_ELEMENT_ROLES, ...REQUIRED_FORM_ELEMENT_ROLES]
+        : REQUIRED_BASE_ELEMENT_ROLES;
+    const missingRoles = requiredRoles.filter((role) => !getElementByRole(role));
     if (missingRoles.length === 0) return;
     throw new Error(`Fehlende Demo-Elemente (data-nostr oder id): ${missingRoles.join(", ")}`);
 }
@@ -869,7 +885,8 @@ function hideConnectionInfoForBoilerplate() {
  * @param {boolean} isBusy - Busy flag.
  */
 function setBusy(isBusy) {
-    sendBtn.disabled = isBusy || !currentConnection;
+    if (!(sendBtn instanceof HTMLButtonElement)) return;
+    sendBtn.disabled = isBusy || !currentConnection || !activeFormSchema;
 }
 
 /**
@@ -880,6 +897,26 @@ function cleanupFormRuntime() {
         formCounterCleanup();
     }
     formCounterCleanup = null;
+}
+
+/**
+ * Toggles generated form visibility in the demo UI.
+ * @param {boolean} isVisible - True to show generated form controls.
+ */
+function setGeneratedFormVisibility(isVisible) {
+    if (postForm instanceof HTMLFormElement) {
+        postForm.hidden = !isVisible;
+    }
+
+    const counterRow = contentCountEl instanceof HTMLElement ? contentCountEl.closest(".row") : null;
+    if (counterRow instanceof HTMLElement) {
+        counterRow.hidden = !isVisible;
+        return;
+    }
+
+    if (contentCountEl instanceof HTMLElement) {
+        contentCountEl.hidden = !isVisible;
+    }
 }
 
 /**
@@ -912,7 +949,20 @@ function applyFormSchemaToUi(schema) {
  * Loads form schema and renders it into the current form container.
  */
 async function initializeFormRuntime() {
-    const loadedSchema = await loadFormSchema({ formUri: runtimeConfig.formUri });
+    const loadedSchema = await loadFormSchema({
+        formUri: runtimeConfig.formUri,
+        allowEmpty: true
+    });
+
+    if (!loadedSchema) {
+        cleanupFormRuntime();
+        activeFormSchema = null;
+        setGeneratedFormVisibility(false);
+        setResult("Kein form_uri gesetzt. Formularmodus ist deaktiviert. Nutze nostrclient.signEvent(...) und nostrclient.publishSignedEvent(...) fuer Custom-Events.");
+        return;
+    }
+
+    setGeneratedFormVisibility(true);
     if (!isSupportedSchemaVersion(loadedSchema)) {
         setResult("Hinweis: Unbekannte Formular-Version geladen. Es wird versucht, kompatibel zu rendern.");
     }
@@ -1010,7 +1060,8 @@ async function onPostSubmit(event) {
  * Enables or disables action buttons based on current state.
  */
 function refreshActionButtons() {
-    sendBtn.disabled = !currentConnection;
+    if (!(sendBtn instanceof HTMLButtonElement)) return;
+    sendBtn.disabled = !currentConnection || !activeFormSchema;
 }
 
 /**
@@ -1027,7 +1078,9 @@ async function bootstrap() {
         requestAllowOnceBtn.addEventListener("click", onRequestAllowOnceClicked);
         requestAllowAlwaysBtn.addEventListener("click", onRequestAllowAlwaysClicked);
         requestRejectBtn.addEventListener("click", onRequestRejectClicked);
-        postForm.addEventListener("submit", onPostSubmit);
+        if (postForm instanceof HTMLFormElement) {
+            postForm.addEventListener("submit", onPostSubmit);
+        }
         setSignerButtonState("connecting", "Signer: verbindet");
         setSetupDialogMode(false);
         hideConnectionInfoForBoilerplate();
@@ -1098,8 +1151,8 @@ function destroy() {
  * @returns {Promise<void>} Resolves when setup flow started.
  */
 async function init(options = {}) {
-    ensureRequiredDemoElements();
     runtimeConfig = normalizeInitConfig(options.config);
+    ensureRequiredDemoElements({ requiresFormUi: isFormUiEnabled(runtimeConfig) });
     currentConnection = null;
 
     if (bunkerClient && typeof bunkerClient.destroy === "function") {

@@ -320,7 +320,6 @@ import { nostrclient } from "./nostreclient.js";
 
 const config = {
   signer_iframe_uri: "../signer.html",
-  form_uri: "./forms/schemas/kind1.json",
   relays: [],
   allow_nip07: false
 };
@@ -343,7 +342,7 @@ console.log(pubkey, relayUrls, response);
 ```js
 {
   signer_iframe_uri: "../signer.html", // oder signerIframeUri
-  form_uri: "./forms/schemas/kind1.json", // oder formUri
+  form_uri: "./forms/schemas/kind1.json", // oder formUri, optional
   relays: ["wss://relay.damus.io"],    // optional, leer => Demo-Defaults
   allow_nip07: true,                   // oder allowNip07
   custom_bunker_uri: ""                // oder customBunkerUri
@@ -431,7 +430,7 @@ init(options?: {
 Config-Felder:
 
 - `signer_iframe_uri`: Pfad zur Signer-Seite. Default: `../signer.html`
-- `form_uri`: URI zu einem JSON-Form-Schema. Leer => lokales Default-Schema (`kind1.json`)
+- `form_uri`: URI zu einem JSON-Form-Schema. Leer => kein generiertes Formular (API-only Modus)
 - `relays`: optionale Relay-Liste fuer den Client. Leer = interne Defaults
 - `allow_nip07`: wenn `true`, kann intern `window.nostr` bereitgestellt werden
 - `custom_bunker_uri`: optionaler fixer Fallback auf eine `bunker://...` URI
@@ -439,6 +438,7 @@ Config-Felder:
 Verhalten:
 
 - Bei erneutem `init(...)` wird die bestehende Verbindung sauber ersetzt (Re-Init).
+- Wenn `form_uri` fehlt, wird kein Formular gerendert; du sendest Events direkt ueber `nostrclient.signEvent(...)` und `nostrclient.publishSignedEvent(...)`.
 - Wenn erforderliche Demo-Elemente in der HTML fehlen, wird ein Fehler geworfen.
 
 ### 12.3 `getPublicKey()`
@@ -505,7 +505,7 @@ import { nostrclient } from "./nostreclient.js";
 
 const config = {
   signer_iframe_uri: "../signer.html",
-  form_uri: "./forms/schemas/kind1.json",
+  // form_uri optional
   relays: [],
   allow_nip07: false
 };
@@ -528,6 +528,8 @@ Beispiel fuer den Post-Flow:
 - `data-nostr="form-fields"`: Container, in den Felder aus dem geladenen Schema gerendert werden
 - `data-nostr="send-btn"`: Submit-Button fuer den Post-Flow
 - `data-nostr="content-count"`: Zeichenzaehler
+
+Hinweis: Diese Rollen sind nur fuer den Formularmodus mit gesetztem `form_uri` erforderlich.
 
 Minimalbeispiel:
 
@@ -560,12 +562,14 @@ Gleiches Prinzip bei NIP-23: `30023` (publish) und `30024` (draft).
 
 ### 13.3 Aktueller Laufzeit-Flow
 
-1. `nostrclient.init({ config })` laedt `form_uri` (oder fallback `kind1.json`)
+1. `nostrclient.init({ config })` laedt `form_uri` (wenn gesetzt)
 2. `form-generator.js` rendert Felder in `data-nostr="form-fields"`
 3. Beim Submit:
    - Werte sammeln + validieren
    - Adapter erzeugt unsigned Event
    - `nostrclient.signEvent(...)` + `nostrclient.publishSignedEvent(...)`
+
+Wenn `form_uri` nicht gesetzt ist, entfallen Schritt 2/3 und der Client bleibt im API-only Modus fuer eigene Custom-Events.
 
 ### 13.4 Schema-Format (JSON)
 

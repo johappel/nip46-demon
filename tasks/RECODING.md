@@ -288,3 +288,11 @@ Refactoring von `signer.html` in wartbare Module plus neue Aufmerksamkeits-Featu
 - [x] `democlient/nostreclient.js`: Abhaengigkeiten zu `pubkey-btn` entfernt (Required-Roles, Listener, Busy/Enable-State).
 - [x] `SIGNER_DOKU.md`: Verhalten dokumentiert (Public Key wird intern bei Bedarf geladen).
 
+## Fortschritt 2026-02-17 (Form-URI optional / API-only Modus)
+
+- [x] `democlient/forms/schema-loader.js`: `loadFormSchema(...)` um `allowEmpty` erweitert (`null` bei leerem `form_uri`).
+- [x] `democlient/nostreclient.js`: Formularmodus optional gemacht; ohne `form_uri` wird kein Formular gerendert.
+- [x] `democlient/nostreclient.js`: Required-DOM-Rollen in Basis- und Formularrollen getrennt, damit API-only Setup ohne Formular-Elemente moeglich ist.
+- [x] `democlient/index.js`: Default-Config auf formularlosen Start umgestellt (Kommentar fuer Custom-Event-Flow).
+- [x] `SIGNER_DOKU.md`: API-Doku auf neues Verhalten aktualisiert (`form_uri` optional, API-only ohne Formular).
+

@@ -173,13 +173,25 @@ function getDefaultFormSchemaUri() {
 }
 
 /**
+ * @typedef {object} LoadFormSchemaOptions
+ * @property {string=} formUri - Optional schema URI.
+ * @property {boolean=} allowEmpty - Return null when no schema URI is provided.
+ */
+
+/**
  * Loads and normalizes one form schema.
  * Falls back to the bundled kind:1 schema when remote loading fails.
- * @param {{formUri?: string}=} options - Load options.
- * @returns {Promise<object>} Normalized schema.
+ * Returns null when no URI is set and allowEmpty=true.
+ * @param {LoadFormSchemaOptions=} options - Load options.
+ * @returns {Promise<object|null>} Normalized schema or null.
  */
 export async function loadFormSchema(options = {}) {
     const requestedUri = String(options.formUri || "").trim();
+    const allowEmpty = Boolean(options.allowEmpty);
+
+    if (!requestedUri && allowEmpty) {
+        return null;
+    }
 
     if (requestedUri) {
         try {
