@@ -273,7 +273,7 @@ Use-Case: Multi-User-Systeme (z. B. WordPress), in denen pro App-User ein eigene
 
 ## 10. Relevante Dateien im Repo
 
-- `signer.html` (Signer-Layout mit Tabs inkl. `Relays`, Modals, CSP, Modul-Bootstrap)
+- `signer.html` (Signer-Layout mit Tabs inkl. `Relays`, Modals, CSP, Modul-Bootstrap; ohne `meta[name=\"theme-color\"]`, um Cross-Browser-Lint-Warnungen zu vermeiden)
 - `signer-nip46.js` (NIP-46 Core, Keyring, Permissions, Relay-Config, Bridge, Startup)
 - `signer-ui.js` (Attention-Features: Notification, Blink, Sound)
 - `signer-ui.css` (komplette UI-Styles)

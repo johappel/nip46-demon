@@ -181,3 +181,7 @@ Refactoring von `signer.html` in wartbare Module plus neue Aufmerksamkeits-Featu
 - [x] `democlient/index.js`: Vorschau-Card nur bei aktiver Genehmigungsanfrage sichtbar (sonst ausgeblendet).
 - [x] `democlient/index.js`: iframe-Embed-Styles reduziert (`#status`, `#user-info`, `#request-title` ausgeblendet) fuer klaren Fokus auf Buttons.
 - [x] `democlient/index.html`: Vorschau-Card initial versteckt (`hidden`) gegen Lade-Flackern.
+
+## Fortschritt 2026-02-17 (Lint-Warnung theme-color entfernt)
+
+- [x] `signer.html`: `meta[name="theme-color"]` entfernt, um Browser-Kompatibilitaetswarnung in Firefox/Opera-Targets zu vermeiden.
