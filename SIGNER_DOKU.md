@@ -543,6 +543,7 @@ Wenn du Felder erweiterst, vergib neue `data-nostr` Rollen und dokumentiere sie 
 - `kind` = numerischer Eventtyp im Event (`event.kind`)
 
 Darum kann ein NIP mehrere Kinds nutzen (z. B. NIP-52 mit mehreren 3192x-Kinds).
+Gleiches Prinzip bei NIP-23: `30023` (publish) und `30024` (draft).
 
 ### 13.2 Unterschied Schema vs Adapter
 
@@ -589,5 +590,5 @@ Damit kann ein einziges Schema auch NIPs mit mehreren Kinds abbilden.
 Beispiel-Schemata im Repo:
 
 - `democlient/forms/schemas/kind1.json`
-- `democlient/forms/schemas/kind30023.json`
+- `democlient/forms/schemas/kind30023.json` (NIP-23 Publish/Draft via `kindSelectorMap`)
 - `democlient/forms/schemas/nip52-calendar.json` (Multi-Kind Beispiel fuer 31922-31925)

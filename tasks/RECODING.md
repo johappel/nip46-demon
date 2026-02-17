@@ -230,6 +230,8 @@ Refactoring von `signer.html` in wartbare Module plus neue Aufmerksamkeits-Featu
 - [x] `democlient/forms/kind-adapters/index.js` implementiert (Adapter-Registry + `kind-1`, `kind-30023`, `generic-kind`).
 - [x] `democlient/forms/schemas/kind1.json` als lokales Default-Schema angelegt.
 - [x] Beispiel-Schemata angelegt: `kind30023.json` und `nip52-calendar.json` (Kind-Selector 31922-31925).
+- [x] `kind30023.json` auf NIP-23 Publish/Draft erweitert (`30023` vs `30024` per `kindSelectorField` + `kindSelectorMap`).
+- [x] `kind-30023` Adapter aktualisiert: nutzt jetzt selektierten Kind statt festem `30023`.
 - [x] `democlient/nostreclient.js` auf dynamischen Submit-Flow umgestellt (`collect -> validate -> adapter -> sign -> publish`).
 - [x] `democlient/index.html` um `data-nostr=\"form-fields\"` als Render-Container erweitert.
 - [x] `democlient/index.js` um `config.form_uri` erweitert.

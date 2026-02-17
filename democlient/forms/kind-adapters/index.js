@@ -149,11 +149,12 @@ function buildKind1UnsignedEvent(context) {
 }
 
 /**
- * Builds a kind:30023 long-form event.
+ * Builds a NIP-23 long-form event (publish/draft).
  * @param {BuildEventContext} context - Build context.
  * @returns {object} Unsigned nostr event.
  */
 function buildKind30023UnsignedEvent(context) {
+    const schema = context.schema;
     const values = context.values;
     const identifier = String(values.identifier || values.slug || values.title || "entry").trim();
     const title = String(values.title || "").trim();
@@ -167,8 +168,10 @@ function buildKind30023UnsignedEvent(context) {
     if (image) tags.push(["image", image]);
     if (publishedAt) tags.push(["published_at", String(publishedAt)]);
 
+    const kind = resolveKindWithSelector(schema, values);
+
     return {
-        kind: 30023,
+        kind,
         created_at: Math.floor(Date.now() / 1000),
         tags,
         content: String(values.content || "").trim(),

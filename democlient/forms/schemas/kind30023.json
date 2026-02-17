@@ -1,12 +1,34 @@
 ﻿{
   "version": "nostr-form-v1",
   "id": "kind30023-longform",
-  "title": "Long Form (kind:30023)",
-  "description": "Beispielschema fuer Long-Form-Posts.",
+  "title": "Long Form (NIP-23)",
+  "description": "Beispielschema fuer NIP-23 Long-Form-Posts mit Draft/Publish Auswahl.",
   "kind": 30023,
   "adapter": "kind-30023",
+  "kindSelectorField": "publishMode",
+  "kindSelectorMap": {
+    "publish": 30023,
+    "draft": 30024
+  },
   "submitLabel": "Long Form signieren + senden",
   "fields": [
+    {
+      "name": "publishMode",
+      "label": "Modus",
+      "type": "select",
+      "required": true,
+      "defaultValue": "publish",
+      "options": [
+        {
+          "label": "Publish (kind:30023)",
+          "value": "publish"
+        },
+        {
+          "label": "Draft (kind:30024)",
+          "value": "draft"
+        }
+      ]
+    },
     {
       "name": "identifier",
       "label": "Identifier (d-Tag)",
