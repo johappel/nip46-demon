@@ -257,4 +257,18 @@ Refactoring von `signer.html` in wartbare Module plus neue Aufmerksamkeits-Featu
 - [x] `democlient/forms/schemas/kind30023.json`: Felder fuer `published_at`, `topics`, `tagsJson` ergaenzt.
 - [x] `SIGNER_DOKU.md`: NIP-23 Abschnitt zu optionalen Tags und Editability hinzugefuegt.
 
+## Fortschritt 2026-02-17 (NIP-23 published_at automatisiert)
+
+- [x] `democlient/forms/kind-adapters/nip23.js`: `published_at` wird bei `kind:30023` automatisch zur Laufzeit gesetzt.
+- [x] `democlient/forms/schemas/kind30023.json`: User-Felder `published_at` und `publishedAt` entfernt.
+- [x] `democlient/forms/kind-adapters/nip23.js`: `tagsJson` kann `published_at` nicht mehr ueberschreiben.
+- [x] `SIGNER_DOKU.md`: Verhalten dokumentiert (auto-generated statt User-Eingabe).
+
+## Fortschritt 2026-02-17 (NIP-52 TZID/Geohash automatisiert)
+
+- [x] `democlient/forms/kind-adapters/nip52.js`: `start_tzid`/`end_tzid` auf Browser-Systemzeitzone (IANA) umgestellt.
+- [x] `democlient/forms/kind-adapters/nip52.js`: Geohash-Erzeugung ohne externe Abhaengigkeit implementiert.
+- [x] `democlient/forms/kind-adapters/nip52.js`: `g` wird aus `lat/lon` oder aus `location`-Text (`lat,lon`) abgeleitet.
+- [x] `democlient/forms/schemas/nip52-calendar.json`: manuelle Felder `startTzid`, `endTzid`, `geohash` entfernt.
+- [x] `SIGNER_DOKU.md`: NIP-52 Verhalten fuer automatische TZID/Geohash-Ableitung dokumentiert.
 

@@ -2,6 +2,8 @@
 
 const SECONDS_PER_DAY = 86400;
 const MAX_D_TAG_RANGE_DAYS = 3660;
+const GEOHASH_BASE32 = "0123456789bcdefghjkmnpqrstuvwxyz";
+const GEOHASH_DEFAULT_PRECISION = 9;
 
 /**
  * Reads the first non-empty value from a candidate key list.
@@ -79,6 +81,136 @@ function buildDayGranularityRange(startUnix, endUnix) {
 }
 
 /**
+ * Resolves the browser/system IANA time zone id.
+ * @returns {string} Time zone id or empty string.
+ */
+function getBrowserTimeZoneId() {
+    try {
+        const zone = Intl.DateTimeFormat().resolvedOptions()?.timeZone;
+        return String(zone || "").trim();
+    } catch (_err) {
+        return "";
+    }
+}
+
+/**
+ * Parses a decimal coordinate.
+ * @param {string} text - Raw coordinate text.
+ * @returns {number|undefined} Parsed finite number.
+ */
+function parseCoordinate(text) {
+    const numeric = Number(String(text || "").trim());
+    if (!Number.isFinite(numeric)) return undefined;
+    return numeric;
+}
+
+/**
+ * Tries to parse coordinates from free-text location.
+ * Accepted format example: "52.5200, 13.4050".
+ * @param {string} locationText - Human readable location.
+ * @returns {{lat:number, lon:number}|undefined} Parsed coordinates.
+ */
+function parseCoordinatesFromLocationText(locationText) {
+    const raw = String(locationText || "");
+    if (!raw) return undefined;
+
+    const match = raw.match(/(-?\d+(?:\.\d+)?)\s*[,;]\s*(-?\d+(?:\.\d+)?)/);
+    if (!match) return undefined;
+
+    const lat = parseCoordinate(match[1]);
+    const lon = parseCoordinate(match[2]);
+    if (lat === undefined || lon === undefined) return undefined;
+    if (lat < -90 || lat > 90 || lon < -180 || lon > 180) return undefined;
+
+    return { lat, lon };
+}
+
+/**
+ * Resolves coordinates from explicit fields or location text.
+ * @param {Record<string,string>} values - Collected form values.
+ * @param {string} locationText - Human readable location.
+ * @returns {{lat:number, lon:number}|undefined} Parsed coordinates.
+ */
+function resolveCoordinates(values, locationText) {
+    const latRaw = readFirstValue(values, ["locationLat", "latitude", "lat"]);
+    const lonRaw = readFirstValue(values, ["locationLon", "longitude", "lon", "lng"]);
+    if (latRaw && lonRaw) {
+        const lat = parseCoordinate(latRaw);
+        const lon = parseCoordinate(lonRaw);
+        if (lat !== undefined && lon !== undefined && lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180) {
+            return { lat, lon };
+        }
+    }
+
+    return parseCoordinatesFromLocationText(locationText);
+}
+
+/**
+ * Encodes coordinates as geohash.
+ * @param {number} lat - Latitude.
+ * @param {number} lon - Longitude.
+ * @param {number=} precision - Geohash length.
+ * @returns {string} Geohash.
+ */
+function encodeGeohash(lat, lon, precision = GEOHASH_DEFAULT_PRECISION) {
+    let minLat = -90;
+    let maxLat = 90;
+    let minLon = -180;
+    let maxLon = 180;
+    let bits = 0;
+    let bitCount = 0;
+    let useLon = true;
+    let out = "";
+
+    while (out.length < precision) {
+        if (useLon) {
+            const midLon = (minLon + maxLon) / 2;
+            if (lon >= midLon) {
+                bits = (bits << 1) | 1;
+                minLon = midLon;
+            } else {
+                bits <<= 1;
+                maxLon = midLon;
+            }
+        } else {
+            const midLat = (minLat + maxLat) / 2;
+            if (lat >= midLat) {
+                bits = (bits << 1) | 1;
+                minLat = midLat;
+            } else {
+                bits <<= 1;
+                maxLat = midLat;
+            }
+        }
+
+        useLon = !useLon;
+        bitCount += 1;
+        if (bitCount === 5) {
+            out += GEOHASH_BASE32[bits];
+            bits = 0;
+            bitCount = 0;
+        }
+    }
+
+    return out;
+}
+
+/**
+ * Resolves geohash from explicit field or derived coordinates.
+ * @param {Record<string,string>} values - Collected form values.
+ * @param {string} locationText - Human readable location.
+ * @returns {string} Geohash or empty string.
+ */
+function resolveGeohash(values, locationText) {
+    const explicit = readFirstValue(values, ["geohash", "g"]);
+    if (explicit) return explicit;
+
+    const coords = resolveCoordinates(values, locationText);
+    if (!coords) return "";
+    return encodeGeohash(coords.lat, coords.lon);
+}
+
+/**
  * Builds a NIP-52 calendar-related event.
  * For kind 31923 (time-based), required tags from NIP-52 are enforced.
  * @param {import("./shared.js").BuildEventContext} context - Build context.
@@ -94,12 +226,15 @@ export function buildNip52UnsignedEvent(context) {
     const description = readFirstValue(values, ["description", "content"]);
     const identifier = resolveNip52Identifier(values);
     const location = readFirstValue(values, ["location"]);
-    const geohash = readFirstValue(values, ["geohash", "g"]);
+    const geohash = resolveGeohash(values, location);
     const image = readFirstValue(values, ["image"]);
     const calendarReference = readFirstValue(values, ["calendarReference", "a"]);
     const rsvpStatus = readFirstValue(values, ["rsvpStatus", "status"]);
-    const startTzid = readFirstValue(values, ["startTzid", "start_tzid"]);
-    const endTzid = readFirstValue(values, ["endTzid", "end_tzid"]);
+    const requestedStartTzid = readFirstValue(values, ["startTzid", "start_tzid"]);
+    const requestedEndTzid = readFirstValue(values, ["endTzid", "end_tzid"]);
+    const browserTzid = getBrowserTimeZoneId();
+    const startTzid = requestedStartTzid || browserTzid;
+    const endTzid = requestedEndTzid || startTzid;
     const startUnix = parseOptionalUnixField(values, ["start"]);
     const endUnix = parseOptionalUnixField(values, ["end"]);
 

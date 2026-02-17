@@ -2,7 +2,7 @@
   "version": "nostr-form-v1",
   "id": "nip52-calendar-example",
   "title": "NIP-52 Kalender (Beispiel)",
-  "description": "Beispiel-Schema fuer NIP-52 mit konkreter 31923-Time-Based-Unterstuetzung im Adapter.",
+  "description": "Beispiel-Schema fuer NIP-52 mit automatischer Browser-TZID und Geohash-Ableitung.",
   "kind": 31922,
   "adapter": "nip-52",
   "kindSelectorField": "calendarKind",
@@ -63,32 +63,12 @@
       "required": false
     },
     {
-      "name": "startTzid",
-      "label": "Start TZID (IANA)",
-      "type": "text",
-      "required": false,
-      "placeholder": "America/Costa_Rica"
-    },
-    {
-      "name": "endTzid",
-      "label": "End TZID (IANA)",
-      "type": "text",
-      "required": false,
-      "placeholder": "America/Costa_Rica"
-    },
-    {
       "name": "location",
       "label": "Ort",
       "type": "text",
       "required": false,
-      "maxLength": 220
-    },
-    {
-      "name": "geohash",
-      "label": "Geohash (g-Tag)",
-      "type": "text",
-      "required": false,
-      "maxLength": 80
+      "maxLength": 220,
+      "placeholder": "Berlin, 52.5200, 13.4050"
     },
     {
       "name": "image",

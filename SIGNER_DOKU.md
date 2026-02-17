@@ -605,10 +605,14 @@ Der dedizierte Adapter `democlient/forms/kind-adapters/nip52.js` erzwingt fuer `
 - `start` ist Pflicht (Unix-Sekunden-Tag `start`).
 - `end` ist optional, muss aber groesser als `start` sein.
 - `D`-Tags werden automatisch erzeugt (`floor(unix_seconds / 86400)`), bei Zeitraeumen als mehrere `D`-Tags.
-- optionale TZID-Tags: `start_tzid`, `end_tzid`.
+- `start_tzid` und `end_tzid` werden automatisch aus der Browser-Systemzeitzone gesetzt (IANA TZID).
 - `content` bleibt vorhanden (Beschreibung), darf aber leer sein.
+- `g` (geohash) wird automatisch erzeugt, wenn Koordinaten verfuegbar sind:
+  - entweder ueber optionale Felder `lat/lon` (in Custom-Schemata)
+  - oder direkt aus `location` im Format `lat,lon` (z. B. `52.5200, 13.4050`)
+  - reine Ortsnamen ohne Koordinaten erzeugen ohne Geocoding-Service keinen `g`-Tag
 
-Das Beispiel-Schema `democlient/forms/schemas/nip52-calendar.json` stellt dafuer passende Felder bereit (`summary`, `startTzid`, `endTzid`, `geohash`).
+Das Beispiel-Schema `democlient/forms/schemas/nip52-calendar.json` zeigt den vereinfachten Input ohne manuelle TZID-/Geohash-Felder.
 
 ### 13.6 NIP-23 Optional Tags und Editability
 
@@ -617,17 +621,21 @@ Der Adapter `democlient/forms/kind-adapters/nip23.js` setzt die ueblichen option
 - `title`
 - `image`
 - `summary`
-- `published_at` (stringifizierte Unix-Sekunden)
+- `published_at` (stringifizierte Unix-Sekunden, automatisch bei `kind:30023` gesetzt)
 
 Zusaetzlich unterstuetzt das Schema `democlient/forms/schemas/kind30023.json`:
 
 - `topics` -> erzeugt mehrere `t`-Tags (Komma-/Zeilenliste)
 - `tagsJson` -> rohe zusaetzliche Tags (z. B. `e`/`a` Referenzen)
 
+Hinweis:
+
+- `published_at` ist kein User-Feld im Formular und wird intern generiert.
+- `tagsJson` darf `published_at` nicht ueberschreiben (wird im Adapter gefiltert).
+
 Editability:
 
 - NIP-23 ist addressable.
 - Fuer Updates musst du denselben `d`-Identifier mit demselben `pubkey` und demselben `kind` wiederverwenden.
 - `30023` (publish) und `30024` (draft) sind unterschiedliche Kinds und damit unterschiedliche adressierbare Streams.
-
 

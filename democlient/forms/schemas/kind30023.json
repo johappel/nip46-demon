@@ -2,7 +2,7 @@
   "version": "nostr-form-v1",
   "id": "kind30023-longform",
   "title": "Long Form (NIP-23)",
-  "description": "Beispielschema fuer NIP-23 Long-Form-Posts mit Draft/Publish Auswahl und optionalen Tags.",
+  "description": "Beispielschema fuer NIP-23 Long-Form-Posts mit Draft/Publish Auswahl und automatischem published_at.",
   "kind": 30023,
   "adapter": "kind-30023",
   "kindSelectorField": "publishMode",
@@ -61,19 +61,6 @@
       "placeholder": "https://..."
     },
     {
-      "name": "published_at",
-      "label": "published_at (Unix Sekunden)",
-      "type": "text",
-      "required": false,
-      "placeholder": "1296962229"
-    },
-    {
-      "name": "publishedAt",
-      "label": "Publiziert am (Datum/Uhrzeit)",
-      "type": "datetime-local",
-      "required": false
-    },
-    {
       "name": "topics",
       "label": "Themen (t-Tags, Komma oder Zeilen)",
       "type": "text",
@@ -98,4 +85,5 @@
     }
   ]
 }
+
 
