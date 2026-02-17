@@ -761,6 +761,7 @@ Sicherheitsprofil:
 
 - `session`: Login erforderlich
 - `bind`/`rebind`: Login + gueltiger `X-WP-Nonce` (oder `_wpnonce`)
+- `/nostr/signer/`: oeffentlich erreichbar (kein WordPress-Login erforderlich), damit der Signer als allgemeiner NIP-46 Bunker fuer andere Anwendungen nutzbar bleibt.
 - Bei `session` versucht das Plugin den User-Kontext bei Bedarf aus dem `logged_in`-Cookie wiederherzustellen (gegen REST-401 trotz aktivem Frontend-Login).
 
 Datenhaltung (MVP):

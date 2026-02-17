@@ -341,9 +341,7 @@ function nip46IdentityLinkRouteRequiresAuthentication(string $normalizedPath): b
 {
     $routesNeedingAuth = [
         'identity-link',
-        'identity-link/index.html',
-        'signer',
-        'signer/index.html'
+        'identity-link/index.html'
     ];
 
     return in_array($normalizedPath, $routesNeedingAuth, true);

@@ -547,3 +547,9 @@ Refactoring von `signer.html` in wartbare Module plus neue Aufmerksamkeits-Featu
   - `integrations/wordpress/nostr-identity-link/public/signer/index.html` -> `signer-nip46.js?v=20260217q`
   - `integrations/wordpress/nostr-identity-link/public/signer/sw.js` -> `CACHE_VERSION = "nip46-signer-v12"`
 
+## Fortschritt 2026-02-17 (Signer-Route ohne WP-Login)
+
+- [x] `integrations/wordpress/nostr-identity-link/nostr-identity-link.php`: Login-Zwang fuer `/nostr/signer/` entfernt.
+- [x] `nip46IdentityLinkRouteRequiresAuthentication(...)` verlangt jetzt nur noch Auth fuer `identity-link`-Routen.
+- [x] Ergebnis: `https://.../nostr/signer/` ist oeffentlich erreichbar, waehrend Identity-Link-Frontend und REST-Binding-Flow weiter WP-Login/Nonce-geschuetzt bleiben.
+
