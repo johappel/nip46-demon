@@ -297,6 +297,10 @@ Use-Case: Multi-User-Systeme (z. B. WordPress), in denen pro App-User ein eigene
 - `embedclients/flotilla/index.html` (Wizard-UI + Flotilla-iframe + Signer-Dialog)
 - `embedclients/flotilla/index.css` (Styles fuer den Flotilla-Embed-Client)
 - `embedclients/flotilla/index.js` (Bunker-Link-Flow mit `createBunkerConnectClient`)
+- `embedclients/identity-link/index.html` (Identity-Link UI fuer Backend-vs-Signer-Abgleich)
+- `embedclients/identity-link/index.css` (Styles fuer den Identity-Link Client)
+- `embedclients/identity-link/index.js` (Bridge-Flow, Provider-Adapter, Match/Mismatch, Bind/Rebind)
+- `integrations/wordpress/nostr-identity-link/nostr-identity-link.php` (WordPress Plugin mit Session/Bind/Rebind REST-API)
 
 ## 11. Manual: Nostr Client mit Bunkerconnect in 2 Minuten
 
@@ -682,4 +686,113 @@ Seit dem Refactor ist `embedclients/flotilla/index.js` app-agnostisch:
 - Falls eine Ziel-App iframe-Einbettung spaeter blockiert, nutze den Button `Flotilla im Tab oeffnen`.
 - Wenn der Signer gesperrt ist, oeffnet der Embed-Client den Signer-Dialog automatisch, damit die Passwortabfrage direkt sichtbar ist.
 - Nach erfolgreicher Entsperrung (Bunker-Link verfuegbar) schliesst der Signer-Dialog automatisch und der Status springt von `Verbindung wird vorbereitet ...` auf `Bunker Link ist bereit`.
+
+## 15. Identity-Link Client (WordPress/OIDC vorbereiteter Flow)
+
+Unter `embedclients/identity-link/` gibt es einen dritten Client fuer den Abgleich:
+
+- Backend-Identity laden (`provider`, `subject`, `displayName`, `expectedPubkey`)
+- Signer-Key ueber Bridge sicherstellen (`wp-ensure-user-key`)
+- `expectedPubkey` gegen Signer-`pubkey` vergleichen
+- bei fehlender Zuordnung optional auto-bind (`POST /wp-json/identity-link/v1/bind`)
+- bei Konflikt (`mismatched`) klare Warn-UI und expliziter Rebind (`POST /wp-json/identity-link/v1/rebind`)
+
+### 15.1 Runtime-Konfiguration (HTML Data-Attribute)
+
+Am Root-Element `#identity-link-root`:
+
+- `data-provider` (z. B. `wordpress`, `keycloak`, `moodle`, `drupal`)
+- `data-signer-uri` (standardmaessig `../../signer.html`)
+- `data-identity-endpoint` (GET Session-Identity, Standard: `/wp-json/identity-link/v1/session`)
+- `data-bind-endpoint` (POST Erstzuordnung, Standard: `/wp-json/identity-link/v1/bind`)
+- `data-rebind-endpoint` (POST Konfliktaufloesung, Standard: `/wp-json/identity-link/v1/rebind`)
+- `data-wp-rest-nonce` (optionaler WP-REST-Nonce fuer write-Calls)
+- `data-auto-bind-on-unbound` (`true`/`false`)
+
+### 15.2 Adapter-Architektur
+
+Der Client trennt Core-Flow und Provider-Details:
+
+- Core: Signer-Bridge, State-Machine (`unbound|matched|mismatched`), Mismatch-UI, Bind/Rebind Requests.
+- Adapter: Subject-Normalisierung und Mapping auf Bridge-`userId`.
+
+Aktuell enthalten:
+
+- `wordpress` Adapter: nutzt `subject` direkt als Bridge-`userId`.
+- OIDC-basierte Adapter (`keycloak`, `moodle`, `drupal`): namespacen `userId` als `<provider>:<subject>`.
+
+Hinweis:
+
+- Die Bridge-Methode heisst aktuell technisch `wp-ensure-user-key`, wird hier aber bereits provider-agnostisch genutzt.
+- Fuer produktive Multi-Provider-Setups ist mittelfristig eine neutral benannte Bridge-API empfehlenswert.
+
+### 15.3 WordPress Plugin-Skelett (MVP)
+
+Pfad im Repo:
+
+- `integrations/wordpress/nostr-identity-link/nostr-identity-link.php`
+- `integrations/wordpress/nostr-identity-link/public/` (ausgelieferte Web-Assets fuer Signer/Client)
+
+REST-Endpunkte des Plugins:
+
+- `GET /wp-json/identity-link/v1/session`
+- `POST /wp-json/identity-link/v1/bind`
+- `POST /wp-json/identity-link/v1/rebind`
+
+Rewrite-Routen (ueber WordPress):
+
+- `/nostr/` -> Redirect auf `/nostr/identity-link/`
+- `/nostr/identity-link/` -> Identity-Link-Client aus dem Plugin
+- `/nostr/signer/` -> NIP-46 Signer aus dem Plugin
+- `/nostr/democlient/*` und `/nostr/vendor/*` -> benoetigte Modul-Abhaengigkeiten
+
+Shortcode:
+
+- `[nip46_identity_link_client]`
+- optional mit Attributen:
+  - `client_url` (URL zur Identity-Link-Client-Seite)
+  - `show_iframe="1|0"`
+  - `iframe_height="960"`
+  - `iframe_title="..."`
+
+Ohne Attribute nutzt der Shortcode standardmaessig `home_url('/nostr/identity-link/')`.
+
+Sicherheitsprofil:
+
+- `session`: Login erforderlich
+- `bind`/`rebind`: Login + gueltiger `X-WP-Nonce` (oder `_wpnonce`)
+- Bei `session` versucht das Plugin den User-Kontext bei Bedarf aus dem `logged_in`-Cookie wiederherzustellen (gegen REST-401 trotz aktivem Frontend-Login).
+
+Datenhaltung (MVP):
+
+- `user_meta` pro User (`pubkey`, `npub`, `keyId`, `updatedAt`)
+- begrenzter Audit-Log in Option-Storage (`actor`, `target`, `oldPubkey`, `newPubkey`, `timestamp`, IP, User-Agent)
+
+Hinweis zur Frontend-Integration:
+
+- Der Client uebernimmt den Nonce aus `data-wp-rest-nonce`, `<meta name=\"wp-rest-nonce\">` oder `meta.restNonce` aus der Session-Antwort.
+- Der Shortcode injiziert den Nonce automatisch als `<meta name=\"wp-rest-nonce\">` per Inline-Script in die Seite.
+- Wenn `client_url` gesetzt ist, wird der Nonce zusaetzlich als Query-Parameter `wpRestNonce` an die Client-URL angehaengt.
+- Die Plugin-PHP-Datei muss ohne UTF-8 BOM gespeichert sein, sonst koennen bei Aktivierung `headers already sent`/unerwartete 3-Byte-Ausgaben auftreten.
+- Nach Plugin-Aktivierung oder Update der Rewrite-Regeln einmal Permalinks speichern (oder `flush_rewrite_rules()` durch Reaktivierung ausloesen), damit `/nostr/...` sofort erreichbar ist.
+- Das Plugin unterbindet Canonical-Redirects auf `/nostr/...`, damit Modul-URLs nicht auf `*.js/` umgebogen werden (sonst falscher MIME-Typ `text/html` moeglich).
+- Die HTTP-Sicherheitspruefung im Client behandelt lokale Dev-Hosts als Ausnahme (`localhost`, `127.0.0.1`, `::1`, `*.localhost`, `*.test`), damit lokale Testdomains wie `forums.test` nicht blockiert werden.
+- Die gleiche Dev-Ausnahme gilt fuer den Signer-Start (`signer-nip46.js`), damit `/nostr/signer/` im lokalen HTTP-Testbetrieb funktioniert.
+- Im Plugin-Bundle ist der Signer-Script-Import versioniert (`signer-nip46.js?v=...`) und die Service-Worker-Cache-Version erhoeht, damit Sicherheitsfixes nicht an alten Browser-Caches haengen bleiben.
+- Wenn trotz Dev-Ausnahme `WebCrypto (crypto.subtle)` fehlt, ist das eine Browser-Grenze fuer unsichere Kontexte (typisch `http://*.test` in Firefox). Dann sind nur HTTPS/localhost oder ein browser-spezifischer Dev-Flag (Chromium) moeglich.
+- `wp-ensure-user-key` laeuft im Signer jetzt ohne blockierenden Passwort-Prompt: wenn kein nutzbares Session-Entsperrmaterial vorhanden ist, kommt sofort ein klarer `gesperrt/entsperren`-Fehler statt stillem Bridge-Timeout.
+- Fuer vorhandenes Session-Entsperrmaterial nutzt der Signer den WP-Bridge-Flow ohne Passwortabfrage (inkl. Key-Erzeugung mit Session-Material), damit eingebettete iframes nicht an unsichtbaren Dialogen haengen.
+- Der Identity-Link-Client oeffnet den Signer-Dialog bei `wp-ensure-user-key`-Timeout automatisch und nutzt ein laengeres Timeout (30s), damit der Unlock-Flow im lokalen Testbetrieb stabiler ist.
+- Das WordPress-Plugin erzwingt fuer Verzeichnisrouten kanonische Trailing-Slashes (`/nostr/signer/`, `/nostr/identity-link/`), damit relative Asset-URLs (`./signer-ui.css`, `./icons/...`) korrekt aufloesen.
+- Fuer Alt-Caches/Broken-URLs gibt es Fallback-Aliase von `/nostr/signer-ui.css`, `/nostr/signer-nip46.js`, `/nostr/icons/*` auf die korrekten `signer/*`-Pfade.
+- Bei Lock-Fehlern im eingebetteten Betrieb schaltet der Signer jetzt automatisch aus `compact-connected` in den `management`-Tab, damit Entsperren direkt im iframe moeglich ist.
+- Der Identity-Link-Client sendet beim Oeffnen des Signer-Dialogs explizit `show-management` an die Bridge, damit die Entsperr-Ansicht ohne manuellen Tab-Wechsel sichtbar wird.
+- `wp-ensure-user-key` behandelt den Fall "gebundener Key ist bereits aktiv" jetzt ohne zusaetzliche Entschluesselung und liefert `pubkey/npub` direkt aus dem aktiven Signer-User.
+- Die Statusanzeige im Plugin-Signer wurde auf klares `bereit` vereinheitlicht (kein Emoji/Fallback-`??` mehr).
+
+Beispiel:
+
+```txt
+[nip46_identity_link_client client_url="https://example.com/nostr/embedclients/identity-link/index.html" iframe_height="1100"]
+```
 

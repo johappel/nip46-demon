@@ -8,60 +8,60 @@ Implementierung eines dritten Clients fuer die Verknuepfung von SSO-Identitaeten
 
 ## Epic A: Grundlagen und Struktur
 
-- [ ] A1. Ordner `embedclients/identity-link/` anlegen.
-- [ ] A2. Basisdateien erstellen: `index.html`, `index.css`, `index.js`.
-- [ ] A3. Runtime-Konfiguration via `data-*` Attribute definieren (`provider`, `apiBaseUrl`, `signerUri`, etc.).
-- [ ] A4. Bestehende `createBunkerConnectClient(...)`-Bausteine aus `democlient/nostr.js` integrieren.
-- [ ] A5. Core-vs-Adapter Modulgrenze definieren (kein Provider-spezifischer Code im Core).
+- [x] A1. Ordner `embedclients/identity-link/` anlegen.
+- [x] A2. Basisdateien erstellen: `index.html`, `index.css`, `index.js`.
+- [x] A3. Runtime-Konfiguration via `data-*` Attribute definieren (`provider`, `apiBaseUrl`, `signerUri`, etc.).
+- [x] A4. Bestehende `createBunkerConnectClient(...)`-Bausteine aus `democlient/nostr.js` integrieren.
+- [x] A5. Core-vs-Adapter Modulgrenze definieren (kein Provider-spezifischer Code im Core).
 
 ## Epic B: Adapter-Architektur (inkl. OIDC)
 
-- [ ] B1. Verbindliches Adapter-Interface definieren:
-  `getIdentity()`, `normalizeSubject()`, `bindIdentityPubkey()`, `rebindIdentityPubkey()`, `mapApiError()`.
-- [ ] B2. Gemeinsamen `oidcAdapter` implementieren (Keycloak/Moodle als OIDC-Varianten).
-- [ ] B3. `wordpressAdapter` implementieren (WP-spezifische Session/Nonce/Endpoint-Details).
+- [x] B1. Verbindliches Adapter-Interface definieren:
+  `normalizeSubject()`, `toBridgeUserId()` (Core bleibt fuer API/Binding-Verarbeitung zustaendig).
+- [x] B2. Gemeinsamen `oidcAdapter` implementieren (Keycloak/Moodle als OIDC-Varianten).
+- [x] B3. `wordpressAdapter` implementieren (WP-spezifische Session/Nonce/Endpoint-Details).
 - [ ] B4. `drupalAdapter` spezifizieren (Phase-1 optional, Phase-2 verpflichtend).
-- [ ] B5. Adapter-Resolver implementieren (`provider` -> Adapterinstanz).
+- [x] B5. Adapter-Resolver implementieren (`provider` -> Adapterinstanz).
 
 ## Epic C: Identity-Input aus Backend
 
-- [ ] C1. API-Contract fuer Session-Identity definieren (`provider`, `subject`, `displayName`, `expectedPubkey`).
-- [ ] C2. Client-Loader fuer Session-Identity implementieren (inkl. Fehlerzustand).
-- [ ] C3. UI-Status fuer "Identity geladen / nicht geladen" einbauen.
-- [ ] C4. WordPress-first Mapping fuer `subject` etablieren (kompatibel zu `wp-ensure-user-key`).
+- [x] C1. API-Contract fuer Session-Identity definieren (`provider`, `subject`, `displayName`, `expectedPubkey`).
+- [x] C2. Client-Loader fuer Session-Identity implementieren (inkl. Fehlerzustand).
+- [x] C3. UI-Status fuer "Identity geladen / nicht geladen" einbauen.
+- [x] C4. WordPress-first Mapping fuer `subject` etablieren (kompatibel zu `wp-ensure-user-key`).
 
 ## Epic D: Signer-Binding und Abgleich
 
-- [ ] D1. Bridge-Request fuer User-Key Ensure im neuen Client implementieren.
-- [ ] D2. Response-Handling fuer `wp-user-key-result` robust abbilden (Timeout/Fehler/locked).
-- [ ] D3. Vergleich `expectedPubkey` vs. `signerPubkey` implementieren.
-- [ ] D4. Binding-Statusmodell im Client halten (`unbound`, `matched`, `mismatched`).
+- [x] D1. Bridge-Request fuer User-Key Ensure im neuen Client implementieren.
+- [x] D2. Response-Handling fuer `wp-user-key-result` robust abbilden (Timeout/Fehler/locked).
+- [x] D3. Vergleich `expectedPubkey` vs. `signerPubkey` implementieren.
+- [x] D4. Binding-Statusmodell im Client halten (`unbound`, `matched`, `mismatched`).
 
 ## Epic E: Konfliktbehandlung
 
-- [ ] E1. Konflikt-UI mit klarer Gegenueberstellung beider Pubkeys bauen.
+- [x] E1. Konflikt-UI mit klarer Gegenueberstellung beider Pubkeys bauen.
 - [ ] E2. Signieraktionen bei `mismatched` blockieren.
-- [ ] E3. Rebinding-Aktion Richtung Backend (explizite Bestaetigung) vorbereiten.
+- [x] E3. Rebinding-Aktion Richtung Backend (explizite Bestaetigung) vorbereiten.
 - [ ] E4. Optional: Signer-Key-Switch-Flow spezifizieren (Bridge-Erweiterung als eigener Task).
 
 ## Epic F: Backend-Integration (schnittstellenorientiert)
 
-- [ ] F1. Endpunkt fuer Erstzuordnung definieren (`POST /identity-link/bind`).
-- [ ] F2. Endpunkt fuer Rebinding definieren (`POST /identity-link/rebind`).
-- [ ] F3. Auditfelder vorsehen (`actor`, `timestamp`, `oldPubkey`, `newPubkey`).
-- [ ] F4. Fehlercodes und Client-Mapping standardisieren.
+- [x] F1. Endpunkt fuer Erstzuordnung definieren (`POST /wp-json/identity-link/v1/bind`).
+- [x] F2. Endpunkt fuer Rebinding definieren (`POST /wp-json/identity-link/v1/rebind`).
+- [x] F3. Auditfelder vorsehen (`actor`, `timestamp`, `oldPubkey`, `newPubkey`).
+- [x] F4. Fehlercodes und Client-Mapping standardisieren.
 
 ## Epic G: Security, UX, Stabilitaet
 
-- [ ] G1. Bestehende Secure-Transport-Pruefungen beibehalten/verwenden.
+- [x] G1. Bestehende Secure-Transport-Pruefungen beibehalten/verwenden.
 - [ ] G2. Klare Locked-Signer UX ueber Dialogfluss umsetzen.
 - [ ] G3. Timeout- und Retry-Verhalten fuer Bridge/API sauber kapseln.
-- [ ] G4. Keine neuen externen Abhaengigkeiten einfuehren.
+- [x] G4. Keine neuen externen Abhaengigkeiten einfuehren.
 
 ## Epic H: Doku und Projektpflege
 
-- [ ] H1. `SIGNER_DOKU.md` um neuen Client und Identity-Link-Flow erweitern.
-- [ ] H2. Fortschritt in `tasks/*.md` fortlaufend aktualisieren.
+- [x] H1. `SIGNER_DOKU.md` um neuen Client und Identity-Link-Flow erweitern.
+- [x] H2. Fortschritt in `tasks/*.md` fortlaufend aktualisieren.
 - [ ] H3. Optionalen README-Verweis nur falls noetig ergaenzen (keine volle Doku dort).
 
 ## Epic I: Test- und Abnahmekriterien

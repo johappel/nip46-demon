@@ -1,4 +1,4 @@
-﻿import NDK, { NDKNip46Backend, NDKPrivateKeySigner } from "./vendor/ndk-3.0.0.js";
+﻿import NDK, { NDKNip46Backend, NDKPrivateKeySigner } from "../vendor/ndk-3.0.0.js";
 import { createSignerAttentionManager } from "./signer-ui.js";
         // ===== Storage Keys =====
         // Älterer Speicherort für unverschlüsselte nsec (nur bei Migration relevant)
@@ -2875,11 +2875,10 @@ import { createSignerAttentionManager } from "./signer-ui.js";
          * Validiert Origin und Source vor der Verarbeitung.
          * 
          * Unterstützte Anfragen:
-         * - "ping": Prüfe ob Signer ready ist → antworte mit connectionInfo oder "locked"
+         * - "ping": Prüfe ob Signer ready ist ? antworte mit connectionInfo oder "locked"
          * - "get-connection-info": Wie ping
-         * - "request-frame-size": Parent fragt nach neuer Höhe → antworte mit frame-size
-         * - "show-management": Signer aus Compact-Mode holen und Management-Tab zeigen
-         * - "wp-ensure-user-key": {userId} → erstelle/lade WP User Key → antworte mit wp-user-key-result
+         * - "request-frame-size": Parent fragt nach neuer Höhe ? antworte mit frame-size
+         * - "wp-ensure-user-key": {userId} ? erstelle/lade WP User Key ? antworte mit wp-user-key-result
          * 
          * @param {MessageEvent} event - Das PostMessage-Event vom Parent-Frame
          */
@@ -3589,7 +3588,7 @@ import { createSignerAttentionManager } from "./signer-ui.js";
             console.error(err);
             setCompactConnectedMode(false);
             renderStandaloneConnectionInfo();
-            document.getElementById("status").innerText = `🔴 Fehler: ${err.message}`;
+            document.getElementById("status").innerText = `?? Fehler: ${err.message}`;
         });
 
 

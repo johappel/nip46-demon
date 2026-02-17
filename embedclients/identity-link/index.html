@@ -1,0 +1,96 @@
+﻿<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; connect-src 'self' https: wss:; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; frame-src 'self' https: http:; object-src 'none'; base-uri 'self'; form-action 'self';">
+    <title>Identity Link Client</title>
+    <link rel="stylesheet" href="./index.css">
+</head>
+<body>
+    <main
+        id="identity-link-root"
+        class="layout"
+        data-provider="wordpress"
+        data-signer-uri="../../signer.html"
+        data-identity-endpoint="/wp-json/identity-link/v1/session"
+        data-bind-endpoint="/wp-json/identity-link/v1/bind"
+        data-rebind-endpoint="/wp-json/identity-link/v1/rebind"
+        data-wp-rest-nonce=""
+        data-auto-bind-on-unbound="true"
+    >
+        <section class="panel">
+            <p class="eyebrow">Identity Link</p>
+            <h1>SSO User mit Nostr Key verknuepfen</h1>
+            <p class="muted">
+                Dieser Client verbindet eine Backend-Identity mit einem Signer-Key.
+                Bei Abweichungen zwischen Backend und Signer wird der Konflikt klar angezeigt.
+            </p>
+
+            <p id="overall-status" class="status" data-state="idle">Initialisiere Identity-Link-Flow ...</p>
+
+            <div class="actions">
+                <button id="reload-identity-btn" type="button" class="secondary-btn">Identity neu laden</button>
+                <button id="ensure-link-btn" type="button">Signer-Key sicherstellen</button>
+                <button id="open-signer-btn" type="button" class="secondary-btn">Signer oeffnen</button>
+            </div>
+        </section>
+
+        <section class="panel grid">
+            <article class="card">
+                <h2>Backend Identity</h2>
+                <dl class="kv">
+                    <div><dt>Provider</dt><dd id="identity-provider-value">-</dd></div>
+                    <div><dt>Subject</dt><dd id="identity-subject-value">-</dd></div>
+                    <div><dt>Display Name</dt><dd id="identity-display-name-value">-</dd></div>
+                    <div><dt>Backend Pubkey</dt><dd id="identity-expected-pubkey-value">-</dd></div>
+                </dl>
+            </article>
+
+            <article class="card">
+                <h2>Signer Binding</h2>
+                <dl class="kv">
+                    <div><dt>Status</dt><dd><span id="binding-status-badge" class="badge" data-status="idle">idle</span></dd></div>
+                    <div><dt>Signer Pubkey</dt><dd id="signer-pubkey-value">-</dd></div>
+                    <div><dt>Signer NPUB</dt><dd id="signer-npub-value">-</dd></div>
+                    <div><dt>Schluesselname</dt><dd id="signer-key-name-value">-</dd></div>
+                </dl>
+                <p id="signer-status" class="status" data-state="idle">Signer noch nicht initialisiert.</p>
+            </article>
+        </section>
+
+        <section id="mismatch-panel" class="panel mismatch" hidden>
+            <h2>Pubkey-Konflikt erkannt</h2>
+            <p class="muted">
+                Der im Backend gespeicherte Pubkey unterscheidet sich vom Signer-Pubkey.
+                Signieraktionen bleiben blockiert, bis der Konflikt aufgeloest ist.
+            </p>
+            <label for="expected-pubkey-output">Backend Pubkey</label>
+            <textarea id="expected-pubkey-output" rows="2" readonly></textarea>
+            <label for="current-pubkey-output">Signer Pubkey</label>
+            <textarea id="current-pubkey-output" rows="2" readonly></textarea>
+            <div class="actions">
+                <button id="rebind-btn" type="button">Backend auf Signer-Pubkey umstellen</button>
+            </div>
+        </section>
+
+        <section class="panel">
+            <h2>Ablauf-Log</h2>
+            <pre id="result-output" class="output">Warte auf Initialisierung ...</pre>
+        </section>
+    </main>
+
+    <dialog id="signer-dialog" class="signer-dialog">
+        <section class="panel signer-panel">
+            <div class="dialog-head">
+                <h2>NIP-46 Signer</h2>
+                <button id="close-signer-btn" type="button" class="close-btn" aria-label="Dialog schliessen">X</button>
+            </div>
+            <p id="signer-dialog-status" class="status" data-state="idle">Signer wird geladen ...</p>
+            <iframe id="signer-frame" title="Signer" src="about:blank"></iframe>
+        </section>
+    </dialog>
+
+    <script type="module" src="./index.js"></script>
+</body>
+</html>

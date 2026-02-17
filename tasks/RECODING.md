@@ -338,3 +338,110 @@ Refactoring von `signer.html` in wartbare Module plus neue Aufmerksamkeits-Featu
 - [x] `embedclients/flotilla/index.html`: CSP `frame-src` auf generisches Embed-Profil (`'self' https: http:`) erweitert.
 - [x] `SIGNER_DOKU.md`: Abschnitt 14 um die neue app-agnostische Konfiguration ergaenzt.
 
+## Fortschritt 2026-02-17 (Identity-Link Client MVP Start)
+
+- [x] Neuer Ordner `embedclients/identity-link/` angelegt.
+- [x] `embedclients/identity-link/index.html` erstellt (Identity-UI, Status, Mismatch-Panel, Signer-Dialog).
+- [x] `embedclients/identity-link/index.css` erstellt (responsive Layout + Status/Badge/Mismatch Styles).
+- [x] `embedclients/identity-link/index.js` erstellt:
+  - nutzt `createBunkerConnectClient(...)` aus `democlient/nostr.js` im Bridge-only Modus
+  - laedt Session-Identity aus Backend-Endpunkt
+  - stellt Signer-Key per Bridge sicher (`wp-ensure-user-key`)
+  - vergleicht Backend-`expectedPubkey` gegen Signer-`pubkey`
+  - bildet Status `unbound|matched|mismatched|error`
+  - unterstuetzt `bind` und `rebind` Endpunkte
+  - fuehrt Provider-Adapter ein (WordPress + OIDC-Namespace fuer Keycloak/Moodle/Drupal)
+- [x] `SIGNER_DOKU.md` um Abschnitt 15 (Identity-Link Client) erweitert.
+
+## Fortschritt 2026-02-17 (WordPress Plugin-Skelett fuer Identity-Link)
+
+- [x] Neuer Ordner `integrations/wordpress/nostr-identity-link/` angelegt.
+- [x] Neues Plugin `integrations/wordpress/nostr-identity-link/nostr-identity-link.php` erstellt.
+- [x] REST-Endpunkte implementiert:
+  - `GET /wp-json/identity-link/v1/session`
+  - `POST /wp-json/identity-link/v1/bind`
+  - `POST /wp-json/identity-link/v1/rebind`
+- [x] Sicherheitschecks fuer write-Endpunkte implementiert (Login + `X-WP-Nonce` / `_wpnonce`).
+- [x] Session-Auth robust gemacht: User-Kontext wird fuer `GET /session` bei Bedarf aus `logged_in`-Cookie wiederhergestellt (REST-401 trotz aktivem Login reduziert).
+- [x] MVP-Datenhaltung in `user_meta` umgesetzt (`pubkey`, `npub`, `keyId`, `updatedAt`).
+- [x] Audit-Log als begrenzte Option-Liste umgesetzt (inkl. `actor`, `target`, `oldPubkey`, `newPubkey`, `timestamp`, IP, User-Agent).
+- [x] `embedclients/identity-link/index.html` Default-Endpunkte auf WordPress-REST-Pfade umgestellt.
+- [x] `embedclients/identity-link/index.js` um WP-REST-Nonce-Unterstuetzung erweitert (Meta/Data-Attribut + `meta.restNonce` aus API-Antwort).
+- [x] Aktivierungsfehler behoben: `nostr-identity-link.php` ohne UTF-8 BOM gespeichert, damit kein vorzeitiger Output (`EF BB BF`) gesendet wird.
+
+## Fortschritt 2026-02-17 (WordPress Shortcode fuer Nonce-Injektion)
+
+- [x] `integrations/wordpress/nostr-identity-link/nostr-identity-link.php`: Shortcode `nip46_identity_link_client` hinzugefuegt.
+- [x] Shortcode injiziert den WP-REST-Nonce als `<meta name=\"wp-rest-nonce\">` in die Seite.
+- [x] Shortcode kann optional ein iframe auf den Identity-Link-Client rendern (`client_url`, `show_iframe`, `iframe_height`, `iframe_title`).
+- [x] Shortcode haengt den Nonce zusaetzlich als `wpRestNonce` Query-Parameter an `client_url` an.
+- [x] `embedclients/identity-link/index.js`: Query-Fallback fuer Nonce (`wpRestNonce`, `wp_rest_nonce`, `_wpnonce`) ergaenzt.
+- [x] `SIGNER_DOKU.md` um Shortcode-Nutzung erweitert.
+
+## Fortschritt 2026-02-17 (WordPress Rewrite fuer /nostr/...)
+
+- [x] Plugin-Rewrite eingefuehrt:
+  - `/nostr/` -> Redirect auf `/nostr/identity-link/`
+  - `/nostr/identity-link/` -> Plugin-Client
+  - `/nostr/signer/` -> Plugin-Signer
+- [x] Statische Auslieferung aus `integrations/wordpress/nostr-identity-link/public/` implementiert (inkl. MIME-Type und Path-Sanitizing).
+- [x] Query-Var-Registrierung + `template_redirect`-Serve-Flow im Plugin hinzugefuegt.
+- [x] Activation/Deactivation erweitert um Rewrite-Flush.
+- [x] Web-Bundle im Plugin abgelegt:
+  - `public/signer/*`
+  - `public/identity-link/*`
+  - `public/democlient/nostr.js`
+  - `public/vendor/ndk-3.0.0.js`
+- [x] Modulpfade fuer Plugin-Route angepasst:
+  - `public/signer/signer-nip46.js` -> `../vendor/ndk-3.0.0.js`
+  - `public/identity-link/index.js` -> `../democlient/nostr.js`
+  - `public/identity-link/index.html` signer URI -> `../signer/`
+- [x] `SIGNER_DOKU.md` um Rewrite-/Deployment-Hinweise erweitert.
+- [x] MIME-Fix fuer ES-Module: Canonical-Redirects fuer `/nostr/...` deaktiviert, damit `*.js` nicht auf `*.js/` umgebogen wird.
+- [x] Alias-Mapping fuer fehlaufgeloeste Modulpfade ergaenzt (`identity-link/democlient/*` -> `democlient/*` etc.).
+- [x] HTTP-Dev-Ausnahme erweitert: lokale Domains `*.test` und `*.localhost` werden nicht mehr als unsicher blockiert.
+- [x] Signer-Transportcheck ebenfalls erweitert: `signer-nip46.js` (Core + Plugin-Bundle) erlaubt lokale Dev-Hosts `*.test`/`*.localhost` unter HTTP.
+- [x] Cache-Busting fuer Plugin-Signer ergaenzt: `public/signer/index.html` nutzt versionierten Script-Import (`signer-nip46.js?v=...`).
+- [x] `public/signer/sw.js` korrigiert (Cache-Version hochgezogen, `index.html` statt `signer.html`, ungueltigen `./vendor/...` Eintrag entfernt).
+- [x] WebCrypto-Fehlermeldung im Signer verbessert (Core + Plugin-Bundle): erklaert `crypto.subtle`-Browsergrenze auf `http://*.test` und nennt konkrete Dev-Workarounds.
+
+## Fortschritt 2026-02-17 (WP-Bridge Timeout bei `wp-ensure-user-key`)
+
+- [x] `signer-nip46.js`: WP-Bridge-Flow entkoppelt von blockierenden Passwort-Prompts.
+- [x] `signer-nip46.js`: neue no-prompt Helfer fuer `wp-ensure-user-key` eingebaut:
+  - Entschluesselung vorhandener Bindings via Session-Passwort oder Session-Unlock-Material (bei passendem Salt)
+  - Key-Erzeugung via Session-Passwort oder Session-Unlock-Material
+  - sofortiger `gesperrt/entsperren`-Fehler, falls interaktive Entsperrung noetig ist
+- [x] `integrations/wordpress/nostr-identity-link/public/signer/signer-nip46.js`: identische Fixes im Plugin-Bundle uebernommen.
+- [x] `embedclients/identity-link/index.js`: Timeout fuer `wp-ensure-user-key` auf 30s erhoeht und bei Timeout Signer-Dialog automatisch geoeffnet.
+- [x] `integrations/wordpress/nostr-identity-link/public/identity-link/index.js`: identische Timeout-/Dialog-Fixes fuer Plugin-Bundle uebernommen.
+- [x] `integrations/wordpress/nostr-identity-link/public/signer/index.html` + `public/signer/sw.js`: Cache-Busting fuer Rollout aktualisiert (`signer-nip46.js?v=20260217c`, `CACHE_VERSION` -> `nip46-signer-v3`).
+- [x] `SIGNER_DOKU.md`: Verhalten und neue Bridge-Fehlersemantik dokumentiert.
+
+## Fortschritt 2026-02-17 (WordPress Route-Fix fuer `/nostr/signer`)
+
+- [x] `integrations/wordpress/nostr-identity-link/nostr-identity-link.php`: kanonischer Redirect fuer Verzeichnisrouten ohne trailing slash eingebaut (`/nostr/signer` -> `/nostr/signer/`, analog fuer `identity-link`).
+- [x] `integrations/wordpress/nostr-identity-link/nostr-identity-link.php`: Public-Alias-Fallbacks fuer alte Asset-URLs ergaenzt (`signer-ui.css`, `signer-ui.js`, `signer-nip46.js`, `manifest.webmanifest`, `icons/*` -> `signer/...`).
+- [x] `SIGNER_DOKU.md`: Hinweis zu Trailing-Slash-Kanonisierung und Asset-Fallback dokumentiert.
+
+## Fortschritt 2026-02-17 (Embedded Unlock-UI fuer Identity-Link)
+
+- [x] `signer-nip46.js`: `focusEmbeddedUnlockUi()` eingefuehrt; bei `wp-ensure-user-key` Lock-Fehler wird automatisch auf `management` umgeschaltet und Compact-Mode deaktiviert.
+- [x] `signer-nip46.js`: Bridge-Request `show-management` unterstuetzt, damit Parent den Management-Tab explizit oeffnen kann.
+- [x] `integrations/wordpress/nostr-identity-link/public/signer/signer-nip46.js`: identische Embedded-Unlock-Fixes ins Plugin-Bundle uebernommen.
+- [x] `embedclients/identity-link/index.js`: `requestSignerManagementView()` hinzugefuegt und bei `Signer öffnen`, Lock-Warnungen und Bridge-Timeout verwendet.
+- [x] `integrations/wordpress/nostr-identity-link/public/identity-link/index.js`: identische Unlock-View-Trigger ins Plugin-Bundle uebernommen.
+- [x] Cache-Busting fuer sofortigen Rollout aktualisiert:
+  - `integrations/wordpress/nostr-identity-link/public/signer/index.html` -> `signer-nip46.js?v=20260217d`
+  - `integrations/wordpress/nostr-identity-link/public/signer/sw.js` -> `CACHE_VERSION = "nip46-signer-v4"`
+  - `integrations/wordpress/nostr-identity-link/public/identity-link/index.html` -> `index.js?v=20260217d`
+- [x] `SIGNER_DOKU.md`: Embedded-Unlock-Verhalten dokumentiert.
+
+## Fortschritt 2026-02-17 (Statuskonsistenz und aktiver Binding-Key)
+
+- [x] `signer-nip46.js`: `wp-ensure-user-key` optimiert: wenn der gebundene Key bereits der aktive Key ist, werden `pubkey/npub` direkt aus `activeUser` geliefert (keine zusaetzliche Entschluesselung noetig).
+- [x] `integrations/wordpress/nostr-identity-link/public/signer/signer-nip46.js`: gleicher Fix fuer Plugin-Bundle uebernommen.
+- [x] Fehlermeldung praezisiert: statt pauschal "Signer ist gesperrt" jetzt klarer Hinweis auf noetige Passwort-Bestaetigung fuer die konkrete WP-Keyring-Aktion.
+- [x] Statusanzeige vereinheitlicht: `bereit ??`/Emoji-Fallback auf klares `bereit` umgestellt.
+- [x] Cache-Busting fuer Plugin-Signer erneut hochgezogen (`signer-nip46.js?v=20260217e`, `CACHE_VERSION = "nip46-signer-v5"`).
+
