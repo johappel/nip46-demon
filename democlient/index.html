@@ -52,7 +52,12 @@
             </div>
             <p id="setup-dialog-hint" class="muted">Bitte Signer entsperren. Danach wird die Verbindung automatisch aufgebaut.</p>
             <p id="status" class="status" data-state="idle">Noch nicht initialisiert.</p>
-            <pre id="connection-info" class="output">Keine aktive Verbindung.</pre>
+            <section id="approval-preview" class="approval-preview" aria-live="polite" hidden>
+                <h3 class="approval-preview-title">Aktuelle Anfrage</h3>
+                <p id="approval-preview-method" class="approval-preview-method">Keine offene Signer-Anfrage.</p>
+                <p id="approval-preview-content" class="approval-preview-content"></p>
+            </section>
+            <pre id="connection-info" class="output" hidden>Keine aktive Verbindung.</pre>
             <iframe id="signer-frame" title="NIP-46 Signer" src="about:blank"></iframe>
         </section>
     </dialog>

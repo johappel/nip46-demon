@@ -250,6 +250,33 @@ button[disabled] {
     display: none;
 }
 
+.approval-preview {
+    margin: 0.35rem 0 0.75rem;
+    padding: 0.65rem 0.75rem;
+    border-radius: 10px;
+    border: 1px solid #2f5568;
+    background: #08141b;
+}
+
+.approval-preview-title {
+    margin: 0 0 0.28rem;
+    font-size: 0.9rem;
+    letter-spacing: 0.01em;
+}
+
+.approval-preview-method {
+    margin: 0;
+    color: #d6f2ff;
+    font-weight: 650;
+}
+
+.approval-preview-content {
+    margin: 0.35rem 0 0;
+    color: #a6c5d6;
+    font-family: "IBM Plex Mono", "Consolas", monospace;
+    font-size: 0.9rem;
+}
+
 .setup-card .output {
     color: #d6f2ff;
     background: #08141b;

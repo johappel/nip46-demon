@@ -164,3 +164,20 @@ Refactoring von `signer.html` in wartbare Module plus neue Aufmerksamkeits-Featu
 ## Fortschritt 2026-02-16 (Result-UX aufgeraeumt)
 
 - [x] `democlient/index.js`: Setup-Hinweistext aus dem `result`-Bereich entfernt, damit dort nur Event-Output/Fehler angezeigt werden.
+
+## Fortschritt 2026-02-17 (Approval-Kurzfassung im Setup-Dialog)
+
+- [x] `democlient/index.html`: neue Card `Aktuelle Anfrage` im Setup-Dialog hinzugefuegt.
+- [x] `democlient/index.html`: technische `connection-info` im Boilerplate-Dialog standardmaessig ausgeblendet.
+- [x] `democlient/index.js`: Live-Sync aus Signer-iframe eingebaut (auth-modal/request-title/request-details).
+- [x] `democlient/index.js`: kompakte Genehmigungsdarstellung implementiert (Methode + Content-Vorschau bis 100 Zeichen fuer `sign_event` und `nip04|nip44_encrypt`).
+- [x] `democlient/index.css`: Styles fuer die neue Anfragevorschau ergaenzt.
+- [x] `SIGNER_DOKU.md`: Manual um den neuen Boilerplate-Dialogflow erweitert.
+
+## Fortschritt 2026-02-17 (Dopplungen im Setup-Dialog reduziert)
+
+- [x] `democlient/index.js`: Setup-Statuszeile wird im verbundenen Zustand ausgeblendet, damit kein doppelter "bereit"-Hinweis erscheint.
+- [x] `democlient/index.js`: Anfrage-Kurzfassung ohne redundantes Prefix (`Anfrage:`) umgestellt.
+- [x] `democlient/index.js`: Vorschau-Card nur bei aktiver Genehmigungsanfrage sichtbar (sonst ausgeblendet).
+- [x] `democlient/index.js`: iframe-Embed-Styles reduziert (`#status`, `#user-info`, `#request-title` ausgeblendet) fuer klaren Fokus auf Buttons.
+- [x] `democlient/index.html`: Vorschau-Card initial versteckt (`hidden`) gegen Lade-Flackern.

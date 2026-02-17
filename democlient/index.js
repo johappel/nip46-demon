@@ -13,6 +13,9 @@ const showSignerLabel = document.getElementById("show-signer-label");
 const statusEl = document.getElementById("status");
 const resultEl = document.getElementById("result");
 const connectionInfoEl = document.getElementById("connection-info");
+const approvalPreviewEl = document.getElementById("approval-preview");
+const approvalPreviewMethodEl = document.getElementById("approval-preview-method");
+const approvalPreviewContentEl = document.getElementById("approval-preview-content");
 const postForm = document.getElementById("post-form");
 const postContent = document.getElementById("post-content");
 const contentCountEl = document.getElementById("content-count");
@@ -32,9 +35,11 @@ const SIGNER_URL = "../signer.html";
 const CUSTOM_BUNKER_URI = "";
 const APPROVAL_BUTTON_FIND_TIMEOUT_MS = 2500;
 const APPROVAL_BUTTON_FIND_POLL_MS = 80;
+const REQUEST_PREVIEW_MAX_LEN = 100;
 
 let currentConnection = null;
 let signerFrameUiObserver = null;
+let signerFrameUiSyncScheduled = false;
 
 /**
  * Applies visual state and text to the signer button.
@@ -61,9 +66,284 @@ function setSetupDialogMode(isReady) {
     if (setupDialogHintEl) {
         setupDialogHintEl.hidden = Boolean(isReady);
     }
+    if (statusEl) {
+        statusEl.hidden = Boolean(isReady);
+    }
     if (setupCardEl) {
         setupCardEl.classList.toggle("compact-connected-view", Boolean(isReady));
     }
+}
+
+/**
+ * Normalizes text for compact request previews.
+ * @param {string} text - Raw text.
+ * @param {number=} maxLen - Maximum length.
+ * @returns {string} Normalized text.
+ */
+function normalizePreviewText(text, maxLen = REQUEST_PREVIEW_MAX_LEN) {
+    const compact = String(text || "").replace(/\s+/g, " ").trim();
+    if (!compact) return "";
+    if (compact.length <= maxLen) return compact;
+    return `${compact.slice(0, maxLen)}...`;
+}
+
+/**
+ * Parses method and parameter text from signer request details.
+ * @param {string} requestDetailsText - Raw signer details text.
+ * @returns {{method: string, paramsText: string}} Parsed parts.
+ */
+function parseSignerRequestDetailsText(requestDetailsText) {
+    const raw = String(requestDetailsText || "");
+    const knownMethodMatch = raw.match(/\b(sign_event|nip04_encrypt|nip04_decrypt|nip44_encrypt|nip44_decrypt|connect|get_public_key)\b/i);
+    const method = knownMethodMatch ? knownMethodMatch[1].toLowerCase() : "";
+    const paramMarkerMatch = raw.match(/Parameter:\s*/i);
+    if (!paramMarkerMatch || typeof paramMarkerMatch.index !== "number") {
+        return { method, paramsText: "" };
+    }
+
+    const paramStart = paramMarkerMatch.index + paramMarkerMatch[0].length;
+    return {
+        method,
+        paramsText: raw.slice(paramStart).trim()
+    };
+}
+
+/**
+ * Maps signer request title text to method name.
+ * @param {string} requestTitleText - Raw signer request title.
+ * @returns {string} Method or empty string.
+ */
+function methodFromSignerRequestTitle(requestTitleText) {
+    const title = String(requestTitleText || "").toLowerCase();
+    const normalized = title
+        .replace(/\u00e4/g, "ae")
+        .replace(/\u00f6/g, "oe")
+        .replace(/\u00fc/g, "ue")
+        .replace(/\u00df/g, "ss");
+    if (!normalized) return "";
+    if (normalized.includes("signieren")) return "sign_event";
+    if (normalized.includes("verschl")) return "nip44_encrypt";
+    if (normalized.includes("entschl")) return "nip44_decrypt";
+    if (normalized.includes("verbindung")) return "connect";
+    if (normalized.includes("oeffentlichen schluessel")) return "get_public_key";
+    return "";
+}
+
+/**
+ * Parses JSON-like signer params text.
+ * @param {string} paramsText - Raw params text.
+ * @returns {any|null} Parsed JSON object/array or null.
+ */
+function parseSignerParamsAsJson(paramsText) {
+    const text = String(paramsText || "").trim();
+    if (!text) return null;
+    if (!text.startsWith("{") && !text.startsWith("[")) return null;
+    try {
+        return JSON.parse(text);
+    } catch (_err) {
+        return null;
+    }
+}
+
+/**
+ * Extracts preview content from parsed JSON params.
+ * @param {string} method - Request method.
+ * @param {any} parsedParams - Parsed params.
+ * @returns {string} Content snippet or empty.
+ */
+function extractPreviewContentForMethod(method, parsedParams) {
+    if (!parsedParams) return "";
+
+    if (method === "sign_event") {
+        if (typeof parsedParams?.content === "string") return normalizePreviewText(parsedParams.content);
+        if (typeof parsedParams?.event?.content === "string") return normalizePreviewText(parsedParams.event.content);
+        return "";
+    }
+
+    if (method === "nip04_encrypt" || method === "nip44_encrypt") {
+        if (Array.isArray(parsedParams) && typeof parsedParams[1] === "string") return normalizePreviewText(parsedParams[1]);
+        if (typeof parsedParams?.plaintext === "string") return normalizePreviewText(parsedParams.plaintext);
+        if (typeof parsedParams?.content === "string") return normalizePreviewText(parsedParams.content);
+        return "";
+    }
+
+    return "";
+}
+
+/**
+ * Extracts preview content from raw params string if JSON parsing fails.
+ * @param {string} method - Request method.
+ * @param {string} paramsText - Raw params text.
+ * @returns {string} Content snippet or empty.
+ */
+function extractPreviewContentFromRawParams(method, paramsText) {
+    const text = String(paramsText || "");
+    if (!text) return "";
+
+    if (method === "sign_event") {
+        const contentMatch = text.match(/["']content["']\s*:\s*["']([\s\S]*?)["']/i);
+        if (contentMatch && contentMatch[1]) return normalizePreviewText(contentMatch[1].replace(/\\n/g, " "));
+        return "";
+    }
+
+    if (method === "nip04_encrypt" || method === "nip44_encrypt") {
+        const plaintextMatch = text.match(/["']plaintext["']\s*:\s*["']([\s\S]*?)["']/i);
+        if (plaintextMatch && plaintextMatch[1]) return normalizePreviewText(plaintextMatch[1].replace(/\\n/g, " "));
+        const arrayStyleMatch = text.match(/^\s*\[\s*["'][^"']*["']\s*,\s*["']([\s\S]*?)["']/);
+        if (arrayStyleMatch && arrayStyleMatch[1]) return normalizePreviewText(arrayStyleMatch[1].replace(/\\n/g, " "));
+        return "";
+    }
+
+    return "";
+}
+
+/**
+ * Builds compact approval preview payload from signer request texts.
+ * @param {string} requestTitleText - Raw request title.
+ * @param {string} requestDetailsText - Raw request details.
+ * @returns {{methodText: string, contentText: string}} Preview payload.
+ */
+function buildApprovalPreview(requestTitleText, requestDetailsText) {
+    const parsed = parseSignerRequestDetailsText(requestDetailsText);
+    const method = parsed.method || methodFromSignerRequestTitle(requestTitleText);
+    const jsonParams = parseSignerParamsAsJson(parsed.paramsText);
+    const previewContent =
+        extractPreviewContentForMethod(method, jsonParams) ||
+        extractPreviewContentFromRawParams(method, parsed.paramsText);
+
+    if (method === "sign_event") {
+        return {
+            methodText: "Signieren und senden",
+            contentText: previewContent ? `"${previewContent}"` : ""
+        };
+    }
+
+    if (method === "nip04_encrypt" || method === "nip44_encrypt") {
+        return {
+            methodText: "Nachricht verschluesseln",
+            contentText: previewContent ? `"${previewContent}"` : ""
+        };
+    }
+
+    if (method === "nip04_decrypt" || method === "nip44_decrypt") {
+        return {
+            methodText: "Nachricht entschluesseln",
+            contentText: ""
+        };
+    }
+
+    if (method === "connect") {
+        return {
+            methodText: "Verbindung freigeben",
+            contentText: ""
+        };
+    }
+
+    if (method === "get_public_key") {
+        return {
+            methodText: "Oeffentlichen Schluessel freigeben",
+            contentText: ""
+        };
+    }
+
+    const fallbackTitle = normalizePreviewText(String(requestTitleText || "").replace(/[?!]+$/g, ""), 72);
+    if (fallbackTitle) {
+        return {
+            methodText: fallbackTitle,
+            contentText: ""
+        };
+    }
+
+    return {
+        methodText: "Keine offene Signer-Anfrage.",
+        contentText: ""
+    };
+}
+
+/**
+ * Renders an idle preview state.
+ */
+function renderIdleApprovalPreview() {
+    if (approvalPreviewEl) {
+        approvalPreviewEl.hidden = true;
+    }
+    if (approvalPreviewMethodEl) {
+        approvalPreviewMethodEl.textContent = "Keine offene Signer-Anfrage.";
+    }
+    if (approvalPreviewContentEl) {
+        approvalPreviewContentEl.textContent = "";
+    }
+}
+
+/**
+ * Renders an active approval preview state.
+ * @param {{methodText: string, contentText: string}} preview - Preview payload.
+ */
+function renderApprovalPreview(preview) {
+    if (approvalPreviewEl) {
+        approvalPreviewEl.hidden = false;
+    }
+    if (approvalPreviewMethodEl) {
+        approvalPreviewMethodEl.textContent = preview.methodText;
+    }
+    if (approvalPreviewContentEl) {
+        approvalPreviewContentEl.textContent = preview.contentText || "";
+    }
+}
+
+/**
+ * Checks whether a signer frame element is visible.
+ * @param {Element|null} element - DOM element from signer iframe.
+ * @returns {boolean} True when visible.
+ */
+function isFrameElementVisible(element) {
+    if (!element) return false;
+    if (element.hasAttribute("hidden")) return false;
+    const style = window.getComputedStyle(element);
+    if (style.display === "none" || style.visibility === "hidden") return false;
+    const rect = element.getBoundingClientRect();
+    return rect.width > 0 && rect.height > 0;
+}
+
+/**
+ * Syncs the setup dialog request preview from signer iframe modal state.
+ */
+function syncSetupApprovalPreviewFromFrame() {
+    let frameDoc = null;
+    try {
+        frameDoc = signerFrame.contentDocument;
+    } catch (_err) {
+        renderIdleApprovalPreview();
+        return;
+    }
+    if (!frameDoc) {
+        renderIdleApprovalPreview();
+        return;
+    }
+
+    const authModal = frameDoc.getElementById("auth-modal");
+    if (!isFrameElementVisible(authModal)) {
+        renderIdleApprovalPreview();
+        return;
+    }
+
+    const rawTitle = frameDoc.getElementById("request-title")?.textContent?.trim() || "";
+    const rawDetails = frameDoc.getElementById("request-details")?.textContent?.trim() || "";
+    const preview = buildApprovalPreview(rawTitle, rawDetails);
+    renderApprovalPreview(preview);
+}
+
+/**
+ * Schedules one consolidated iframe UI sync on the next animation frame.
+ */
+function scheduleSignerFrameUiSync() {
+    if (signerFrameUiSyncScheduled) return;
+    signerFrameUiSyncScheduled = true;
+    requestAnimationFrame(() => {
+        signerFrameUiSyncScheduled = false;
+        applyEmbeddedSignerCompactPresentation();
+        syncSetupApprovalPreviewFromFrame();
+    });
 }
 
 /**
@@ -92,16 +372,18 @@ function applyEmbeddedSignerCompactPresentation() {
     }
     styleEl.textContent =
         "body.compact-connected #app-title{display:none !important;}" +
-        "body.compact-connected #status{margin-top:0 !important;}" +
+        "body.compact-connected #status{display:none !important;}" +
+        "body.compact-connected #user-info{display:none !important;}" +
         "body.compact-connected #overlay{display:none !important;}" +
         "body.compact-connected #auth-modal{position:static !important;top:auto !important;left:auto !important;transform:none !important;max-width:none !important;width:100% !important;margin:0 !important;padding:14px !important;border-radius:0 !important;border-left:none !important;border-right:none !important;background:#222 !important;}" +
+        "body.compact-connected #request-title{display:none !important;}" +
         "body.compact-connected #request-details{display:none !important;}" +
         "body.compact-connected #toggle-request-details-btn{display:none !important;}" +
         "body.compact-connected #auth-modal .button-row{gap:10px !important;justify-content:flex-start !important;}";
 }
 
 /**
- * Installs iframe observer to react on compact-connected class changes.
+ * Installs iframe observer to react on signer UI changes.
  */
 function installSignerFrameUiObserver() {
     if (signerFrameUiObserver) {
@@ -118,15 +400,16 @@ function installSignerFrameUiObserver() {
     if (!frameDoc?.body) return;
 
     signerFrameUiObserver = new MutationObserver(() => {
-        applyEmbeddedSignerCompactPresentation();
+        scheduleSignerFrameUiSync();
     });
     signerFrameUiObserver.observe(frameDoc.body, {
+        childList: true,
+        subtree: true,
         attributes: true,
-        attributeFilter: ["class"],
-        subtree: false
+        characterData: true
     });
 
-    applyEmbeddedSignerCompactPresentation();
+    scheduleSignerFrameUiSync();
 }
 
 /**
@@ -313,7 +596,7 @@ function onConnectionChanged(connection) {
         setSignerButtonState("connecting", "Signer: verbindet");
         setSetupDialogMode(false);
     }
-    applyEmbeddedSignerCompactPresentation();
+    scheduleSignerFrameUiSync();
     refreshActionButtons();
 }
 
@@ -355,9 +638,11 @@ function openSignerSetupDialog() {
     if (!signerSetupDialogEl) return;
     if (typeof signerSetupDialogEl.showModal === "function" && !signerSetupDialogEl.open) {
         signerSetupDialogEl.showModal();
+        scheduleSignerFrameUiSync();
         return;
     }
     signerSetupDialogEl.setAttribute("open", "open");
+    scheduleSignerFrameUiSync();
 }
 
 /**
@@ -386,6 +671,15 @@ function renderConnectionInfo(connection) {
         `pubkey: ${connection.pubkey}\n` +
         `npub: ${connection.npub}\n` +
         `relays:\n- ${connection.relays.join("\n- ")}`;
+}
+
+/**
+ * Hides technical connection details in boilerplate mode.
+ * This keeps the setup dialog focused on user approval context.
+ */
+function hideConnectionInfoForBoilerplate() {
+    if (!connectionInfoEl) return;
+    connectionInfoEl.hidden = true;
 }
 
 /**
@@ -530,6 +824,8 @@ async function bootstrap() {
     updateContentCounter();
     setSignerButtonState("connecting", "Signer: verbindet");
     setSetupDialogMode(false);
+    hideConnectionInfoForBoilerplate();
+    renderIdleApprovalPreview();
     refreshActionButtons();
 
     await startAutoSignerFlow();
