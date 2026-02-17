@@ -296,3 +296,7 @@ Refactoring von `signer.html` in wartbare Module plus neue Aufmerksamkeits-Featu
 - [x] `democlient/index.js`: Default-Config auf formularlosen Start umgestellt (Kommentar fuer Custom-Event-Flow).
 - [x] `SIGNER_DOKU.md`: API-Doku auf neues Verhalten aktualisiert (`form_uri` optional, API-only ohne Formular).
 
+## Fortschritt 2026-02-17 (Hidden-Attribut CSS-Fix)
+
+- [x] `democlient/index.css`: globale Regel `[hidden] { display: none !important; }` hinzugefuegt, damit per JS ausgeblendete Bereiche (z. B. `content-count`-Zeile) nicht durch `.row { display: grid; }` sichtbar bleiben.
+
