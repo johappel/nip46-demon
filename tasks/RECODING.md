@@ -445,3 +445,48 @@ Refactoring von `signer.html` in wartbare Module plus neue Aufmerksamkeits-Featu
 - [x] Statusanzeige vereinheitlicht: `bereit ??`/Emoji-Fallback auf klares `bereit` umgestellt.
 - [x] Cache-Busting fuer Plugin-Signer erneut hochgezogen (`signer-nip46.js?v=20260217e`, `CACHE_VERSION = "nip46-signer-v5"`).
 
+## Fortschritt 2026-02-17 (Bridge-Timeout Diagnose / Kompatibilitaet)
+
+- [x] `embedclients/identity-link/index.js`: `wp-user-key-result`-Antworten ohne `requestId` als Legacy-Fallback akzeptiert (solange Typ/Source/Origin passt).
+- [x] `integrations/wordpress/nostr-identity-link/public/identity-link/index.js`: gleicher Legacy-Fallback im Plugin-Bundle.
+- [x] `signer-nip46.js`: Bridge-Diagnose-Logs fuer WP-Flow hinzugefuegt:
+  - `Bridge: wp-ensure-user-key empfangen (...)`
+  - `Bridge: wp-user-key-result ok (...)`
+  - `Bridge: wp-user-key-result error (...)`
+- [x] `integrations/wordpress/nostr-identity-link/public/signer/signer-nip46.js`: gleiche Diagnose-Logs im Plugin-Bundle.
+- [x] Cache-Busting aktualisiert:
+  - `integrations/wordpress/nostr-identity-link/public/signer/index.html` -> `signer-nip46.js?v=20260217f`
+  - `integrations/wordpress/nostr-identity-link/public/identity-link/index.html` -> `index.js?v=20260217f`
+  - `integrations/wordpress/nostr-identity-link/public/signer/sw.js` -> `CACHE_VERSION = "nip46-signer-v6"`
+
+## Fortschritt 2026-02-17 (WP-Keyring Passwort-Bestaetigung ueber Bridge)
+
+- [x] `signer-nip46.js`: `wp-ensure-user-key` kann bei fehlendem Session-Passwort jetzt aktiv `ensureSessionPassword()` anstossen (statt sofortiger Fehler), inkl. Fokus auf Management-Ansicht im Embed.
+- [x] `integrations/wordpress/nostr-identity-link/public/signer/signer-nip46.js`: gleiche Anpassung im Plugin-Bundle.
+- [x] `embedclients/identity-link/index.js`: Timeout fuer `wp-ensure-user-key` auf 120s erhoeht, damit Passwort-Bestaetigung im Signer-Dialog nicht in einen kuenstlichen Client-Timeout laeuft.
+- [x] `integrations/wordpress/nostr-identity-link/public/identity-link/index.js`: gleicher Timeout-Fix im Plugin-Bundle.
+- [x] Cache-Busting erneut erhoeht:
+  - `integrations/wordpress/nostr-identity-link/public/signer/index.html` -> `signer-nip46.js?v=20260217g`
+  - `integrations/wordpress/nostr-identity-link/public/identity-link/index.html` -> `index.js?v=20260217g`
+  - `integrations/wordpress/nostr-identity-link/public/signer/sw.js` -> `CACHE_VERSION = "nip46-signer-v7"`
+
+## Fortschritt 2026-02-17 (Bridge-Ready Race im Identity-Link Client)
+
+- [x] `embedclients/identity-link/index.js`: `waitForSignerBridgeReady(...)` hinzugefuegt (Polling via `bunkerClient.syncConnectionInfo()`), um `wp-ensure-user-key` erst nach sicherem Bridge-Ready abzusetzen.
+- [x] `integrations/wordpress/nostr-identity-link/public/identity-link/index.js`: gleicher Bridge-Ready-Wait im Plugin-Bundle.
+- [x] `embedclients/identity-link/index.js`: `isReadySignerMessage(...)` und Auto-Recovery nach Unlock eingebaut (Dialog schliessen + erneuter Sync).
+- [x] `integrations/wordpress/nostr-identity-link/public/identity-link/index.js`: gleiche Auto-Recovery-Logik im Plugin-Bundle.
+- [x] Cache-Busting aktualisiert:
+  - `integrations/wordpress/nostr-identity-link/public/identity-link/index.html` -> `index.js?v=20260217h`
+  - `integrations/wordpress/nostr-identity-link/public/signer/sw.js` -> `CACHE_VERSION = "nip46-signer-v8"`
+
+## Fortschritt 2026-02-17 (Auto-Open Passwortdialog bei Ensure)
+
+- [x] `embedclients/identity-link/index.js`: `isSignerDialogOpen()` hinzugefuegt.
+- [x] `embedclients/identity-link/index.js`: `ensureSignerKeyForActiveIdentity()` oeffnet den Signer-Dialog automatisch, wenn er vor dem Ensure geschlossen war.
+- [x] `embedclients/identity-link/index.js`: bei erfolgreichem Ensure wird der fuer den Flow automatisch geoeffnete Dialog wieder geschlossen; bei Fehler bleibt er offen.
+- [x] `integrations/wordpress/nostr-identity-link/public/identity-link/index.js`: identische Anpassungen im Plugin-Bundle.
+- [x] Cache-Busting aktualisiert:
+  - `integrations/wordpress/nostr-identity-link/public/identity-link/index.html` -> `index.js?v=20260217i`
+  - `integrations/wordpress/nostr-identity-link/public/signer/sw.js` -> `CACHE_VERSION = "nip46-signer-v9"`
+

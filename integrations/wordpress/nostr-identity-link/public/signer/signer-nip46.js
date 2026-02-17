@@ -1181,17 +1181,6 @@ import { createSignerAttentionManager } from "./signer-ui.js";
         }
 
         /**
-         * Erstellt einen standardisierten Fehler, wenn fuer WP-Bridge-Aktionen ein explizites Entsperren noetig ist.
-         * Dieser Fehler wird absichtlich ohne Passwort-Dialog geworfen, damit ein verstecktes iframe nicht blockiert.
-         *
-         * @throws {Error} Immer, mit Hinweismeldung zum Entsperren im Signer.
-         */
-        function throwWpBridgeUnlockRequired() {
-            focusEmbeddedUnlockUi();
-            throw new Error("Signer ist bereit, aber fuer diese WP-Key-Aktion ist eine Passwort-Bestaetigung im Signer (Verwaltung) noetig.");
-        }
-
-        /**
          * Oeffnet im eingebetteten Signer gezielt die Entsperr-/Management-Ansicht.
          * Dadurch bleibt der Unlock-Flow auch dann erreichbar, wenn der Compact-Mode aktiv war.
          *
@@ -1228,7 +1217,9 @@ import { createSignerAttentionManager } from "./signer-ui.js";
                 return decryptNsecWithDerivedKey(entry.payload, sessionUnlockMaterial.unlockKey);
             }
 
-            throwWpBridgeUnlockRequired();
+            focusEmbeddedUnlockUi();
+            const confirmedPassword = await ensureSessionPassword();
+            return decryptNsec(entry.payload, confirmedPassword);
         }
 
         /**
@@ -1247,7 +1238,9 @@ import { createSignerAttentionManager } from "./signer-ui.js";
             if (hasSessionUnlockMaterial()) {
                 return createKeyringEntryWithSessionMaterial(nsec, entryName);
             }
-            throwWpBridgeUnlockRequired();
+            focusEmbeddedUnlockUi();
+            const confirmedPassword = await ensureSessionPassword();
+            return createKeyringEntry(nsec, confirmedPassword, entryName);
         }
 
         /**
@@ -2911,15 +2904,18 @@ import { createSignerAttentionManager } from "./signer-ui.js";
             if (data.type === "wp-ensure-user-key") {
                 const requestId = typeof data?.payload?.requestId === "string" ? data.payload.requestId : "";
                 const userId = data?.payload?.userId;
+                appendRequestLog(`Bridge: wp-ensure-user-key empfangen (${String(userId || "").slice(0, 48) || "?"})`);
                 (async () => {
                     try {
                         const ensured = await ensureWpUserKey(userId);
+                        appendRequestLog(`Bridge: wp-user-key-result ok (${ensured?.keyName || "key"})`);
                         postBridgeMessage("wp-user-key-result", {
                             requestId,
                             ok: true,
                             ...ensured
                         });
                     } catch (err) {
+                        appendRequestLog(`Bridge: wp-user-key-result error (${err?.message || "unbekannt"})`);
                         postBridgeMessage("wp-user-key-result", {
                             requestId,
                             ok: false,

@@ -789,6 +789,9 @@ Hinweis zur Frontend-Integration:
 - Der Identity-Link-Client sendet beim Oeffnen des Signer-Dialogs explizit `show-management` an die Bridge, damit die Entsperr-Ansicht ohne manuellen Tab-Wechsel sichtbar wird.
 - `wp-ensure-user-key` behandelt den Fall "gebundener Key ist bereits aktiv" jetzt ohne zusaetzliche Entschluesselung und liefert `pubkey/npub` direkt aus dem aktiven Signer-User.
 - Die Statusanzeige im Plugin-Signer wurde auf klares `bereit` vereinheitlicht (kein Emoji/Fallback-`??` mehr).
+- Wenn fuer `wp-ensure-user-key` kein Session-Passwort verfuegbar ist, startet der Signer jetzt die Passwort-Bestaetigung aktiv (statt sofort abzubrechen); der Identity-Link-Client wartet dafuer laenger (120s).
+- Der Identity-Link-Client wartet vor `wp-ensure-user-key` explizit auf `connection-info` der Bridge (Race-Condition-Fix zwischen iframe-Init und erster Ensure-Anfrage).
+- Nach erfolgreicher Entsperrung im eingebetteten Signer kann der Identity-Link-Client automatisch einen erneuten Sync anstossen, damit ein frueher Lock-Fehlerzustand sofort aufgeloest wird.
 
 Beispiel:
 

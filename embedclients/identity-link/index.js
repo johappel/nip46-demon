@@ -97,6 +97,17 @@ function isLockedSignerMessage(message) {
 }
 
 /**
+ * Checks whether a status text indicates that signer bridge is ready.
+ * @param {string} message - Message text to classify.
+ * @returns {boolean} True when signer ready wording is detected.
+ */
+function isReadySignerMessage(message) {
+    const text = String(message || "").toLowerCase();
+    if (!text) return false;
+    return text.includes("signer bereit");
+}
+
+/**
  * Converts any value to a normalized boolean.
  * @param {string|boolean|number|null|undefined} value - Raw input.
  * @param {boolean} fallbackValue - Fallback when value is empty/unknown.
@@ -319,6 +330,16 @@ function closeSignerDialog() {
         return;
     }
     signerDialogEl.removeAttribute("open");
+}
+
+/**
+ * Checks whether the signer dialog is currently open.
+ * @returns {boolean} True when signer dialog is visible.
+ */
+function isSignerDialogOpen() {
+    if (!(signerDialogEl instanceof HTMLDialogElement)) return false;
+    if (typeof signerDialogEl.open === "boolean") return signerDialogEl.open;
+    return signerDialogEl.hasAttribute("open");
 }
 
 /**
@@ -667,18 +688,62 @@ function requestWpEnsureUserKey(userId, timeoutMs = 15000) {
 }
 
 /**
+ * Waits until signer bridge returns connection-info.
+ * This prevents early wp-ensure requests before signer startup completed.
+ * @param {number} timeoutMs - Maximum wait time.
+ * @param {number} pollMs - Poll interval.
+ * @returns {Promise<void>} Resolves when bridge is ready.
+ */
+async function waitForSignerBridgeReady(timeoutMs = 20000, pollMs = 500) {
+    if (!state.bunkerClient || typeof state.bunkerClient.syncConnectionInfo !== "function") return;
+    const deadline = Date.now() + Math.max(1000, Number(timeoutMs) || 20000);
+    let lastErrorMessage = "";
+
+    while (Date.now() < deadline) {
+        try {
+            await state.bunkerClient.syncConnectionInfo();
+            return;
+        } catch (error) {
+            lastErrorMessage = String(error?.message || "");
+            if (isLockedSignerMessage(lastErrorMessage)) {
+                state.signerUnlockFlowActive = true;
+                openSignerDialog();
+                requestSignerManagementView();
+            }
+            await new Promise((resolve) => setTimeout(resolve, Math.max(100, Number(pollMs) || 500)));
+        }
+    }
+
+    if (lastErrorMessage) {
+        throw new Error(`Signer-Bridge nicht bereit: ${lastErrorMessage}`);
+    }
+    throw new Error("Signer-Bridge nicht bereit.");
+}
+
+/**
  * Ensures a signer key for the currently active identity.
  * @returns {Promise<SignerEnsureResult>} Ensure result.
  */
 async function ensureSignerKeyForActiveIdentity() {
     if (!state.activeIdentity) throw new Error("Identity ist noch nicht geladen.");
 
+    const dialogWasOpen = isSignerDialogOpen();
+    if (!dialogWasOpen) {
+        state.signerUnlockFlowActive = true;
+        openSignerDialog();
+    }
+
+    await waitForSignerBridgeReady(25000, 500);
     const adapter = resolveProviderAdapter(state.activeIdentity.provider);
     const bridgeUserId = adapter.toBridgeUserId(state.activeIdentity);
-    const ensureResult = await requestWpEnsureUserKey(bridgeUserId, 30000);
+    const ensureResult = await requestWpEnsureUserKey(bridgeUserId, 120000);
     state.lastEnsureResult = ensureResult;
     renderSignerResult(ensureResult);
     appendResultLine(`Signer-Key bereit: ${ensureResult.pubkey.slice(0, 16)}... (${ensureResult.keyName})`);
+    if (!dialogWasOpen && state.signerUnlockFlowActive) {
+        state.signerUnlockFlowActive = false;
+        closeSignerDialog();
+    }
     return ensureResult;
 }
 
@@ -878,6 +943,15 @@ function onBunkerClientStatus(status) {
         state.signerUnlockFlowActive = true;
         openSignerDialog();
         requestSignerManagementView();
+        return;
+    }
+
+    if (state.signerUnlockFlowActive && isReadySignerMessage(text)) {
+        state.signerUnlockFlowActive = false;
+        closeSignerDialog();
+        if (!state.isBusy) {
+            runFullSync().catch(() => {});
+        }
     }
 }
 

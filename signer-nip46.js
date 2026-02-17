@@ -1181,17 +1181,6 @@ import { createSignerAttentionManager } from "./signer-ui.js";
         }
 
         /**
-         * Erstellt einen standardisierten Fehler, wenn fuer WP-Bridge-Aktionen ein explizites Entsperren noetig ist.
-         * Dieser Fehler wird absichtlich ohne Passwort-Dialog geworfen, damit ein verstecktes iframe nicht blockiert.
-         *
-         * @throws {Error} Immer, mit Hinweismeldung zum Entsperren im Signer.
-         */
-        function throwWpBridgeUnlockRequired() {
-            focusEmbeddedUnlockUi();
-            throw new Error("Signer ist bereit, aber fuer diese WP-Key-Aktion ist eine Passwort-Bestaetigung im Signer (Verwaltung) noetig.");
-        }
-
-        /**
          * Oeffnet im eingebetteten Signer gezielt die Entsperr-/Management-Ansicht.
          * Dadurch bleibt der Unlock-Flow auch dann erreichbar, wenn der Compact-Mode aktiv war.
          *
@@ -1228,7 +1217,9 @@ import { createSignerAttentionManager } from "./signer-ui.js";
                 return decryptNsecWithDerivedKey(entry.payload, sessionUnlockMaterial.unlockKey);
             }
 
-            throwWpBridgeUnlockRequired();
+            focusEmbeddedUnlockUi();
+            const confirmedPassword = await ensureSessionPassword();
+            return decryptNsec(entry.payload, confirmedPassword);
         }
 
         /**
@@ -1247,7 +1238,9 @@ import { createSignerAttentionManager } from "./signer-ui.js";
             if (hasSessionUnlockMaterial()) {
                 return createKeyringEntryWithSessionMaterial(nsec, entryName);
             }
-            throwWpBridgeUnlockRequired();
+            focusEmbeddedUnlockUi();
+            const confirmedPassword = await ensureSessionPassword();
+            return createKeyringEntry(nsec, confirmedPassword, entryName);
         }
 
         /**
