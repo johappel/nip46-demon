@@ -86,7 +86,44 @@ async function buildBundle(buildToken) {
   await copyDirectoryRecursive(path.join(projectRoot, "icons"), path.join(distBundleDir, "icons"));
 
   await patchIdentityLinkHtml(path.join(distBundleDir, "identity-link", "index.html"), buildToken);
+  await writeBundleEntryIndexHtml(path.join(distBundleDir, "index.html"));
   await createZipArchive(distBundleDir, distBundleName, distZipFile);
+}
+
+/**
+ * Writes one root index page for the standalone bundle.
+ * This page acts as a clear entry point for local/manual testing.
+ * @param {string} indexFilePath Output file path.
+ * @returns {Promise<void>} Resolves when file is written.
+ */
+async function writeBundleEntryIndexHtml(indexFilePath) {
+  const html =
+    "<!DOCTYPE html>\n" +
+    "<html lang=\"en\">\n" +
+    "<head>\n" +
+    "  <meta charset=\"UTF-8\">\n" +
+    "  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n" +
+    "  <title>nostrclient Bundle</title>\n" +
+    "  <style>\n" +
+    "    body { font-family: Arial, sans-serif; margin: 2rem; line-height: 1.4; }\n" +
+    "    h1 { margin-bottom: 0.5rem; }\n" +
+    "    ul { padding-left: 1.2rem; }\n" +
+    "    a { color: #0b63c8; }\n" +
+    "    code { background: #f3f3f3; padding: 0.1rem 0.35rem; border-radius: 4px; }\n" +
+    "  </style>\n" +
+    "</head>\n" +
+    "<body>\n" +
+    "  <h1>nostrclient Bundle</h1>\n" +
+    "  <p>Start points:</p>\n" +
+    "  <ul>\n" +
+    "    <li><a href=\"./identity-link/index.html\">Identity Link Client</a></li>\n" +
+    "    <li><a href=\"./signer.html\">Signer</a></li>\n" +
+    "  </ul>\n" +
+    "  <p>Bridge module path: <code>./nostrclient/nostr.js</code></p>\n" +
+    "</body>\n" +
+    "</html>\n";
+
+  await fs.writeFile(indexFilePath, html, "utf8");
 }
 
 /**

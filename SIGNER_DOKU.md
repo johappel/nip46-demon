@@ -827,6 +827,7 @@ Hinweis zur Frontend-Integration:
 - Deployment ist als Build-Artefakt vorgesehen (kein manuelles Copy/Paste):
   - `npm run build` / `pnpm run build`
     - `dist/nostrclient/nostrclient/`
+    - `dist/nostrclient/nostrclient/index.html` (Bundle-Einstieg)
     - `dist/nostrclient/nostrclient.zip`
   - `npm run build:democlient` / `pnpm run build:democlient`
     - `dist/democlient/democlient/`

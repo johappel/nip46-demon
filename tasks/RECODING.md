@@ -798,3 +798,11 @@ Refactoring von `signer.html` in wartbare Module plus neue Aufmerksamkeits-Featu
   - `npm run build:identity-link:wordpress`
   - `npm run build`
 
+## Fortschritt 2026-02-18 (nostrclient Bundle: klarer Einstieg)
+
+- [x] `scripts/build-nostrclient.mjs` erweitert:
+  - erzeugt jetzt zusaetzlich `dist/nostrclient/nostrclient/index.html` als Einstieg.
+- [x] Root-Index verlinkt direkt auf:
+  - `identity-link/index.html`
+  - `signer.html`
+
