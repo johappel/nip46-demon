@@ -1,0 +1,8 @@
+﻿{
+  "name": "nip46-demon",
+  "private": true,
+  "scripts": {
+    "build:identity-link:wordpress": "node scripts/build-identity-link-wordpress.mjs",
+    "build:indenty-link:wordpress": "npm run build:identity-link:wordpress"
+  }
+}

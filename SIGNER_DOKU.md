@@ -815,6 +815,20 @@ Hinweis zur Frontend-Integration:
   - `NEW/integrations/wordpress/adapter` (WordPress-Strategien)
   - `NEW/apps/identity-link` (neuer Kompositions-Einstieg)
 - Der produktive Signer-/Client-Pfad bleibt bis zur Feature-Flag-Umschaltung unverändert.
+- Der Identity-Link-Client unterstützt dafür jetzt Runtime-Flags:
+  - `data-use-new-core="true|false"` aktiviert/deaktiviert den NEW-Pfad.
+  - `data-new-core-module-uri="..."` setzt die Modul-URL zum NEW-Entry-Point.
+  - Bei NEW-Import-/Laufzeitfehlern fällt der Client automatisch auf den Legacy-Sync zurück.
+- Deployment ist als Build-Artefakt vorgesehen (kein manuelles Copy/Paste):
+  - `npm run build:identity-link:wordpress`
+  - oder `pnpm run build:identity-link:wordpress`
+  - erzeugt:
+    - `dist/wordpress/nostr-identity-link/` (installierbares Plugin-Verzeichnis)
+    - `dist/wordpress/nostr-identity-link-<version>.zip` (WP-Upload)
+  - Dist-`identity-link/index.html` wird dabei auf NEW-Core gesetzt:
+    - `data-use-new-core="true"`
+    - `data-new-core-module-uri="../new/apps/identity-link/index.js?v=<buildToken>"`
+- Das Plugin erlaubt für diese NEW-Module zusätzlich den Public-Prefix `new/` unter `/nostr/new/...`.
 
 Beispiel:
 

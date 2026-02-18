@@ -695,3 +695,41 @@ Refactoring von `signer.html` in wartbare Module plus neue Aufmerksamkeits-Featu
   - `NEW/apps/identity-link/index.js`
 - [x] Workspace-Doku angelegt: `NEW/README.md`
 
+## Fortschritt 2026-02-18 (Identity-Link: Feature-Flag + NEW-Core-Fallback)
+
+- [x] `integrations/wordpress/nostr-identity-link/public/identity-link/index.html` um Runtime-Flags erweitert:
+  - `data-use-new-core="false"`
+  - `data-new-core-module-uri=""`
+- [x] `integrations/wordpress/nostr-identity-link/public/identity-link/index.js` erweitert:
+  - RuntimeConfig um `useNewCore` und `newCoreModuleUri`
+  - `runConfiguredSyncCycle()` mit Umschaltung NEW-Core vs. Legacy
+  - NEW-Core-Fallback auf Legacy bei Import-/Laufzeitfehlern
+  - Log-Zeile beim Start (`Sync-Modus: NEW-Core|Legacy`)
+- [x] NEW-Core-RPC-Brücke im Legacy-Client ergänzt:
+  - `createNewCoreRpcAdapter()`
+  - `resolveSignerStatusForNewCoreRpc()`
+  - `runSyncWithNewCore()`
+- [x] `NEW/shared/identity-link-core/useCases/ensureSignerKeyUseCase.js` auf Compare-First angepasst:
+  - zuerst aktiven Signer-Status lesen
+  - `wp-ensure-user-key` nur als Fallback
+- [x] WordPress-Adapter im NEW-Pfad gehärtet:
+  - `credentials: "include"` für Session-/Bind-/Rebind-/Backup-Requests
+  - robustere Session-Normalisierung (direkte Felder oder `payload.identity`)
+
+## Fortschritt 2026-02-18 (Deployment: Buildbares WordPress-Plugin-ZIP via npm/pnpm)
+
+- [x] `package.json` ergänzt mit plattformunabhängigen Build-Skripten:
+  - `build:identity-link:wordpress`
+  - Alias: `build:indenty-link:wordpress`
+- [x] `scripts/build-identity-link-wordpress.mjs` erstellt (ohne externe Dependencies):
+  - erzeugt `dist/wordpress/nostr-identity-link/`
+  - kopiert Plugin-Source und NEW-Module nach `public/new/...`
+  - patcht Dist-`identity-link/index.html` auf:
+    - `data-use-new-core="true"`
+    - feste Modul-URL `../new/apps/identity-link/index.js?v=<buildToken>`
+  - erzeugt installierbares ZIP:
+    - `dist/wordpress/nostr-identity-link-0.1.0.zip`
+- [x] `integrations/wordpress/nostr-identity-link/nostr-identity-link.php` erweitert:
+  - Alias `identity-link/new/ -> new/`
+  - Allowlist um Prefix `new/` ergänzt
+

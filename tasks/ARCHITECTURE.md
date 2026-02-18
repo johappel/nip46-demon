@@ -212,7 +212,7 @@ Empfohlene erste 5 Commits:
 - [x] Strategie für Hexagonal + Strategy dokumentiert.
 - [x] Phase 0 gestartet.
 - [x] Phase 1 gestartet.
-- [ ] Phase 2 gestartet.
+- [x] Phase 2 gestartet.
 - [ ] Phase 3 gestartet.
 - [ ] Phase 4 gestartet.
 - [ ] Phase 5 gestartet.
@@ -229,3 +229,10 @@ Empfohlene erste 5 Commits:
   - `NEW/integrations/wordpress/adapter/*`
 - [x] Neue Kompositions-Entry-Point angelegt:
   - `NEW/apps/identity-link/index.js`
+- [x] Feature-Flag-Vorbereitung im bestehenden Identity-Link-Client gestartet:
+  - `data-use-new-core`
+  - `data-new-core-module-uri`
+  - Fallback auf Legacy-Pfad bei NEW-Core-Fehler
+- [x] Build-/Deployment-Strategie umgesetzt:
+  - plattformunabhängiges npm/pnpm-Buildscript für ein zip-fähiges WordPress-Plugin-Artefakt
+  - Dist-Ausgabe unter `dist/wordpress/`
