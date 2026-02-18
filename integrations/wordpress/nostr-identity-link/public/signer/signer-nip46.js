@@ -28,6 +28,9 @@ import { createSignerAttentionManager } from "./signer-ui.js";
         // Versioniertes Dateiformat für passwortgeschützte Schlüssel-Exportdateien
         const KEY_EXPORT_TYPE = "nip46-key-export";
         const KEY_EXPORT_VERSION = 2;
+        // WordPress REST-Endpunkte für Session-Info und verschlüsseltes Export-Backup
+        const WP_IDENTITY_LINK_SESSION_ENDPOINT = "/wp-json/identity-link/v1/session";
+        const WP_IDENTITY_LINK_BACKUP_ENDPOINT = "/wp-json/identity-link/v1/backup";
         
         // ===== Relay und Bridge-Konfiguration =====
         // Standard-Relays für NIP-46 RPC-Kommunikation
@@ -93,6 +96,8 @@ import { createSignerAttentionManager } from "./signer-ui.js";
         let activeNsec = null;
         // Das NDKUser-Objekt des aktiven Schlüssels (enthält pubkey, npub, etc.)
         let activeUser = null;
+        // Gecachter WP-REST-Nonce für Backup-REST-Aufrufe
+        let wpRestNonceForBackup = "";
         // Letzte gemeldete Frame-Höhe (für iframe Auto-Resize)
         let lastPostedFrameHeight = 0;
         // Flag um redundante Frame-Size Updates zu vermeiden (Debouncing)
@@ -346,6 +351,177 @@ import { createSignerAttentionManager } from "./signer-ui.js";
             const copied = document.execCommand("copy");
             helper.remove();
             if (!copied) throw new Error("Kopieren wurde vom Browser blockiert.");
+        }
+
+        /**
+         * Normalisiert einen WP-REST-Nonce-Wert.
+         * @param {string} nonceRaw - Der rohe Nonce-Wert.
+         * @returns {string} Der normalisierte Nonce oder leerer String.
+         */
+        function normalizeWpRestNonce(nonceRaw) {
+            return String(nonceRaw || "").trim();
+        }
+
+        /**
+         * Liest den WP-REST-Nonce aus einem Meta-Tag.
+         * @returns {string} Gefundener Nonce oder leerer String.
+         */
+        function readWpRestNonceFromMeta() {
+            const metaEl = document.querySelector('meta[name="wp-rest-nonce"]');
+            if (!(metaEl instanceof HTMLMetaElement)) return "";
+            return normalizeWpRestNonce(metaEl.content);
+        }
+
+        /**
+         * Liest den WP-REST-Nonce aus URL-Parametern.
+         * Unterstützt: `wpRestNonce`, `wp_rest_nonce`, `_wpnonce`.
+         * @returns {string} Gefundener Nonce oder leerer String.
+         */
+        function readWpRestNonceFromQuery() {
+            const params = new URLSearchParams(window.location.search);
+            return (
+                normalizeWpRestNonce(params.get("wpRestNonce")) ||
+                normalizeWpRestNonce(params.get("wp_rest_nonce")) ||
+                normalizeWpRestNonce(params.get("_wpnonce"))
+            );
+        }
+
+        /**
+         * Liest JSON aus einem Fetch-Response.
+         * @param {Response} response - Der Response.
+         * @returns {Promise<any|null>} Geparstes JSON oder null.
+         */
+        async function readJsonFromResponse(response) {
+            try {
+                return await response.json();
+            } catch (_err) {
+                return null;
+            }
+        }
+
+        /**
+         * Extrahiert eine aussagekräftige Fehlermeldung aus einer WP-REST-Antwort.
+         * @param {any} payload - JSON-Payload.
+         * @param {string} fallbackMessage - Fallback bei fehlender Meldung.
+         * @returns {string} Fehlermeldung.
+         */
+        function extractWpRestErrorMessage(payload, fallbackMessage) {
+            const fromPayload = String(payload?.message || "").trim();
+            if (fromPayload) return fromPayload;
+            return String(fallbackMessage || "WordPress-Request fehlgeschlagen.");
+        }
+
+        /**
+         * Holt einen frischen WP-REST-Nonce über die Session-Route.
+         * @returns {Promise<string>} Rest-Nonce.
+         */
+        async function requestWpSessionRestNonce() {
+            const response = await fetch(WP_IDENTITY_LINK_SESSION_ENDPOINT, {
+                method: "GET",
+                credentials: "same-origin",
+                headers: { Accept: "application/json" }
+            });
+            const payload = await readJsonFromResponse(response);
+            if (!response.ok) {
+                throw new Error(extractWpRestErrorMessage(payload, "WordPress-Session nicht verfügbar."));
+            }
+            const nonce = normalizeWpRestNonce(payload?.meta?.restNonce);
+            if (!nonce) {
+                throw new Error("WP-REST-Nonce fehlt in der Session-Antwort.");
+            }
+            return nonce;
+        }
+
+        /**
+         * Liefert einen WP-REST-Nonce für Backup-Aufrufe.
+         * Nutzt Cache, Meta/Query und bei Bedarf die Session-Route.
+         * @param {boolean} forceRefresh - Erzwingt neues Laden aus Session-Route.
+         * @returns {Promise<string>} Rest-Nonce.
+         */
+        async function ensureWpRestNonceForBackup(forceRefresh = false) {
+            if (!forceRefresh) {
+                const cached = normalizeWpRestNonce(wpRestNonceForBackup);
+                if (cached) return cached;
+
+                const fromMeta = readWpRestNonceFromMeta();
+                if (fromMeta) {
+                    wpRestNonceForBackup = fromMeta;
+                    return fromMeta;
+                }
+
+                const fromQuery = readWpRestNonceFromQuery();
+                if (fromQuery) {
+                    wpRestNonceForBackup = fromQuery;
+                    return fromQuery;
+                }
+            }
+
+            const fresh = await requestWpSessionRestNonce();
+            wpRestNonceForBackup = fresh;
+            return fresh;
+        }
+
+        /**
+         * Baut eine URL mit Cache-Bypass Query-Parameter.
+         * @param {string} endpoint - API-Endpoint.
+         * @returns {string} Endpoint mit `_ts` Query-Parameter.
+         */
+        function withCacheBypassQuery(endpoint) {
+            const url = new URL(String(endpoint || ""), window.location.origin);
+            url.searchParams.set("_ts", String(Date.now()));
+            return `${url.pathname}${url.search}`;
+        }
+
+        /**
+         * Führt einen WordPress-Backup-API-Aufruf aus.
+         * Bei Nonce-Ablauf wird ein Re-Try mit frischem Nonce gemacht.
+         * @param {"GET"|"POST"} method - HTTP-Methode.
+         * @param {any=} payload - Optionaler JSON-Payload für POST.
+         * @returns {Promise<any>} JSON-Antwort.
+         */
+        async function requestWordPressBackupApi(method, payload) {
+            const normalizedMethod = String(method || "GET").toUpperCase();
+            for (let attempt = 0; attempt < 2; attempt++) {
+                const nonce = await ensureWpRestNonceForBackup(attempt > 0);
+                const headers = {
+                    Accept: "application/json",
+                    "X-WP-Nonce": nonce
+                };
+                const requestUrl = normalizedMethod === "GET"
+                    ? withCacheBypassQuery(WP_IDENTITY_LINK_BACKUP_ENDPOINT)
+                    : WP_IDENTITY_LINK_BACKUP_ENDPOINT;
+                const requestInit = {
+                    method: normalizedMethod,
+                    credentials: "same-origin",
+                    cache: "no-store",
+                    headers
+                };
+                if (normalizedMethod !== "GET") {
+                    requestInit.headers["Content-Type"] = "application/json";
+                    requestInit.body = JSON.stringify(payload || {});
+                }
+
+                const response = await fetch(requestUrl, requestInit);
+                const responsePayload = await readJsonFromResponse(response);
+                if (response.ok) {
+                    const refreshedNonce = normalizeWpRestNonce(responsePayload?.meta?.restNonce);
+                    if (refreshedNonce) {
+                        wpRestNonceForBackup = refreshedNonce;
+                    }
+                    return responsePayload || {};
+                }
+
+                if (response.status === 403 && attempt === 0) {
+                    wpRestNonceForBackup = "";
+                    continue;
+                }
+
+                throw new Error(
+                    extractWpRestErrorMessage(responsePayload, `WordPress-Backup (${normalizedMethod}) fehlgeschlagen.`)
+                );
+            }
+
+            throw new Error("WordPress-Backup fehlgeschlagen.");
         }
 
         function setSecretInputVisibility(input, toggleBtn, visible) {
@@ -1777,6 +1953,97 @@ import { createSignerAttentionManager } from "./signer-ui.js";
             stateEl.style.color = "#bbb";
         }
 
+        /**
+         * Setzt den sichtbaren Status für den WordPress-Backup-Bereich.
+         * @param {string} message - Statusmeldung.
+         * @param {"neutral"|"ok"|"error"} tone - Darstellungsmodus.
+         * @returns {void}
+         */
+        function setWordPressBackupState(message, tone = "neutral") {
+            const stateEl = document.getElementById("wp-backup-state");
+            if (!stateEl) return;
+            stateEl.textContent = String(message || "");
+            if (tone === "ok") {
+                stateEl.style.color = "#9ad1ff";
+                return;
+            }
+            if (tone === "error") {
+                stateEl.style.color = "#ffb4b4";
+                return;
+            }
+            stateEl.style.color = "#bbb";
+        }
+
+        /**
+         * Formatiert einen ISO-Zeitstempel für die UI.
+         * @param {string} isoTimestamp - UTC/ISO Zeitstempel.
+         * @returns {string} Lokal formatierte Zeit oder leerer String.
+         */
+        function formatBackupTimestampForUi(isoTimestamp) {
+            const value = String(isoTimestamp || "").trim();
+            if (!value) return "";
+            const parsed = new Date(value);
+            if (Number.isNaN(parsed.getTime())) return value;
+            return parsed.toLocaleString();
+        }
+
+        /**
+         * Lädt den aktuellen WordPress-Backup-Status beim Start.
+         * Zeigt an, ob bereits ein Backup gespeichert ist.
+         * @returns {Promise<void>} Abschluss des Status-Refresh.
+         */
+        async function refreshWordPressBackupState() {
+            setWordPressBackupState("WordPress-Backup-Status wird geladen ...", "neutral");
+
+            try {
+                const response = await requestWordPressBackupApi("GET");
+                const hasBackupMetaRaw = response?.meta?.hasBackup;
+                const hasBackupMeta = hasBackupMetaRaw === true || hasBackupMetaRaw === 1 || hasBackupMetaRaw === "1";
+                const hasBackupPayload = !!(response?.backup && typeof response.backup === "object");
+                const sourceCountRaw = response?.meta?.sourceCount;
+                const sourceCount = Number.isFinite(Number(sourceCountRaw)) ? Number(sourceCountRaw) : 0;
+                const parseOkRaw = response?.meta?.parseOk;
+                const parseOk = parseOkRaw === true || parseOkRaw === 1 || parseOkRaw === "1";
+                const hasBackup = hasBackupPayload || hasBackupMeta || (sourceCount > 0 && parseOk);
+                const updatedAtRaw = String(response?.meta?.updatedAt || "").trim();
+                const updatedAtFormatted = formatBackupTimestampForUi(updatedAtRaw);
+                const responseUserId = String(response?.meta?.userId || "").trim();
+                appendRequestLog(
+                    `WordPress-Backup-Status: hasBackupMeta=${hasBackupMeta ? "true" : "false"}, hasBackupPayload=${hasBackupPayload ? "true" : "false"}, sourceCount=${sourceCount}, parseOk=${parseOk ? "true" : "false"}${responseUserId ? `, userId=${responseUserId}` : ""}${updatedAtRaw ? `, updatedAt=${updatedAtRaw}` : ""}`
+                );
+
+                if (!hasBackup) {
+                    setWordPressBackupState("Kein WordPress-Backup gespeichert.", "neutral");
+                    return;
+                }
+
+                if (!hasBackupPayload && sourceCount > 0 && !parseOk) {
+                    setWordPressBackupState("Backup-Daten vorhanden, aber nicht lesbar. Bitte Backup erneut speichern.", "error");
+                    return;
+                }
+
+                setWordPressBackupState(
+                    `Backup vorhanden${updatedAtFormatted ? ` (zuletzt: ${updatedAtFormatted})` : ""}.`,
+                    "ok"
+                );
+            } catch (err) {
+                const message = String(err?.message || "Unbekannter Fehler.");
+                const lower = message.toLowerCase();
+
+                if (lower.includes("login erforderlich")) {
+                    setWordPressBackupState("Kein Backup-Status: bitte in WordPress einloggen.", "neutral");
+                    return;
+                }
+                if (lower.includes("nonce")) {
+                    setWordPressBackupState("Kein Backup-Status: WP-Nonce fehlt oder ist ungültig.", "neutral");
+                    return;
+                }
+
+                setWordPressBackupState(`Backup-Status nicht verfügbar: ${message}`, "error");
+                appendRequestLog(`WordPress-Backup-Status konnte nicht geladen werden: ${message}`);
+            }
+        }
+
         function renderRelayManager(message, tone = "neutral") {
             const input = document.getElementById("relay-list-input");
             if (!input) return;
@@ -2387,18 +2654,24 @@ import { createSignerAttentionManager } from "./signer-ui.js";
             return entry;
         }
 
-        async function downloadActiveKeyPair() {
+        /**
+         * Baut einen verschlüsselten Export-Payload für den aktiven Schlüssel.
+         * @param {string} exportPassword - Export-Passwort für die verschlüsselte Datei.
+         * @returns {Promise<{exportPayload: object, fileName: string, displayName: string}>} Export-Daten.
+         */
+        async function buildActiveKeyExportBundle(exportPassword) {
             if (!currentKeyring) throw new Error("Keyring ist nicht entsperrt.");
             const { entry: activeEntry, index: activeIndex } = resolveActiveKeyEntry(currentKeyring, activeKeyId);
             if (!activeEntry) throw new Error("Kein aktiver Schlüssel gefunden.");
             const password = await ensureSessionPassword();
+            const normalizedExportPassword = String(exportPassword || "");
+            if (!normalizedExportPassword) throw new Error("Kein Export-Passwort angegeben.");
 
             const nsec = await decryptNsec(activeEntry.payload, password);
             const signer = new NDKPrivateKeySigner(nsec);
             const user = await signer.user();
             const displayName = keyDisplayName(activeEntry, activeIndex);
-            const exportPassword = await askForExportPassword();
-            const encryptedPayload = await encryptNsec(nsec, exportPassword);
+            const encryptedPayload = await encryptNsec(nsec, normalizedExportPassword);
             const exportPayload = {
                 v: KEY_EXPORT_VERSION,
                 type: KEY_EXPORT_TYPE,
@@ -2417,8 +2690,18 @@ import { createSignerAttentionManager } from "./signer-ui.js";
                 importHint: "Im Signer unter Verwaltung die Datei auswählen und auf \"Exportdatei importieren\" klicken."
             };
 
-            const blob = new Blob([JSON.stringify(exportPayload, null, 2)], { type: "application/json" });
             const fileName = `${safeFilename(displayName)}-${safeFilename(user.npub.slice(0, 12))}-secure-export.json`;
+            return { exportPayload, fileName, displayName };
+        }
+
+        /**
+         * Lädt den verschlüsselten Export des aktiven Schlüssels als JSON-Datei herunter.
+         * @returns {Promise<void>} Abschluss des Download-Flows.
+         */
+        async function downloadActiveKeyPair() {
+            const exportPassword = await askForExportPassword();
+            const { exportPayload, fileName } = await buildActiveKeyExportBundle(exportPassword);
+            const blob = new Blob([JSON.stringify(exportPayload, null, 2)], { type: "application/json" });
             const url = URL.createObjectURL(blob);
             const link = document.createElement("a");
             link.href = url;
@@ -2428,6 +2711,47 @@ import { createSignerAttentionManager } from "./signer-ui.js";
             link.remove();
             URL.revokeObjectURL(url);
             appendRequestLog(`Verschlüsselter Schlüssel exportiert: ${fileName}`);
+        }
+
+        /**
+         * Speichert den verschlüsselten Export des aktiven Schlüssels im WordPress-Profil.
+         * @returns {Promise<void>} Abschluss des Save-Flows.
+         */
+        async function saveActiveKeyBackupToWordPress() {
+            setWordPressBackupState("WordPress-Backup wird gespeichert ...", "neutral");
+            const exportPassword = await askForExportPassword();
+            const { exportPayload, fileName } = await buildActiveKeyExportBundle(exportPassword);
+            const response = await requestWordPressBackupApi("POST", { backup: exportPayload });
+            const updatedAt = String(response?.meta?.updatedAt || "").trim();
+            setWordPressBackupState(
+                `Backup gespeichert${updatedAt ? ` (${updatedAt})` : ""}.`,
+                "ok"
+            );
+            appendRequestLog(`WordPress-Backup gespeichert: ${fileName}${updatedAt ? ` (${updatedAt})` : ""}`);
+        }
+
+        /**
+         * Importiert einen bereits geparsten Export.
+         * @param {{label: string, encryptedPayload: object}} parsed - Geparster Export.
+         * @param {string} targetName - Zielname für den neuen Schlüssel.
+         * @returns {Promise<any>} Neuer Keyring-Eintrag.
+         */
+        async function importParsedKeyExport(parsed, targetName) {
+            let importedNsec = "";
+            if (parsed.encryptedPayload) {
+                const exportPassword = await askForImportPassword(parsed.encryptedPayload);
+                try {
+                    importedNsec = await decryptNsec(parsed.encryptedPayload, exportPassword);
+                } catch (_err) {
+                    throw new Error("Exportdatei konnte nicht entschlüsselt werden. Passwort prüfen.");
+                }
+            }
+
+            if (!importedNsec || !isValidNsec(importedNsec)) {
+                throw new Error("Exportdatei enthält keinen gültigen nsec.");
+            }
+
+            return addKeyToKeyring(importedNsec, targetName, sessionPassword || "");
         }
 
         async function saveAdditionalKey() {
@@ -2467,24 +2791,9 @@ import { createSignerAttentionManager } from "./signer-ui.js";
 
             const raw = await file.text();
             const parsed = parseKeyExport(raw);
-            let importedNsec = "";
-
-            if (!importedNsec && parsed.encryptedPayload) {
-                const exportPassword = await askForImportPassword(parsed.encryptedPayload);
-                try {
-                    importedNsec = await decryptNsec(parsed.encryptedPayload, exportPassword);
-                } catch (_err) {
-                    throw new Error("Exportdatei konnte nicht entschlüsselt werden. Passwort prüfen.");
-                }
-            }
-
-            if (!importedNsec || !isValidNsec(importedNsec)) {
-                throw new Error("Exportdatei enthält keinen gültigen nsec.");
-            }
-
             const fallbackName = parsed.label || file.name.replace(/\.json$/i, "");
             const targetName = normalizeKeyName(nameInput.value) || fallbackName;
-            const addedEntry = await addKeyToKeyring(importedNsec, targetName, sessionPassword || "");
+            const addedEntry = await importParsedKeyExport(parsed, targetName);
             fileInput.value = "";
             const savedKeysSelect = document.getElementById("saved-keys-select");
             if (savedKeysSelect && addedEntry?.id) {
@@ -2492,6 +2801,67 @@ import { createSignerAttentionManager } from "./signer-ui.js";
                 appendRequestLog("Importierter Schlüssel wird direkt aktiviert.");
                 await switchToSelectedKey();
             }
+        }
+
+        /**
+         * Lädt den gespeicherten WordPress-Backup-Export und importiert ihn in den lokalen Keyring.
+         * @returns {Promise<void>} Abschluss des Restore-Flows.
+         */
+        async function importKeyFromWordPressBackup() {
+            if (!currentKeyring) throw new Error("Keyring ist nicht entsperrt.");
+            const password = sessionPassword || "";
+            if (!password && !hasSessionUnlockMaterial()) {
+                await ensureSessionPassword();
+            }
+
+            setWordPressBackupState("WordPress-Backup wird geladen ...", "neutral");
+            appendRequestLog("WordPress-Backup wird geladen ...");
+            const response = await requestWordPressBackupApi("GET");
+            const hasBackupMetaRaw = response?.meta?.hasBackup;
+            const hasBackupMeta = hasBackupMetaRaw === true || hasBackupMetaRaw === 1 || hasBackupMetaRaw === "1";
+            const backupPayload = response?.backup;
+            const hasBackupPayload = !!(backupPayload && typeof backupPayload === "object");
+            const sourceCountRaw = response?.meta?.sourceCount;
+            const sourceCount = Number.isFinite(Number(sourceCountRaw)) ? Number(sourceCountRaw) : 0;
+            const parseOkRaw = response?.meta?.parseOk;
+            const parseOk = parseOkRaw === true || parseOkRaw === 1 || parseOkRaw === "1";
+            const hasBackup = hasBackupPayload || hasBackupMeta || (sourceCount > 0 && parseOk);
+            const updatedAt = String(response?.meta?.updatedAt || "").trim();
+            const responseUserId = String(response?.meta?.userId || "").trim();
+            appendRequestLog(
+                `WordPress-Backup Antwort: hasBackupMeta=${hasBackupMeta ? "true" : "false"}, hasBackupPayload=${hasBackupPayload ? "true" : "false"}, sourceCount=${sourceCount}, parseOk=${parseOk ? "true" : "false"}${responseUserId ? `, userId=${responseUserId}` : ""}${updatedAt ? `, updatedAt=${updatedAt}` : ""}`
+            );
+            setWordPressBackupState(
+                hasBackup
+                    ? `Backup gefunden${updatedAt ? ` (${updatedAt})` : ""}.`
+                    : "Kein Backup im WordPress-Profil gespeichert.",
+                hasBackup ? "ok" : "error"
+            );
+
+            if (!hasBackupPayload && sourceCount > 0 && !parseOk) {
+                throw new Error("Backup-Daten vorhanden, aber nicht lesbar. Bitte Backup erneut speichern.");
+            }
+            if (!backupPayload || typeof backupPayload !== "object") {
+                throw new Error("Kein WordPress-Backup vorhanden. Bitte zuerst \"Export in WordPress speichern\" ausführen.");
+            }
+
+            const parsed = parseKeyExport(JSON.stringify(backupPayload));
+            const nameInput = document.getElementById("new-key-name-input");
+            const fallbackName = parsed.label || "WordPress Backup";
+            const targetName = normalizeKeyName(nameInput?.value || "") || fallbackName;
+            const addedEntry = await importParsedKeyExport(parsed, targetName);
+
+            const savedKeysSelect = document.getElementById("saved-keys-select");
+            if (savedKeysSelect && addedEntry?.id) {
+                savedKeysSelect.value = addedEntry.id;
+                appendRequestLog("WordPress-Backup importiert. Schlüssel wird direkt aktiviert.");
+                setWordPressBackupState("Backup importiert. Schlüssel wird aktiviert ...", "ok");
+                await switchToSelectedKey();
+                return;
+            }
+
+            appendRequestLog("WordPress-Backup importiert.");
+            setWordPressBackupState("Backup importiert.", "ok");
         }
 
         async function changeKeyringPassword() {
@@ -2704,6 +3074,35 @@ import { createSignerAttentionManager } from "./signer-ui.js";
                 }
             });
 
+            const saveWpBackupBtn = document.getElementById("save-key-wp-backup-btn");
+            if (saveWpBackupBtn) {
+                saveWpBackupBtn.addEventListener("click", async () => {
+                    try {
+                        await saveActiveKeyBackupToWordPress();
+                    } catch (err) {
+                        setWordPressBackupState(`Speichern fehlgeschlagen: ${err.message}`, "error");
+                        appendRequestLog(`WordPress-Backup speichern fehlgeschlagen: ${err.message}`);
+                    }
+                });
+            }
+
+            const loadWpBackupBtn = document.getElementById("load-key-wp-backup-btn");
+            if (loadWpBackupBtn) {
+                loadWpBackupBtn.addEventListener("click", async () => {
+                    try {
+                        await importKeyFromWordPressBackup();
+                    } catch (err) {
+                        const message = String(err?.message || "Unbekannter Fehler.");
+                        setWordPressBackupState(`Import fehlgeschlagen: ${message}`, "error");
+                        appendRequestLog(`WordPress-Backup Import fehlgeschlagen: ${message}`);
+                        setActiveTab("info");
+                        if (message.includes("Kein WordPress-Backup vorhanden")) {
+                            window.alert(message);
+                        }
+                    }
+                });
+            }
+
             document.getElementById("reveal-nsec-once-btn").addEventListener("click", async () => {
                 try {
                     await revealActiveNsecOnce();
@@ -2838,6 +3237,12 @@ import { createSignerAttentionManager } from "./signer-ui.js";
                     }
                 });
             }
+
+            refreshWordPressBackupState().catch((err) => {
+                const message = String(err?.message || "Unbekannter Fehler.");
+                setWordPressBackupState(`Backup-Status nicht verfügbar: ${message}`, "error");
+                appendRequestLog(`WordPress-Backup-Status Fehler: ${message}`);
+            });
 
             document.getElementById("reset-keyring-btn").addEventListener("click", () => {
                 try {

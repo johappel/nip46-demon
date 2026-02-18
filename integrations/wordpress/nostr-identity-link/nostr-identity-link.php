@@ -18,6 +18,8 @@ const NIP46_IDENTITY_LINK_META_PUBKEY = 'nip46_identity_link_pubkey';
 const NIP46_IDENTITY_LINK_META_NPUB = 'nip46_identity_link_npub';
 const NIP46_IDENTITY_LINK_META_KEY_ID = 'nip46_identity_link_key_id';
 const NIP46_IDENTITY_LINK_META_UPDATED_AT = 'nip46_identity_link_updated_at';
+const NIP46_IDENTITY_LINK_META_BACKUP_JSON = 'nip46_identity_link_backup_json_v1';
+const NIP46_IDENTITY_LINK_META_BACKUP_UPDATED_AT = 'nip46_identity_link_backup_updated_at_v1';
 const NIP46_IDENTITY_LINK_AUDIT_OPTION = 'nip46_identity_link_audit_log_v1';
 const NIP46_IDENTITY_LINK_AUDIT_LIMIT = 200;
 const NIP46_IDENTITY_LINK_SHORTCODE_TAG = 'nip46_identity_link_client';
@@ -86,6 +88,23 @@ function nip46IdentityLinkRegisterRoutes(): void
             'methods' => WP_REST_Server::CREATABLE,
             'callback' => 'nip46IdentityLinkHandleRebind',
             'permission_callback' => 'nip46IdentityLinkCanWriteBinding'
+        ]
+    );
+
+    register_rest_route(
+        NIP46_IDENTITY_LINK_REST_NAMESPACE,
+        '/backup',
+        [
+            [
+                'methods' => WP_REST_Server::READABLE,
+                'callback' => 'nip46IdentityLinkHandleBackupRead',
+                'permission_callback' => 'nip46IdentityLinkCanAccessBackup'
+            ],
+            [
+                'methods' => WP_REST_Server::CREATABLE,
+                'callback' => 'nip46IdentityLinkHandleBackupWrite',
+                'permission_callback' => 'nip46IdentityLinkCanAccessBackup'
+            ]
         ]
     );
 }
@@ -652,6 +671,32 @@ function nip46IdentityLinkCanWriteBinding(WP_REST_Request $request)
 }
 
 /**
+ * Prueft, ob der Benutzer den verschluesselten Export-Backup lesen/schreiben darf.
+ * Fuer Backup-Lesezugriffe wird bewusst ebenfalls ein WP-REST-Nonce verlangt.
+ *
+ * @param WP_REST_Request $request Die REST-Anfrage.
+ * @return bool|WP_Error True bei Erfolg, sonst WP_Error.
+ */
+function nip46IdentityLinkCanAccessBackup(WP_REST_Request $request)
+{
+    nip46IdentityLinkMaybeRestoreUserFromLoggedInCookie();
+    $authResult = nip46IdentityLinkRequireLoggedInUser();
+    if ($authResult !== true) {
+        return $authResult;
+    }
+
+    if (!nip46IdentityLinkVerifyWpRestNonce($request)) {
+        return new WP_Error(
+            'nip46_identity_link_nonce_invalid',
+            'Ungueltiger oder fehlender WP-REST-Nonce.',
+            ['status' => 403]
+        );
+    }
+
+    return true;
+}
+
+/**
  * Stellt sicher, dass ein eingeloggter Benutzer vorhanden ist.
  *
  * @return bool|WP_Error True bei Erfolg, sonst WP_Error.
@@ -811,6 +856,84 @@ function nip46IdentityLinkHandleRebind(WP_REST_Request $request)
 }
 
 /**
+ * Verarbeitet GET /backup.
+ * Liefert den zuletzt gespeicherten verschluesselten Export des aktuellen Users.
+ *
+ * @param WP_REST_Request $request Die REST-Anfrage.
+ * @return WP_REST_Response|WP_Error Ergebnisobjekt oder Fehler.
+ */
+function nip46IdentityLinkHandleBackupRead(WP_REST_Request $request)
+{
+    $currentUser = wp_get_current_user();
+    $backupBundle = nip46IdentityLinkLoadUserBackup((int) $currentUser->ID);
+
+    return nip46IdentityLinkBuildResponse(
+        [
+            'backup' => $backupBundle['backup'],
+            'meta' => [
+                'hasBackup' => $backupBundle['hasBackup'],
+                'updatedAt' => $backupBundle['updatedAt'],
+                'sourceCount' => $backupBundle['sourceCount'],
+                'parseOk' => $backupBundle['parseOk'],
+                'userId' => (int) $currentUser->ID,
+                'restNonce' => wp_create_nonce('wp_rest')
+            ]
+        ],
+        200
+    );
+}
+
+/**
+ * Verarbeitet POST /backup.
+ * Speichert einen verschluesselten Export-Blob in den User-Metadaten.
+ *
+ * @param WP_REST_Request $request Die REST-Anfrage.
+ * @return WP_REST_Response|WP_Error Ergebnisobjekt oder Fehler.
+ */
+function nip46IdentityLinkHandleBackupWrite(WP_REST_Request $request)
+{
+    $currentUser = wp_get_current_user();
+    $normalizedBackup = nip46IdentityLinkNormalizeBackupInput($request);
+    if (is_wp_error($normalizedBackup)) {
+        return $normalizedBackup;
+    }
+
+    $backupJson = wp_json_encode($normalizedBackup, JSON_UNESCAPED_SLASHES);
+    if (!is_string($backupJson) || $backupJson === '') {
+        return new WP_Error(
+            'nip46_identity_link_backup_encode_failed',
+            'Backup konnte nicht serialisiert werden.',
+            ['status' => 500]
+        );
+    }
+
+    if (strlen($backupJson) > 200000) {
+        return new WP_Error(
+            'nip46_identity_link_backup_too_large',
+            'Backup ist zu gross (max. 200 KB).',
+            ['status' => 413]
+        );
+    }
+
+    $updatedAt = gmdate('c');
+    update_user_meta((int) $currentUser->ID, NIP46_IDENTITY_LINK_META_BACKUP_JSON, $normalizedBackup);
+    update_user_meta((int) $currentUser->ID, NIP46_IDENTITY_LINK_META_BACKUP_UPDATED_AT, $updatedAt);
+
+    return nip46IdentityLinkBuildResponse(
+        [
+            'backup' => $normalizedBackup,
+            'meta' => [
+                'hasBackup' => true,
+                'updatedAt' => $updatedAt,
+                'userId' => (int) $currentUser->ID,
+                'restNonce' => wp_create_nonce('wp_rest')
+            ]
+        ],
+        200
+    );
+}
+
+/**
  * Baut ein einheitliches REST-Response-Objekt.
  *
  * @param array<string,mixed> $payload Der Antwortpayload.
@@ -820,6 +943,294 @@ function nip46IdentityLinkHandleRebind(WP_REST_Request $request)
 function nip46IdentityLinkBuildResponse(array $payload, int $statusCode): WP_REST_Response
 {
     return new WP_REST_Response($payload, $statusCode);
+}
+
+/**
+ * Normalisiert und validiert die Backup-Nutzlast.
+ * Erwartet: `{ "backup": { ...nip46-key-export... } }`.
+ *
+ * @param WP_REST_Request $request Die REST-Anfrage.
+ * @return array<string,mixed>|WP_Error Normalisierte Backup-Daten oder Fehler.
+ */
+function nip46IdentityLinkNormalizeBackupInput(WP_REST_Request $request)
+{
+    $rawInput = $request->get_json_params();
+    if (!is_array($rawInput)) {
+        return new WP_Error(
+            'nip46_identity_link_backup_payload_invalid',
+            'Ungueltiger JSON-Payload.',
+            ['status' => 400]
+        );
+    }
+
+    $rawBackup = $rawInput['backup'] ?? null;
+    if (!is_array($rawBackup)) {
+        return new WP_Error(
+            'nip46_identity_link_backup_missing',
+            'backup fehlt oder ist kein Objekt.',
+            ['status' => 400]
+        );
+    }
+
+    $version = (int) ($rawBackup['v'] ?? 0);
+    if ($version <= 0 || $version > 20) {
+        return new WP_Error(
+            'nip46_identity_link_backup_version_invalid',
+            'Backup-Version ist ungueltig.',
+            ['status' => 400]
+        );
+    }
+
+    $type = trim((string) ($rawBackup['type'] ?? ''));
+    if ($type !== 'nip46-key-export') {
+        return new WP_Error(
+            'nip46_identity_link_backup_type_invalid',
+            'Backup-Typ ist ungueltig.',
+            ['status' => 400]
+        );
+    }
+
+    $rawEncryptedPayload = $rawBackup['payload'] ?? null;
+    if (!is_array($rawEncryptedPayload)) {
+        return new WP_Error(
+            'nip46_identity_link_backup_encrypted_payload_missing',
+            'backup.payload fehlt oder ist ungueltig.',
+            ['status' => 400]
+        );
+    }
+
+    $encryptedVersion = (int) ($rawEncryptedPayload['v'] ?? 0);
+    $salt = trim((string) ($rawEncryptedPayload['salt'] ?? ''));
+    $iv = trim((string) ($rawEncryptedPayload['iv'] ?? ''));
+    $ciphertext = trim((string) ($rawEncryptedPayload['ct'] ?? ''));
+    $iterations = (int) ($rawEncryptedPayload['iter'] ?? 0);
+    if ($encryptedVersion !== 1 || $salt === '' || $iv === '' || $ciphertext === '' || $iterations < 10000) {
+        return new WP_Error(
+            'nip46_identity_link_backup_encrypted_payload_invalid',
+            'backup.payload hat ein ungueltiges Verschluesselungsformat.',
+            ['status' => 400]
+        );
+    }
+
+    if (strlen($salt) > 256 || strlen($iv) > 256 || strlen($ciphertext) > 131072) {
+        return new WP_Error(
+            'nip46_identity_link_backup_encrypted_payload_too_large',
+            'backup.payload ist zu gross.',
+            ['status' => 400]
+        );
+    }
+
+    $pubkey = strtolower(trim((string) ($rawBackup['pubkey'] ?? '')));
+    if ($pubkey !== '' && !preg_match('/^[0-9a-f]{64}$/', $pubkey)) {
+        return new WP_Error(
+            'nip46_identity_link_backup_pubkey_invalid',
+            'backup.pubkey ist ungueltig.',
+            ['status' => 400]
+        );
+    }
+
+    $npub = trim((string) ($rawBackup['npub'] ?? ''));
+    if ($npub !== '' && (strlen($npub) > 128 || strpos($npub, 'npub1') !== 0)) {
+        return new WP_Error(
+            'nip46_identity_link_backup_npub_invalid',
+            'backup.npub ist ungueltig.',
+            ['status' => 400]
+        );
+    }
+
+    $normalizedBackup = [
+        'v' => $version,
+        'type' => $type,
+        'format' => sanitize_text_field((string) ($rawBackup['format'] ?? 'encrypted-nsec')),
+        'label' => sanitize_text_field((string) ($rawBackup['label'] ?? '')),
+        'createdAt' => sanitize_text_field((string) ($rawBackup['createdAt'] ?? '')),
+        'sourceKeyCreatedAt' => sanitize_text_field((string) ($rawBackup['sourceKeyCreatedAt'] ?? '')),
+        'pubkey' => $pubkey,
+        'npub' => $npub,
+        'encryption' => [
+            'kdf' => sanitize_text_field((string) ($rawBackup['encryption']['kdf'] ?? 'PBKDF2-SHA256')),
+            'iterations' => (int) ($rawBackup['encryption']['iterations'] ?? 0),
+            'cipher' => sanitize_text_field((string) ($rawBackup['encryption']['cipher'] ?? 'AES-256-GCM'))
+        ],
+        'payload' => [
+            'v' => $encryptedVersion,
+            'kdf' => sanitize_text_field((string) ($rawEncryptedPayload['kdf'] ?? 'PBKDF2-SHA256')),
+            'alg' => sanitize_text_field((string) ($rawEncryptedPayload['alg'] ?? 'AES-GCM')),
+            'iter' => $iterations,
+            'salt' => $salt,
+            'iv' => $iv,
+            'ct' => $ciphertext
+        ],
+        'importHint' => sanitize_text_field((string) ($rawBackup['importHint'] ?? ''))
+    ];
+
+    return $normalizedBackup;
+}
+
+/**
+ * Laedt den gespeicherten User-Backup-Blob.
+ *
+ * @param int $userId Die WordPress User-ID.
+ * @return array<string,mixed> Bundle mit `hasBackup`, `backup`, `updatedAt`.
+ */
+function nip46IdentityLinkLoadUserBackup(int $userId): array
+{
+    $rawBackupValues = get_user_meta($userId, NIP46_IDENTITY_LINK_META_BACKUP_JSON, false);
+    if (!is_array($rawBackupValues)) {
+        $rawBackupValues = [];
+    }
+    if (count($rawBackupValues) === 0) {
+        $singleRawValue = get_user_meta($userId, NIP46_IDENTITY_LINK_META_BACKUP_JSON, true);
+        if (is_array($singleRawValue) || is_object($singleRawValue) || (is_string($singleRawValue) && $singleRawValue !== '')) {
+            $rawBackupValues[] = $singleRawValue;
+        }
+    }
+
+    $sourceCount = count($rawBackupValues);
+    if ($sourceCount === 0) {
+        return [
+            'hasBackup' => false,
+            'backup' => null,
+            'updatedAt' => '',
+            'sourceCount' => 0,
+            'parseOk' => false
+        ];
+    }
+
+    $decodedBackup = null;
+    for ($index = $sourceCount - 1; $index >= 0; $index--) {
+        $candidateRaw = $rawBackupValues[$index] ?? null;
+        $decodedCandidate = nip46IdentityLinkDecodeBackupValue($candidateRaw);
+        if (!is_array($decodedCandidate) || !nip46IdentityLinkLooksLikeBackupPayload($decodedCandidate)) {
+            continue;
+        }
+        $decodedBackup = $decodedCandidate;
+        break;
+    }
+
+    if (!is_array($decodedBackup)) {
+        return [
+            'hasBackup' => false,
+            'backup' => null,
+            'updatedAt' => '',
+            'sourceCount' => $sourceCount,
+            'parseOk' => false
+        ];
+    }
+
+    $updatedAt = nip46IdentityLinkGetLatestBackupUpdatedAt($userId);
+
+    return [
+        'hasBackup' => true,
+        'backup' => $decodedBackup,
+        'updatedAt' => $updatedAt,
+        'sourceCount' => $sourceCount,
+        'parseOk' => true
+    ];
+}
+
+/**
+ * Prueft, ob ein dekodierter Wert wie ein Backup-Payload aussieht.
+ *
+ * @param array<string,mixed> $payload Kandidat.
+ * @return bool True, wenn Kernfelder eines Backups vorhanden sind.
+ */
+function nip46IdentityLinkLooksLikeBackupPayload(array $payload): bool
+{
+    if (!isset($payload['v']) || !isset($payload['type']) || !isset($payload['payload'])) {
+        return false;
+    }
+
+    $version = (int) $payload['v'];
+    $type = (string) $payload['type'];
+    $encryptedPayload = $payload['payload'];
+    if ($version <= 0) return false;
+    if ($type !== 'nip46-key-export') return false;
+    if (!is_array($encryptedPayload)) return false;
+
+    return isset($encryptedPayload['v']) && isset($encryptedPayload['salt']) && isset($encryptedPayload['iv']) && isset($encryptedPayload['ct']);
+}
+
+/**
+ * Dekodiert einen gespeicherten Backup-Meta-Wert robust.
+ * Unterstuetzt:
+ * - bereits dekodierte Arrays
+ * - JSON-Objekte
+ * - doppelt-kodierte JSON-Strings
+ * - serialisierte PHP-Arrays
+ *
+ * @param mixed $rawBackupValue Der gespeicherte Meta-Wert.
+ * @return array<string,mixed>|null Dekodiertes Objekt oder null.
+ */
+function nip46IdentityLinkDecodeBackupValue($rawBackupValue): ?array
+{
+    if (is_array($rawBackupValue)) {
+        return $rawBackupValue;
+    }
+    if (is_object($rawBackupValue)) {
+        return (array) $rawBackupValue;
+    }
+    if (!is_string($rawBackupValue) || $rawBackupValue === '') {
+        return null;
+    }
+
+    $rawBackupJson = $rawBackupValue;
+    $candidates = [
+        $rawBackupJson,
+        wp_unslash($rawBackupJson),
+        html_entity_decode($rawBackupJson, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8')
+    ];
+
+    foreach ($candidates as $candidate) {
+        $normalizedCandidate = trim((string) $candidate);
+        if ($normalizedCandidate === '') {
+            continue;
+        }
+
+        $normalizedCandidate = preg_replace('/^\xEF\xBB\xBF/u', '', $normalizedCandidate) ?? $normalizedCandidate;
+        $maybeUnserialized = maybe_unserialize($normalizedCandidate);
+        if (is_array($maybeUnserialized)) {
+            return $maybeUnserialized;
+        }
+        if (is_object($maybeUnserialized)) {
+            return (array) $maybeUnserialized;
+        }
+
+        $decoded = json_decode($normalizedCandidate, true);
+        if (is_array($decoded)) {
+            return $decoded;
+        }
+
+        if (is_string($decoded)) {
+            $decodedSecondPass = json_decode($decoded, true);
+            if (is_array($decodedSecondPass)) {
+                return $decodedSecondPass;
+            }
+        }
+    }
+
+    return null;
+}
+
+/**
+ * Liest den neuesten Backup-Zeitstempel aus den User-Metadaten.
+ *
+ * @param int $userId Die WordPress User-ID.
+ * @return string Der zuletzt bekannte Zeitstempel oder leerer String.
+ */
+function nip46IdentityLinkGetLatestBackupUpdatedAt(int $userId): string
+{
+    $updatedAtValues = get_user_meta($userId, NIP46_IDENTITY_LINK_META_BACKUP_UPDATED_AT, false);
+    if (is_array($updatedAtValues) && count($updatedAtValues) > 0) {
+        for ($index = count($updatedAtValues) - 1; $index >= 0; $index--) {
+            $candidate = trim((string) $updatedAtValues[$index]);
+            if ($candidate !== '') {
+                return $candidate;
+            }
+        }
+    }
+
+    return trim((string) get_user_meta($userId, NIP46_IDENTITY_LINK_META_BACKUP_UPDATED_AT, true));
 }
 
 /**

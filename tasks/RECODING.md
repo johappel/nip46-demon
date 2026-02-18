@@ -553,3 +553,113 @@ Refactoring von `signer.html` in wartbare Module plus neue Aufmerksamkeits-Featu
 - [x] `nip46IdentityLinkRouteRequiresAuthentication(...)` verlangt jetzt nur noch Auth fuer `identity-link`-Routen.
 - [x] Ergebnis: `https://.../nostr/signer/` ist oeffentlich erreichbar, waehrend Identity-Link-Frontend und REST-Binding-Flow weiter WP-Login/Nonce-geschuetzt bleiben.
 
+## Fortschritt 2026-02-17 (WP-Backup fuer verschluesselte Exportdatei)
+
+- [x] WordPress REST erweitert:
+  - `GET /wp-json/identity-link/v1/backup` (Backup lesen)
+  - `POST /wp-json/identity-link/v1/backup` (Backup speichern)
+- [x] Backup-Endpunkte verlangen Login **und** gueltigen `X-WP-Nonce` (auch fuer GET), damit der verschluesselte Export nicht ohne explizite Session-Autorisierung auslesbar ist.
+- [x] Backup-Speicherung pro User in `user_meta` umgesetzt:
+  - `nip46_identity_link_backup_json_v1`
+  - `nip46_identity_link_backup_updated_at_v1`
+- [x] Signer-UI erweitert:
+  - Button `Export in WordPress speichern`
+  - Button `Aus WordPress wiederherstellen`
+- [x] Signer-Flow erweitert:
+  - Nonce-Aufloesung aus Meta/Query/Session-Endpoint
+  - REST-Retry bei 403 (Nonce-Refresh)
+  - Import aus WordPress-Backup in lokalen Keyring inkl. direkter Aktivierung
+- [x] Cache-Busting aktualisiert:
+  - `integrations/wordpress/nostr-identity-link/public/signer/index.html` -> `signer-nip46.js?v=20260217r`
+  - `integrations/wordpress/nostr-identity-link/public/signer/sw.js` -> `CACHE_VERSION = "nip46-signer-v13"`
+
+## Fortschritt 2026-02-17 (Hotfix: Duplicate Identifier im Signer)
+
+- [x] `integrations/wordpress/nostr-identity-link/public/signer/signer-nip46.js`: Duplicate-Identifier-Fehler behoben (`exportPassword` wurde in `buildActiveKeyExportBundle(...)` doppelt deklariert).
+- [x] `buildActiveKeyExportBundle(...)` nutzt jetzt strikt den übergebenen Parameter und validiert auf leeren Wert.
+- [x] Cache-Busting nach Hotfix:
+  - `integrations/wordpress/nostr-identity-link/public/signer/index.html` -> `signer-nip46.js?v=20260217s`
+  - `integrations/wordpress/nostr-identity-link/public/signer/sw.js` -> `CACHE_VERSION = "nip46-signer-v14"`
+
+## Fortschritt 2026-02-17 (UX-Debug: Restore aus WordPress)
+
+- [x] `integrations/wordpress/nostr-identity-link/public/signer/signer-nip46.js`: Restore-Flow um sichtbare Logs erweitert:
+  - `WordPress-Backup wird geladen ...`
+  - Antwort-Meta inkl. `hasBackup`/`updatedAt`
+- [x] Klarere Fehlermeldung bei leerem Backup: Hinweis, zuerst `Export in WordPress speichern` auszuführen.
+- [x] Bei Restore-Fehler wird automatisch auf Tab `Info/Log` gewechselt; bei fehlendem Backup zusätzlich `alert(...)`.
+- [x] Nonce-Refresh verbessert: `requestWordPressBackupApi(...)` übernimmt `meta.restNonce` aus erfolgreicher Antwort.
+- [x] Cache-Busting nach UX-Debug:
+  - `integrations/wordpress/nostr-identity-link/public/signer/index.html` -> `signer-nip46.js?v=20260217t`
+  - `integrations/wordpress/nostr-identity-link/public/signer/sw.js` -> `CACHE_VERSION = "nip46-signer-v15"`
+
+## Fortschritt 2026-02-17 (Sichtbares Backup-Feedback im Signer)
+
+- [x] `integrations/wordpress/nostr-identity-link/public/signer/index.html`: sichtbare Statuszeile `#wp-backup-state` im WordPress-Backup-Block ergänzt.
+- [x] `integrations/wordpress/nostr-identity-link/public/signer/signer-nip46.js`: `setWordPressBackupState(...)` ergänzt (neutral/ok/error).
+- [x] Save-/Load-Flow aktualisiert:
+  - zeigt jetzt direkt am Button-Bereich an, ob gespeichert/gefunden/importiert/fehlgeschlagen.
+  - ergänzt Zeitstempel (`updatedAt`) bei Erfolg.
+- [x] Cache-Busting nach Feedback-UX:
+  - `integrations/wordpress/nostr-identity-link/public/signer/index.html` -> `signer-nip46.js?v=20260217u`
+  - `integrations/wordpress/nostr-identity-link/public/signer/sw.js` -> `CACHE_VERSION = "nip46-signer-v16"`
+
+## Fortschritt 2026-02-17 (Auto-Status nach Reload fuer WP-Backup)
+
+- [x] `integrations/wordpress/nostr-identity-link/public/signer/signer-nip46.js`: `refreshWordPressBackupState()` ergänzt.
+- [x] Beim Laden des Signers wird jetzt automatisch geprüft, ob ein WordPress-Backup vorhanden ist.
+- [x] Statuszeile zeigt nach Reload unmittelbar:
+  - `Backup vorhanden (zuletzt: ...)`
+  - oder `Kein WordPress-Backup gespeichert.`
+  - oder neutralen Login/Nonce-Hinweis.
+- [x] Cache-Busting nach Auto-Status:
+  - `integrations/wordpress/nostr-identity-link/public/signer/index.html` -> `signer-nip46.js?v=20260217v`
+  - `integrations/wordpress/nostr-identity-link/public/signer/sw.js` -> `CACHE_VERSION = "nip46-signer-v17"`
+
+## Fortschritt 2026-02-17 (Fix: Stale WP-Backup durch Service-Worker-Cache)
+
+- [x] Ursache identifiziert: Signer-Service-Worker cachte bisher auch `GET /wp-json/...` und lieferte stale Backup-Antworten.
+- [x] `integrations/wordpress/nostr-identity-link/public/signer/sw.js`: `/wp-json/` Requests werden nicht mehr gecacht/intercepted.
+- [x] `integrations/wordpress/nostr-identity-link/public/signer/signer-nip46.js`: Backup-GET nutzt zusätzlich Cache-Bypass (`_ts`) und `cache: "no-store"`.
+- [x] Cache-Busting nach Cache-Fix:
+  - `integrations/wordpress/nostr-identity-link/public/signer/index.html` -> `signer-nip46.js?v=20260217w`
+  - `integrations/wordpress/nostr-identity-link/public/signer/sw.js` -> `CACHE_VERSION = "nip46-signer-v18"`
+
+## Fortschritt 2026-02-17 (Backup-Status Robustheit + User-Debug)
+
+- [x] `integrations/wordpress/nostr-identity-link/public/signer/signer-nip46.js`: Backup-Erkennung robuster gemacht:
+  - `hasBackup` gilt jetzt auch, wenn nur `backup`-Payload vorhanden ist (nicht nur bei strikt boolschem `meta.hasBackup === true`).
+- [x] Restore-Log erweitert um Debug-Felder:
+  - `hasBackupMeta`, `hasBackupPayload`, `userId`, `updatedAt`.
+- [x] `integrations/wordpress/nostr-identity-link/nostr-identity-link.php`: `/backup`-Antwort liefert `meta.userId` zur eindeutigen Zuordnung des eingeloggten Users.
+- [x] Cache-Busting nach Robustheits-Fix:
+  - `integrations/wordpress/nostr-identity-link/public/signer/index.html` -> `signer-nip46.js?v=20260217x`
+  - `integrations/wordpress/nostr-identity-link/public/signer/sw.js` -> `CACHE_VERSION = "nip46-signer-v19"`
+
+## Fortschritt 2026-02-17 (Fix: Reload-Status zeigte false trotz vorhandenem Backup)
+
+- [x] `integrations/wordpress/nostr-identity-link/public/signer/signer-nip46.js`: `refreshWordPressBackupState()` auf dieselbe robuste Backup-Erkennung umgestellt wie der manuelle Restore-Flow.
+- [x] Status-Log beim Start erweitert (`hasBackupMeta`, `hasBackupPayload`, `userId`, `updatedAt`), um User-/Payload-Mismatches sofort sichtbar zu machen.
+- [x] Cache-Busting nach Reload-Status-Fix:
+  - `integrations/wordpress/nostr-identity-link/public/signer/index.html` -> `signer-nip46.js?v=20260217y`
+  - `integrations/wordpress/nostr-identity-link/public/signer/sw.js` -> `CACHE_VERSION = "nip46-signer-v20"`
+
+## Fortschritt 2026-02-17 (Backup-Debug vertieft: sourceCount/parseOk)
+
+- [x] `integrations/wordpress/nostr-identity-link/public/signer/signer-nip46.js`: Frontend-Logs erweitert um `sourceCount` und `parseOk` aus `/backup`-Meta.
+- [x] Status-/Fehlertexte präzisiert:
+  - `Backup-Daten vorhanden, aber nicht lesbar. Bitte Backup erneut speichern.`
+- [x] Restore-Flow wirft bei `sourceCount>0 && parseOk=false` expliziten Fehler statt generischem "kein Backup".
+- [x] Cache-Busting nach Debug-Erweiterung:
+  - `integrations/wordpress/nostr-identity-link/public/signer/index.html` -> `signer-nip46.js?v=20260217z`
+  - `integrations/wordpress/nostr-identity-link/public/signer/sw.js` -> `CACHE_VERSION = "nip46-signer-v21"`
+
+## Fortschritt 2026-02-17 (Backend-Fix: parseOk=false bei vorhandenem Usermeta-Backup)
+
+- [x] `integrations/wordpress/nostr-identity-link/nostr-identity-link.php`: Backup-Write speichert jetzt kanonisch als Array in `user_meta` (statt JSON-String), um Decode-Probleme bei späterem Lesen zu vermeiden.
+- [x] `nip46IdentityLinkLoadUserBackup(...)` robust gemacht für gemischte Altbestände:
+  - verarbeitet String-, Array- und Objektwerte
+  - unterstützt JSON, doppelt-kodiertes JSON und serialisierte PHP-Werte
+  - validiert Struktur über `nip46IdentityLinkLooksLikeBackupPayload(...)`
+- [x] Ziel: Fälle mit `sourceCount>0` und `parseOk=false` auflösen, obwohl Backup in `usermeta` vorhanden ist.
+

@@ -738,6 +738,8 @@ REST-Endpunkte des Plugins:
 - `GET /wp-json/identity-link/v1/session`
 - `POST /wp-json/identity-link/v1/bind`
 - `POST /wp-json/identity-link/v1/rebind`
+- `GET /wp-json/identity-link/v1/backup`
+- `POST /wp-json/identity-link/v1/backup`
 
 Rewrite-Routen (ueber WordPress):
 
@@ -761,6 +763,7 @@ Sicherheitsprofil:
 
 - `session`: Login erforderlich
 - `bind`/`rebind`: Login + gueltiger `X-WP-Nonce` (oder `_wpnonce`)
+- `backup` (GET/POST): Login + gueltiger `X-WP-Nonce` (liefert/speichert verschluesselten Exportblob pro User)
 - `/nostr/signer/`: oeffentlich erreichbar (kein WordPress-Login erforderlich), damit der Signer als allgemeiner NIP-46 Bunker fuer andere Anwendungen nutzbar bleibt.
 - Bei `session` versucht das Plugin den User-Kontext bei Bedarf aus dem `logged_in`-Cookie wiederherzustellen (gegen REST-401 trotz aktivem Frontend-Login).
 
@@ -802,6 +805,10 @@ Hinweis zur Frontend-Integration:
 - `wp-ensure-user-key` wird im Alltag damit nur noch fuer den ungebundenen Erstzuordnungsfall benoetigt.
 - Die Host-Statusanzeige ist fuer den Compare-Only-Fall jetzt explizit: `Signer-Bridge bereit. Pubkey kann verglichen werden.` (statt unklarem `Verbindung wird vorbereitet ...`).
 - Bei Bundle-Kopien in das WordPress-Plugin muessen relative Modulpfade plugin-spezifisch bleiben (`signer/signer-nip46.js` -> `../vendor/...`, `identity-link/index.js` -> `../democlient/...`), sonst laedt der Browser HTML statt Modul-JS.
+- Im Signer-Tab `Verwaltung` gibt es zusaetzlich zwei WP-Backup-Aktionen:
+  - `Export in WordPress speichern` (speichert den verschluesselten Export im User-Profil)
+  - `Aus WordPress wiederherstellen` (laedt diesen Export und importiert ihn lokal im aktuellen Browser)
+- Der Signer-Service-Worker umgeht `GET /wp-json/...` bewusst (kein Cache), damit REST-Daten wie Backup-Status nicht stale aus dem Offline-Cache kommen.
 
 Beispiel:
 

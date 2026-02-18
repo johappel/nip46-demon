@@ -1,4 +1,4 @@
-﻿const CACHE_VERSION = "nip46-signer-v12";
+﻿const CACHE_VERSION = "nip46-signer-v21";
 const CORE_ASSETS = [
     "./",
     "./index.html",
@@ -36,6 +36,7 @@ self.addEventListener("fetch", (event) => {
 
     const url = new URL(req.url);
     if (url.origin !== self.location.origin) return;
+    if (url.pathname.startsWith("/wp-json/")) return;
 
     if (req.mode === "navigate") {
         event.respondWith((async () => {

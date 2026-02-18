@@ -131,6 +131,17 @@
             </fieldset>
 
             <fieldset class="toolset">
+                <legend>WordPress Backup</legend>
+                <p>Speichert den verschlüsselten Export des aktiven Schlüssels im WordPress-Profil, damit du ihn in einem anderen Browser wiederherstellen kannst.</p>
+                <p class="attention-hint">Für Speichern und Laden ist ein eingeloggter WordPress-User mit gültigem WP-REST-Nonce erforderlich.</p>
+                <p id="wp-backup-state" class="attention-hint">Noch kein WordPress-Backup-Status geladen.</p>
+                <div class="button-row">
+                    <button class="btn-allow-temporary" id="save-key-wp-backup-btn" type="button">Export in WordPress speichern</button>
+                    <button class="btn-allow-temporary" id="load-key-wp-backup-btn" type="button">Aus WordPress wiederherstellen</button>
+                </div>
+            </fieldset>
+
+            <fieldset class="toolset">
                 <legend>Neuen Schlüssel hinzufügen</legend>
                 <label for="new-key-name-input">Neuer Schlüsselname (optional)</label>
                 <input id="new-key-name-input" placeholder="z.B. Phone Backup" />
@@ -286,6 +297,6 @@
         </div>
     </div>
 
-    <script type="module" src="./signer-nip46.js?v=20260217q"></script>
+    <script type="module" src="./signer-nip46.js?v=20260217z"></script>
 </body>
 </html>
