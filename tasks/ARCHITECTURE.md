@@ -210,10 +210,22 @@ Empfohlene erste 5 Commits:
 ## 9. Fortschritt
 
 - [x] Strategie für Hexagonal + Strategy dokumentiert.
-- [ ] Phase 0 gestartet.
-- [ ] Phase 1 gestartet.
+- [x] Phase 0 gestartet.
+- [x] Phase 1 gestartet.
 - [ ] Phase 2 gestartet.
 - [ ] Phase 3 gestartet.
 - [ ] Phase 4 gestartet.
 - [ ] Phase 5 gestartet.
 - [ ] Phase 6 gestartet.
+
+## 10. Umgesetzt am 2026-02-18
+
+- [x] Strangler-Workspace `NEW/` angelegt, ohne bestehende Produktionspfade anzurühren.
+- [x] Contracts angelegt unter `NEW/shared/adapter-contracts/*`.
+- [x] Core-Skeleton angelegt unter:
+  - `NEW/shared/identity-link-core/*`
+  - `NEW/shared/signer-core/*`
+- [x] WordPress-Strategien als Adapter-Skeleton angelegt unter:
+  - `NEW/integrations/wordpress/adapter/*`
+- [x] Neue Kompositions-Entry-Point angelegt:
+  - `NEW/apps/identity-link/index.js`

@@ -663,3 +663,35 @@ Refactoring von `signer.html` in wartbare Module plus neue Aufmerksamkeits-Featu
   - validiert Struktur über `nip46IdentityLinkLooksLikeBackupPayload(...)`
 - [x] Ziel: Fälle mit `sourceCount>0` und `parseOk=false` auflösen, obwohl Backup in `usermeta` vorhanden ist.
 
+## Fortschritt 2026-02-18 (Architektur-Start: NEW Strangler-Zone)
+
+- [x] Neue Migrationsstruktur angelegt: `NEW/` (bestehende Pfade bleiben unverändert).
+- [x] Adapter-Contracts mit Laufzeitvalidierung erstellt:
+  - `NEW/shared/adapter-contracts/authStrategy.js`
+  - `NEW/shared/adapter-contracts/backupStrategy.js`
+  - `NEW/shared/adapter-contracts/bindingStrategy.js`
+  - `NEW/shared/adapter-contracts/identityStrategy.js`
+  - `NEW/shared/adapter-contracts/signerBridgePort.js`
+  - `NEW/shared/adapter-contracts/index.js`
+- [x] Identity-Link-Core-Skeleton erstellt:
+  - `NEW/shared/identity-link-core/state.js`
+  - `NEW/shared/identity-link-core/useCases/loadIdentityUseCase.js`
+  - `NEW/shared/identity-link-core/useCases/ensureSignerKeyUseCase.js`
+  - `NEW/shared/identity-link-core/useCases/compareKeysUseCase.js`
+  - `NEW/shared/identity-link-core/index.js`
+- [x] Signer-Core-Skeleton erstellt:
+  - `NEW/shared/signer-core/state.js`
+  - `NEW/shared/signer-core/services/getSignerStatusService.js`
+  - `NEW/shared/signer-core/index.js`
+- [x] WordPress-Adapter-Skeleton erstellt:
+  - `NEW/integrations/wordpress/adapter/config.js`
+  - `NEW/integrations/wordpress/adapter/wordpressIdentityStrategy.js`
+  - `NEW/integrations/wordpress/adapter/wordpressBindingStrategy.js`
+  - `NEW/integrations/wordpress/adapter/wordpressBackupStrategy.js`
+  - `NEW/integrations/wordpress/adapter/wordpressAuthStrategy.js`
+  - `NEW/integrations/wordpress/adapter/wordpressSignerBridgePort.js`
+  - `NEW/integrations/wordpress/adapter/index.js`
+- [x] Neuer Kompositions-Einstieg für den Identity-Link-Flow erstellt:
+  - `NEW/apps/identity-link/index.js`
+- [x] Workspace-Doku angelegt: `NEW/README.md`
+

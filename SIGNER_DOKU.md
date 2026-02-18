@@ -809,6 +809,12 @@ Hinweis zur Frontend-Integration:
   - `Export in WordPress speichern` (speichert den verschluesselten Export im User-Profil)
   - `Aus WordPress wiederherstellen` (laedt diesen Export und importiert ihn lokal im aktuellen Browser)
 - Der Signer-Service-Worker umgeht `GET /wp-json/...` bewusst (kein Cache), damit REST-Daten wie Backup-Status nicht stale aus dem Offline-Cache kommen.
+- Für die schrittweise Architektur-Migration gibt es eine getrennte Strangler-Zone unter `NEW/`:
+  - `NEW/shared/adapter-contracts` (Ports/Contracts)
+  - `NEW/shared/identity-link-core` und `NEW/shared/signer-core` (provider-neutrale Core-Logik)
+  - `NEW/integrations/wordpress/adapter` (WordPress-Strategien)
+  - `NEW/apps/identity-link` (neuer Kompositions-Einstieg)
+- Der produktive Signer-/Client-Pfad bleibt bis zur Feature-Flag-Umschaltung unverändert.
 
 Beispiel:
 
