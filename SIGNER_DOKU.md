@@ -819,11 +819,11 @@ Hinweis zur Frontend-Integration:
   - `nostrclient/shared/identity-link-core` und `nostrclient/shared/signer-core` (provider-neutrale Core-Logik)
   - `nostrclient/integrations/wordpress/adapter` (WordPress-Strategien)
   - `nostrclient/apps/identity-link` (neuer Kompositions-Einstieg)
-- Der produktive Signer-/Client-Pfad bleibt bis zur Feature-Flag-Umschaltung unverändert.
-- Der Identity-Link-Client unterstützt dafür jetzt Runtime-Flags:
-  - `data-use-new-core="true|false"` aktiviert/deaktiviert den nostrclient-Pfad.
+- Der produktive WordPress-Identity-Link-Client laeuft jetzt fest auf dem nostrclient-Core-Pfad.
+- Runtime-Konfiguration dafuer:
   - `data-new-core-module-uri="..."` setzt die Modul-URL zum nostrclient-Entry-Point.
-  - Bei nostrclient-Import-/Laufzeitfehlern fällt der Client automatisch auf den Legacy-Sync zurück.
+  - kein `data-use-new-core` Schalter mehr im produktiven WordPress-Client.
+  - kein Legacy-Sync-Fallback mehr im produktiven WordPress-Client.
 - Deployment ist als Build-Artefakt vorgesehen (kein manuelles Copy/Paste):
   - `npm run build` / `pnpm run build`
     - `dist/nostrclient/nostrclient/`
@@ -845,7 +845,6 @@ Hinweis zur Frontend-Integration:
     - `dist/wordpress/nostr-identity-link/` (installierbares Plugin-Verzeichnis)
     - `dist/wordpress/nostr-identity-link-<version>.zip` (WP-Upload)
   - Dist-`identity-link/index.html` wird dabei auf nostrclient-Core gesetzt:
-    - `data-use-new-core="true"`
     - `data-new-core-module-uri="../nostrclient/apps/identity-link/index.js?v=<buildToken>"`
 - Das Plugin erlaubt für diese nostrclient-Module den Public-Prefix `nostrclient/` unter `/nostr/nostrclient/...`.
 

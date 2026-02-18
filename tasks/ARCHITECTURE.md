@@ -18,7 +18,7 @@ Zielzustand:
 - Hexagonal: Business-Logik kennt keine WordPress-, Moodle- oder Keycloak-Details.
 - Strategy: Provider-spezifisches Verhalten wird über austauschbare Strategien injiziert.
 - Strangler Fig: Bestehenden Code schrittweise ablösen, nie alles auf einmal umschreiben.
-- Backward Compatible: Vorhandene Endpunkte, Message-Formate und UI-Flows bleiben während der Migration lauffähig.
+- Backward Compatible waehrend Migration: Vorhandene Endpunkte, Message-Formate und UI-Flows bleiben bis zur finalen Umschaltung lauffaehig.
 
 ## 3. Zielarchitektur
 
@@ -216,7 +216,7 @@ Empfohlene erste 5 Commits:
 - [ ] Phase 3 gestartet.
 - [ ] Phase 4 gestartet.
 - [ ] Phase 5 gestartet.
-- [ ] Phase 6 gestartet.
+- [x] Phase 6 gestartet.
 
 ## 10. Umgesetzt am 2026-02-18
 
@@ -229,10 +229,11 @@ Empfohlene erste 5 Commits:
   - `nostrclient/integrations/wordpress/adapter/*`
 - [x] Neue Kompositions-Entry-Point angelegt:
   - `nostrclient/apps/identity-link/index.js`
-- [x] Feature-Flag-Vorbereitung im bestehenden Identity-Link-Client gestartet:
-  - `data-use-new-core`
-  - `data-new-core-module-uri`
-  - Fallback auf Legacy-Pfad bei nostrclient-Core-Fehler
+- [x] Identity-Link-Client auf Core-only umgestellt:
+  - `data-new-core-module-uri` bleibt als Modulpfad-Konfiguration
+  - Legacy-Fallback im Client entfernt
+  - kein `data-use-new-core` Schalter mehr im produktiven WordPress-Client
+- [x] WordPress- und Embed-Identity-Link-Client auf denselben Core-Sync-Flow ausgerichtet (`runSyncWithNewCore` als einziger Sync-Pfad).
 - [x] Build-/Deployment-Strategie umgesetzt:
   - plattformunabhängiges npm/pnpm-Buildscript für ein zip-fähiges WordPress-Plugin-Artefakt
   - Dist-Ausgabe unter `dist/wordpress/`

@@ -806,3 +806,18 @@ Refactoring von `signer.html` in wartbare Module plus neue Aufmerksamkeits-Featu
   - `identity-link/index.html`
   - `signer.html`
 
+## Fortschritt 2026-02-18 (Identity-Link Core-only, Legacy entfernt)
+
+- [x] `integrations/wordpress/nostr-identity-link/public/identity-link/index.js` auf Core-only-Sync umgestellt.
+  - kein Legacy-Sync-Pfad mehr
+  - kein Runtime-Feature-Flag `useNewCore` mehr
+  - `runSyncWithNewCore()` ist jetzt der einzige Sync-Weg
+- [x] Legacy-Funktionsblock im WordPress-Identity-Link-Client entfernt (Provider-Adapter/Legacy-Load/Legacy-Ensure).
+- [x] `integrations/wordpress/nostr-identity-link/public/identity-link/index.html` bereinigt:
+  - `data-use-new-core` entfernt
+  - `data-new-core-module-uri` auf festen Core-Pfad gesetzt
+- [x] Build-Patcher bereinigt:
+  - `scripts/build-identity-link-wordpress.mjs` injiziert nur noch `data-new-core-module-uri`
+  - `scripts/build-nostrclient.mjs` injiziert nur noch `data-new-core-module-uri`
+- [x] `embedclients/identity-link/index.js` auf denselben Core-only-Flow synchronisiert.
+

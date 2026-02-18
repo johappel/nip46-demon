@@ -6,6 +6,8 @@ const DEFAULT_SIGNER_URI = "../../signer.html";
 const DEFAULT_IDENTITY_ENDPOINT = "/wp-json/identity-link/v1/session";
 const DEFAULT_BIND_ENDPOINT = "/wp-json/identity-link/v1/bind";
 const DEFAULT_REBIND_ENDPOINT = "/wp-json/identity-link/v1/rebind";
+const DEFAULT_IDENTITY_API_BASE = "/wp-json/identity-link/v1";
+const DEFAULT_NEW_CORE_MODULE_URI = "../../nostrclient/apps/identity-link/index.js";
 
 const rootEl = document.getElementById("identity-link-root");
 const overallStatusEl = document.getElementById("overall-status");
@@ -40,6 +42,7 @@ const signerFrameEl = /** @type {HTMLIFrameElement|null} */ (document.getElement
  * @property {string} rebindEndpoint - Endpoint for forced rebind.
  * @property {string} wpRestNonce - Optional WP REST nonce for write calls.
  * @property {boolean} autoBindOnUnbound - Whether unbound identities auto-bind.
+ * @property {string} newCoreModuleUri - URL to nostrclient architecture entry module.
  */
 
 /**
@@ -61,12 +64,6 @@ const signerFrameEl = /** @type {HTMLIFrameElement|null} */ (document.getElement
  * @property {boolean} active - Whether key is currently active in signer.
  */
 
-/**
- * @typedef {object} ProviderAdapter
- * @property {(identity: IdentitySnapshot) => string} toBridgeUserId - Maps identity to signer bridge userId.
- * @property {(subjectRaw: string) => string} normalizeSubject - Normalizes provider subject.
- */
-
 const state = {
     runtimeConfig: /** @type {RuntimeConfig} */ ({
         provider: DEFAULT_PROVIDER,
@@ -75,7 +72,8 @@ const state = {
         bindEndpoint: DEFAULT_BIND_ENDPOINT,
         rebindEndpoint: DEFAULT_REBIND_ENDPOINT,
         wpRestNonce: "",
-        autoBindOnUnbound: true
+        autoBindOnUnbound: true,
+        newCoreModuleUri: DEFAULT_NEW_CORE_MODULE_URI
     }),
     activeIdentity: /** @type {IdentitySnapshot|null} */ (null),
     lastEnsureResult: /** @type {SignerEnsureResult|null} */ (null),
@@ -188,6 +186,10 @@ function resolveRuntimeConfig() {
         resolveWpRestNonceFromQuery() ||
         resolveWpRestNonceFromMeta();
     const autoBindOnUnbound = parseBoolean(dataset.autoBindOnUnbound, true);
+    const newCoreModuleUri =
+        normalizeUrl(dataset.newCoreModuleUri || "") ||
+        normalizeUrl(dataset.newCoreModule || "") ||
+        DEFAULT_NEW_CORE_MODULE_URI;
 
     return {
         provider,
@@ -196,8 +198,32 @@ function resolveRuntimeConfig() {
         bindEndpoint,
         rebindEndpoint,
         wpRestNonce,
-        autoBindOnUnbound
+        autoBindOnUnbound,
+        newCoreModuleUri
     };
+}
+
+/**
+ * Resolves API base URL from configured identity endpoint.
+ * Example: `.../session` -> `...`.
+ * @param {string} identityEndpoint - Session endpoint URL.
+ * @returns {string} API base URL.
+ */
+function resolveIdentityApiBaseUrl(identityEndpoint) {
+    const fallbackUrl = normalizeUrl(DEFAULT_IDENTITY_API_BASE) || DEFAULT_IDENTITY_API_BASE;
+    try {
+        const endpointUrl = new URL(identityEndpoint || DEFAULT_IDENTITY_ENDPOINT, window.location.href);
+        endpointUrl.search = "";
+        endpointUrl.hash = "";
+        const pathname = String(endpointUrl.pathname || "").replace(/\/+$/, "");
+        const normalizedPath = pathname.endsWith("/session")
+            ? pathname.slice(0, Math.max(0, pathname.length - "/session".length))
+            : pathname;
+        endpointUrl.pathname = normalizedPath || DEFAULT_IDENTITY_API_BASE;
+        return endpointUrl.toString().replace(/\/+$/, "");
+    } catch (_error) {
+        return fallbackUrl;
+    }
 }
 
 /**
@@ -428,73 +454,6 @@ function normalizeGenericSubject(subjectRaw) {
 }
 
 /**
- * Normalizes one WordPress subject.
- * @param {string} subjectRaw - Raw subject value.
- * @returns {string} WordPress-compatible normalized subject.
- */
-function normalizeWordpressSubject(subjectRaw) {
-    return normalizeGenericSubject(subjectRaw);
-}
-
-/**
- * Builds a WordPress provider adapter.
- * @returns {ProviderAdapter} Provider adapter implementation.
- */
-function createWordpressAdapter() {
-    /**
-     * Maps identity to signer bridge userId for WordPress.
-     * @param {IdentitySnapshot} identity - Active identity snapshot.
-     * @returns {string} Bridge user ID.
-     */
-    function toBridgeUserId(identity) {
-        return normalizeWordpressSubject(identity.subject);
-    }
-
-    return {
-        normalizeSubject: normalizeWordpressSubject,
-        toBridgeUserId
-    };
-}
-
-/**
- * Builds a generic OIDC adapter (provider namespaced bridge IDs).
- * @param {string} providerName - OIDC provider key.
- * @returns {ProviderAdapter} Provider adapter implementation.
- */
-function createOidcAdapter(providerName) {
-    const provider = String(providerName || "oidc").trim().toLowerCase() || "oidc";
-
-    /**
-     * Maps OIDC identity to namespaced signer bridge userId.
-     * @param {IdentitySnapshot} identity - Active identity snapshot.
-     * @returns {string} Namespaced bridge user ID.
-     */
-    function toBridgeUserId(identity) {
-        const normalizedSubject = normalizeGenericSubject(identity.subject);
-        return `${provider}:${normalizedSubject}`;
-    }
-
-    return {
-        normalizeSubject: normalizeGenericSubject,
-        toBridgeUserId
-    };
-}
-
-/**
- * Resolves one provider adapter from runtime provider key.
- * @param {string} providerName - Provider key.
- * @returns {ProviderAdapter} Matching provider adapter.
- */
-function resolveProviderAdapter(providerName) {
-    const provider = String(providerName || "").trim().toLowerCase();
-    if (provider === "wordpress") return createWordpressAdapter();
-    if (provider === "keycloak") return createOidcAdapter("keycloak");
-    if (provider === "moodle") return createOidcAdapter("moodle");
-    if (provider === "drupal") return createOidcAdapter("drupal");
-    return createOidcAdapter(provider || "oidc");
-}
-
-/**
  * Builds one normalized identity snapshot from backend payload.
  * Accepts direct payload or wrapped payload under `identity`.
  * @param {any} payload - Raw backend payload.
@@ -503,8 +462,7 @@ function resolveProviderAdapter(providerName) {
 function normalizeIdentityPayload(payload) {
     const source = payload?.identity && typeof payload.identity === "object" ? payload.identity : payload;
     const provider = String(source?.provider || state.runtimeConfig.provider || DEFAULT_PROVIDER).trim().toLowerCase();
-    const adapter = resolveProviderAdapter(provider);
-    const subject = adapter.normalizeSubject(String(source?.subject ?? source?.userId ?? ""));
+    const subject = normalizeGenericSubject(String(source?.subject ?? source?.userId ?? ""));
     const displayName = String(source?.displayName ?? source?.username ?? source?.name ?? "").trim();
     const expectedPubkey = normalizePubkey(String(source?.expectedPubkey ?? source?.pubkey ?? ""));
 
@@ -514,20 +472,6 @@ function normalizeIdentityPayload(payload) {
         displayName,
         expectedPubkey
     };
-}
-
-/**
- * Loads active identity from backend.
- * @returns {Promise<IdentitySnapshot>} Loaded identity snapshot.
- */
-async function loadIdentityFromBackend() {
-    const payload = await fetchJson(state.runtimeConfig.identityEndpoint, { method: "GET" });
-    applyBackendMeta(payload);
-    const identity = normalizeIdentityPayload(payload);
-    state.activeIdentity = identity;
-    renderIdentity(identity);
-    appendResultLine(`Identity geladen: ${identity.provider}:${identity.subject}`);
-    return identity;
 }
 
 /**
@@ -668,7 +612,7 @@ function requestWpEnsureUserKey(userId, timeoutMs = 15000) {
             state.signerUnlockFlowActive = true;
             openSignerDialog();
             requestSignerManagementView();
-            reject(new Error("Keine Antwort vom Signer auf wp-ensure-user-key. Bitte Signer öffnen, entsperren und erneut versuchen."));
+            reject(new Error("Keine Antwort vom Signer auf wp-ensure-user-key. Bitte Signer ?ffnen, entsperren und erneut versuchen."));
         }
 
         const timeoutHandle = setTimeout(onTimeout, timeoutMs);
@@ -791,56 +735,138 @@ async function resolveSignerResultFromBridge(timeoutMs = 12000) {
 }
 
 /**
- * Ensures a signer key for the currently active identity.
- * @returns {Promise<SignerEnsureResult>} Ensure result.
+ * Resolves current signer status for nostrclient core RPC bridge.
+ * @returns {Promise<{locked: boolean, activePubkey: string, activeKeyId: string}>} Status payload.
  */
-async function ensureSignerKeyForActiveIdentity() {
-    if (!state.activeIdentity) throw new Error("Identity ist noch nicht geladen.");
-
-    const dialogWasOpen = isSignerDialogOpen();
-    if (!dialogWasOpen) {
-        state.signerUnlockFlowActive = true;
-        openSignerDialog();
+async function resolveSignerStatusForNewCoreRpc() {
+    try {
+        const signerResult = await resolveSignerResultFromBridge(4500);
+        return {
+            locked: false,
+            activePubkey: normalizePubkey(signerResult.pubkey),
+            activeKeyId: String(signerResult.keyId || "").trim()
+        };
+    } catch (error) {
+        const snapshot =
+            state.bunkerClient && typeof state.bunkerClient.getState === "function"
+                ? state.bunkerClient.getState()
+                : null;
+        const lockedFromSnapshot = !!snapshot?.bridgeLocked;
+        const lockedFromError = isLockedSignerMessage(String(error?.message || ""));
+        return {
+            locked: lockedFromSnapshot || lockedFromError,
+            activePubkey: "",
+            activeKeyId: ""
+        };
     }
-
-    await waitForSignerBridgeReady(25000, 500);
-    const adapter = resolveProviderAdapter(state.activeIdentity.provider);
-    const bridgeUserId = adapter.toBridgeUserId(state.activeIdentity);
-    const ensureResult = await requestWpEnsureUserKey(bridgeUserId, 120000);
-    state.lastEnsureResult = ensureResult;
-    renderSignerResult(ensureResult);
-    appendResultLine(`Signer-Key bereit: ${ensureResult.pubkey.slice(0, 16)}... (${ensureResult.keyName})`);
-    if (!dialogWasOpen && state.signerUnlockFlowActive) {
-        state.signerUnlockFlowActive = false;
-        closeSignerDialog();
-    }
-    return ensureResult;
 }
 
 /**
- * Resolves signer result for current identity with compare-first strategy.
- * Uses bridge pubkey when backend is already bound, wp-ensure only when needed.
- * @returns {Promise<SignerEnsureResult>} Signer result for reconciliation.
+ * Builds RPC adapter used by nostrclient core module.
+ * @returns {{request: (method: string, params?: any) => Promise<any>}} RPC adapter.
  */
-async function resolveSignerResultForActiveIdentity() {
-    if (!state.activeIdentity) throw new Error("Identity ist noch nicht geladen.");
-    const expectedPubkey = normalizePubkey(state.activeIdentity.expectedPubkey);
-    const isBackendBound = isPubkeyHex(expectedPubkey);
+function createNewCoreRpcAdapter() {
+    return {
+        /**
+         * Routes nostrclient core RPC method calls to existing bridge actions.
+         * @param {string} method - RPC method name.
+         * @param {any} params - RPC params payload.
+         * @returns {Promise<any>} RPC result payload.
+         */
+        async request(method, params = {}) {
+            const normalizedMethod = String(method || "").trim();
+            if (normalizedMethod === "wp-ensure-user-key") {
+                const userId = String(params?.userId || params?.subject || state.activeIdentity?.subject || "").trim();
+                if (!userId) {
+                    throw new Error("nostrclient-Core RPC: userId/subject fehlt fuer wp-ensure-user-key.");
+                }
+                await waitForSignerBridgeReady(25000, 500);
+                return requestWpEnsureUserKey(userId, 120000);
+            }
 
-    try {
-        const bridgeResult = await resolveSignerResultFromBridge(15000);
-        appendResultLine(`Signer-Bridge-Pubkey genutzt: ${bridgeResult.pubkey.slice(0, 16)}...`);
-        return bridgeResult;
-    } catch (bridgeError) {
-        const bridgeMessage = String(bridgeError?.message || "Bridge-Pubkey nicht verfuegbar.");
-        appendResultLine(`Bridge-Pubkey nicht verfuegbar: ${bridgeMessage}`);
-        if (isBackendBound) {
-            throw bridgeError;
+            if (normalizedMethod === "signer-status") {
+                return resolveSignerStatusForNewCoreRpc();
+            }
+
+            throw new Error(`nostrclient-Core RPC Methode nicht unterstuetzt: ${normalizedMethod}`);
         }
+    };
+}
+
+/**
+ * Applies nostrclient core sync result to legacy UI state.
+ * @param {any} syncResult - nostrclient core sync result payload.
+ */
+function applyNewCoreSyncResult(syncResult) {
+    const rawIdentity = syncResult?.identity || {};
+    const identity = normalizeIdentityPayload({
+        provider: rawIdentity?.provider || state.runtimeConfig.provider,
+        subject: rawIdentity?.subject || "",
+        displayName: rawIdentity?.displayName || "",
+        expectedPubkey: syncResult?.expectedPubkey || ""
+    });
+    state.activeIdentity = identity;
+    renderIdentity(identity);
+
+    const signerPubkey = normalizePubkey(String(syncResult?.signerPubkey || ""));
+    if (!isPubkeyHex(signerPubkey)) {
+        state.lastEnsureResult = null;
+        renderSignerResult(null);
+        return;
     }
 
-    appendResultLine("Backend ungebunden: Fallback auf wp-ensure-user-key.");
-    return ensureSignerKeyForActiveIdentity();
+    const signerEnsureResult = {
+        userId: identity.subject,
+        keyId: String(syncResult?.keyId || "").trim(),
+        keyName:
+            String(syncResult?.keyName || "").trim() ||
+            String(identity.displayName || "").trim() ||
+            `WP ${identity.subject}`,
+        pubkey: signerPubkey,
+        npub: String(syncResult?.signerNpub || "").trim(),
+        existed: true,
+        active: true
+    };
+
+    state.lastEnsureResult = signerEnsureResult;
+    renderSignerResult(signerEnsureResult);
+}
+
+/**
+ * Runs sync through nostrclient architecture module.
+ * @returns {Promise<void>} Resolves when nostrclient sync completed.
+ */
+async function runSyncWithNewCore() {
+    const moduleUri = String(state.runtimeConfig.newCoreModuleUri || "").trim();
+    if (!moduleUri) {
+        throw new Error("data-new-core-module-uri fehlt.");
+    }
+
+    const moduleNs = await import(moduleUri);
+    if (typeof moduleNs?.runNewIdentityLinkFlow !== "function") {
+        throw new Error("nostrclient-Core Modul exportiert runNewIdentityLinkFlow nicht.");
+    }
+
+    const apiBaseUrl = resolveIdentityApiBaseUrl(state.runtimeConfig.identityEndpoint);
+    const syncResult = await moduleNs.runNewIdentityLinkFlow(
+        {
+            apiBaseUrl,
+            restNonce: state.runtimeConfig.wpRestNonce
+        },
+        createNewCoreRpcAdapter()
+    );
+
+    applyNewCoreSyncResult(syncResult);
+    appendResultLine(`nostrclient-Core Sync ausgefuehrt: ${String(syncResult?.status || "ok")}`);
+}
+
+/**
+ * Runs one sync cycle through configured execution path.
+ * @returns {Promise<void>} Resolves when sync completed.
+ */
+async function runCoreSyncCycle() {
+    await runSyncWithNewCore();
+    await reconcileBindingState();
 }
 
 /**
@@ -899,9 +925,7 @@ async function runFullSync() {
     setStatusText(overallStatusEl, "Synchronisiere Identity-Link-Status ...", "idle");
 
     try {
-        await loadIdentityFromBackend();
-        await resolveSignerResultForActiveIdentity();
-        await reconcileBindingState();
+        await runCoreSyncCycle();
     } catch (error) {
         const message = String(error?.message || "Unbekannter Fehler.");
         setBindingStatus("error");
@@ -927,8 +951,7 @@ async function refreshIdentityOnly() {
     setStatusText(overallStatusEl, "Lade Identity neu ...", "idle");
 
     try {
-        await loadIdentityFromBackend();
-        await reconcileBindingState();
+        await runCoreSyncCycle();
         if (state.bindingStatus === "matched") {
             setStatusText(overallStatusEl, "Identity aktualisiert. Zuordnung bleibt konsistent.", "ok");
         } else if (state.bindingStatus === "mismatched") {
@@ -955,11 +978,7 @@ async function onEnsureLinkClicked() {
     setStatusText(overallStatusEl, "Pruefe Signer-Key und Zuordnung ...", "idle");
 
     try {
-        if (!state.activeIdentity) {
-            await loadIdentityFromBackend();
-        }
-        await resolveSignerResultForActiveIdentity();
-        await reconcileBindingState();
+        await runCoreSyncCycle();
     } catch (error) {
         const message = String(error?.message || "Unbekannter Fehler.");
         setBindingStatus("error");
@@ -1121,6 +1140,7 @@ function destroyIdentityLinkClient() {
  */
 async function bootstrap() {
     state.runtimeConfig = resolveRuntimeConfig();
+    appendResultLine("Sync-Modus: nostrclient-Core (ohne Legacy-Fallback)");
     bindUiEvents();
     renderIdentity(null);
     renderSignerResult(null);

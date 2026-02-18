@@ -137,17 +137,11 @@ async function patchIdentityLinkHtml(htmlFilePath, buildToken) {
 
   html = html.replace(/data-signer-uri="[^"]*"/, 'data-signer-uri="../signer.html"');
 
-  if (/data-use-new-core="[^"]*"/.test(html)) {
-    html = html.replace(/data-use-new-core="[^"]*"/, 'data-use-new-core="true"');
-  } else {
-    html = html.replace(/data-auto-bind-on-unbound="[^"]*"/, '$&\n        data-use-new-core="true"');
-  }
-
   const moduleUri = `../${coreDirName}/apps/identity-link/index.js?v=${buildToken}`;
   if (/data-new-core-module-uri="[^"]*"/.test(html)) {
     html = html.replace(/data-new-core-module-uri="[^"]*"/, `data-new-core-module-uri="${moduleUri}"`);
   } else {
-    html = html.replace(/data-use-new-core="[^"]*"/, `$&\n        data-new-core-module-uri="${moduleUri}"`);
+    html = html.replace(/data-auto-bind-on-unbound="[^"]*"/, `$&\n        data-new-core-module-uri="${moduleUri}"`);
   }
 
   html = html.replace(
