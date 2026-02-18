@@ -39,6 +39,7 @@ async function main() {
 async function validateSourcePaths() {
   const required = [
     [path.join(projectRoot, "democlient"), "democlient source"],
+    [path.join(projectRoot, "nostrclient", "shared", "nostr.js"), "nostr bridge module"],
     [path.join(projectRoot, "vendor", "ndk-3.0.0.js"), "vendor ndk"]
   ];
 
@@ -55,6 +56,10 @@ async function validateSourcePaths() {
 async function buildBundle() {
   await ensureCleanDirectory(distRootDir);
   await copyDirectoryRecursive(path.join(projectRoot, "democlient"), distBundleDir);
+  await copyFileWithParentDirs(
+    path.join(projectRoot, "nostrclient", "shared", "nostr.js"),
+    path.join(distRootDir, "nostrclient", "shared", "nostr.js")
+  );
   await copyFileWithParentDirs(
     path.join(projectRoot, "vendor", "ndk-3.0.0.js"),
     path.join(distRootDir, "vendor", "ndk-3.0.0.js")

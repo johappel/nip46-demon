@@ -821,3 +821,20 @@ Refactoring von `signer.html` in wartbare Module plus neue Aufmerksamkeits-Featu
   - `scripts/build-nostrclient.mjs` injiziert nur noch `data-new-core-module-uri`
 - [x] `embedclients/identity-link/index.js` auf denselben Core-only-Flow synchronisiert.
 
+## Fortschritt 2026-02-18 (Bridge-Modul zentralisiert)
+
+- [x] Gemeinsames Bridge-Modul aus `democlient/` in `nostrclient/shared/nostr.js` verschoben.
+- [x] Imports umgestellt:
+  - `democlient/nostreclient.js` -> `../nostrclient/shared/nostr.js`
+  - `embedclients/identity-link/index.js` -> `../../nostrclient/shared/nostr.js`
+  - `embedclients/flotilla/index.js` -> `../../nostrclient/shared/nostr.js`
+  - `integrations/wordpress/nostr-identity-link/public/identity-link/index.js` -> `../nostrclient/shared/nostr.js`
+- [x] WordPress-Plugin-Public-Pfad angepasst:
+  - `integrations/wordpress/nostr-identity-link/public/nostrclient/shared/nostr.js` angelegt
+  - alter Einzelpfad `public/nostrclient/nostr.js` entfernt
+- [x] Build-Skripte auf Shared-Quelle umgestellt:
+  - `scripts/build-democlient.mjs`
+  - `scripts/build-embedclients.mjs`
+  - `scripts/build-nostrclient.mjs`
+  - `scripts/build-identity-link-wordpress.mjs`
+

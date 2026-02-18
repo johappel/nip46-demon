@@ -1,4 +1,4 @@
-﻿import { createBunkerConnectClient } from "./nostr.js";
+﻿import { createBunkerConnectClient } from "../nostrclient/shared/nostr.js";
 import { bindCharacterCounter, collectFormValues, renderFormSchema, validateFormValues } from "./forms/form-generator.js";
 import { buildUnsignedEventFromForm } from "./forms/kind-adapters/index.js";
 import { isSupportedSchemaVersion, loadFormSchema } from "./forms/schema-loader.js";

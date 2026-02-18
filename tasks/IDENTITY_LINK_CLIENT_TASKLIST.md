@@ -11,7 +11,7 @@ Implementierung eines dritten Clients fuer die Verknuepfung von SSO-Identitaeten
 - [x] A1. Ordner `embedclients/identity-link/` anlegen.
 - [x] A2. Basisdateien erstellen: `index.html`, `index.css`, `index.js`.
 - [x] A3. Runtime-Konfiguration via `data-*` Attribute definieren (`provider`, `apiBaseUrl`, `signerUri`, etc.).
-- [x] A4. Bestehende `createBunkerConnectClient(...)`-Bausteine aus `democlient/nostr.js` integrieren.
+- [x] A4. Bestehende `createBunkerConnectClient(...)`-Bausteine aus `nostrclient/shared/nostr.js` integrieren.
 - [x] A5. Core-vs-Adapter Modulgrenze definieren (kein Provider-spezifischer Code im Core).
 - [x] A6. Feature-Flag fuer nostrclient-vs-Legacy Sync-Pfad im Identity-Link-Client einfuehren.
 - [x] A7. Feature-Flag wieder entfernen und Identity-Link auf Core-only umstellen (kein Legacy-Fallback).

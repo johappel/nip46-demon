@@ -1,4 +1,4 @@
-﻿import { createBunkerConnectClient } from "../../democlient/nostr.js";
+﻿import { createBunkerConnectClient } from "../../nostrclient/shared/nostr.js";
 
 const DEFAULT_APP_NAME = "Ziel-App";
 const DEFAULT_SIGNER_URI = "../../signer.html";

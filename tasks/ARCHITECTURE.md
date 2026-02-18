@@ -241,3 +241,7 @@ Empfohlene erste 5 Commits:
   - `dist/nostrclient/` via `build`
   - `dist/embedclients/` via `build:embedclients`
   - `dist/signer/` via `build:signer`
+- [x] Bridge-Modul aus `democlient/` in den gemeinsamen Core verschoben:
+  - neue Quelle: `nostrclient/shared/nostr.js`
+  - `democlient`, `embedclients` und `wordpress identity-link` importieren nun denselben Shared-Pfad
+  - Build-Skripte kopieren nur noch den Shared-Pfad (`build:democlient`, `build:embedclients`, `build`)

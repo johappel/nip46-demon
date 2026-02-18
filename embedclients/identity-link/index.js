@@ -1,4 +1,4 @@
-﻿import { createBunkerConnectClient } from "../../democlient/nostr.js";
+﻿import { createBunkerConnectClient } from "../../nostrclient/shared/nostr.js";
 
 const BRIDGE_SOURCE = "nip46-signer-bridge";
 const DEFAULT_PROVIDER = "wordpress";

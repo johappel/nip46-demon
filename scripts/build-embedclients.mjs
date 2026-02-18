@@ -39,7 +39,7 @@ async function main() {
 async function validateSourcePaths() {
   const required = [
     [path.join(projectRoot, "embedclients"), "embedclients source"],
-    [path.join(projectRoot, "democlient", "nostr.js"), "democlient nostr.js"],
+    [path.join(projectRoot, "nostrclient", "shared", "nostr.js"), "nostr bridge module"],
     [path.join(projectRoot, "vendor", "ndk-3.0.0.js"), "vendor ndk"],
     [path.join(projectRoot, "signer.html"), "signer html"]
   ];
@@ -57,7 +57,7 @@ async function buildBundle() {
   await ensureCleanDirectory(distRootDir);
 
   await copyDirectoryRecursive(path.join(projectRoot, "embedclients"), path.join(distBundleDir, "embedclients"));
-  await copyFileWithParentDirs(path.join(projectRoot, "democlient", "nostr.js"), path.join(distBundleDir, "democlient", "nostr.js"));
+  await copyFileWithParentDirs(path.join(projectRoot, "nostrclient", "shared", "nostr.js"), path.join(distBundleDir, "nostrclient", "shared", "nostr.js"));
   await copyFileWithParentDirs(path.join(projectRoot, "vendor", "ndk-3.0.0.js"), path.join(distBundleDir, "vendor", "ndk-3.0.0.js"));
   await copyFileWithParentDirs(path.join(projectRoot, "signer.html"), path.join(distBundleDir, "signer.html"));
 

@@ -1,4 +1,4 @@
-﻿import NDK, { NDKEvent, NDKNip46Signer, NDKRelaySet } from "../vendor/ndk-3.0.0.js";
+﻿import NDK, { NDKEvent, NDKNip46Signer, NDKRelaySet } from "../../vendor/ndk-3.0.0.js";
 
 const BRIDGE_SOURCE = "nip46-signer-bridge";
 const DEFAULT_RELAYS = [

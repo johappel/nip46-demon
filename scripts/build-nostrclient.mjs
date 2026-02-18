@@ -44,7 +44,7 @@ async function validateSourcePaths() {
   const required = [
     [path.join(projectRoot, "integrations", "wordpress", "nostr-identity-link", "public", "identity-link"), "identity-link web app"],
     [path.join(projectRoot, "nostrclient"), "nostrclient source"],
-    [path.join(projectRoot, "democlient", "nostr.js"), "nostr bridge module"],
+    [path.join(projectRoot, "nostrclient", "shared", "nostr.js"), "nostr bridge module"],
     [path.join(projectRoot, "vendor", "ndk-3.0.0.js"), "vendor ndk"],
     [path.join(projectRoot, "signer.html"), "signer html"],
     [path.join(projectRoot, "signer-nip46.js"), "signer script"],
@@ -74,7 +74,7 @@ async function buildBundle(buildToken) {
   );
   await copyDirectoryRecursive(path.join(projectRoot, "nostrclient"), path.join(distBundleDir, coreDirName));
 
-  await copyFileWithParentDirs(path.join(projectRoot, "democlient", "nostr.js"), path.join(distBundleDir, "nostrclient", "nostr.js"));
+  await copyFileWithParentDirs(path.join(projectRoot, "nostrclient", "shared", "nostr.js"), path.join(distBundleDir, "nostrclient", "shared", "nostr.js"));
   await copyFileWithParentDirs(path.join(projectRoot, "vendor", "ndk-3.0.0.js"), path.join(distBundleDir, "vendor", "ndk-3.0.0.js"));
 
   await copyFileWithParentDirs(path.join(projectRoot, "signer.html"), path.join(distBundleDir, "signer.html"));
@@ -119,7 +119,7 @@ async function writeBundleEntryIndexHtml(indexFilePath) {
     "    <li><a href=\"./identity-link/index.html\">Identity Link Client</a></li>\n" +
     "    <li><a href=\"./signer.html\">Signer</a></li>\n" +
     "  </ul>\n" +
-    "  <p>Bridge module path: <code>./nostrclient/nostr.js</code></p>\n" +
+    "  <p>Bridge module path: <code>./nostrclient/shared/nostr.js</code></p>\n" +
     "</body>\n" +
     "</html>\n";
 

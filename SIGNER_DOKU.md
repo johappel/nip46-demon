@@ -164,7 +164,7 @@ Die Referenz-Implementierungen sind:
 
 - `mpv-nostr-client.html`
 - `tests/sendevent.html`
-- `democlient/index.html` + `democlient/nostr.js` + `democlient/index.js`
+- `democlient/index.html` + `nostrclient/shared/nostr.js` + `democlient/index.js`
 
 ### 6.1 Iframe-Integration (empfohlen)
 
@@ -282,7 +282,7 @@ Use-Case: Multi-User-Systeme (z. B. WordPress), in denen pro App-User ein eigene
 - `tests/sendevent.html` (fokussierter Testclient inkl. WP-Bridge-Call)
 - `democlient/index.html` (Boilerplate UI fuer eigene Clients)
 - `democlient/index.css` (ausgelagerte Demo-Styles)
-- `democlient/nostr.js` (gekapselte Bunkerconnect-Lib mit Auto-Connect + Dialog-Mirroring)
+- `nostrclient/shared/nostr.js` (gekapselte Bunkerconnect-Lib mit Auto-Connect + Dialog-Mirroring)
 - `democlient/nostreclient.js` (High-Level Wrapper mit `nostrclient.init(...)`)
 - `democlient/index.js` (minimaler Entry-Point mit einer Init-Config)
 - `democlient/forms/schema-loader.js` (laedt und normalisiert JSON-Form-Schemata)
@@ -316,7 +316,7 @@ In deiner Client-Seite:
 
 Die Demo trennt bewusst:
 
-- `democlient/nostr.js`: wiederverwendbare NIP-46/Bunkerconnect Logik
+- `nostrclient/shared/nostr.js`: wiederverwendbare NIP-46/Bunkerconnect Logik
 - `democlient/nostreclient.js`: High-Level Wrapper fuer One-Command-Setup
 - `democlient/index.js`: nur Konfiguration + Start
 
@@ -393,7 +393,7 @@ Alternativ granular:
 Empfehlung:
 
 - `democlient/nostreclient.js` als stabilen Wrapper nutzen
-- bei tieferer Kontrolle direkt `democlient/nostr.js` nutzen
+- bei tieferer Kontrolle direkt `nostrclient/shared/nostr.js` nutzen
 
 ## 12. API-Doku: `democlient/nostreclient.js`
 
@@ -809,7 +809,7 @@ Hinweis zur Frontend-Integration:
 - Der Identity-Link-Client nutzt fuer den Standardfall jetzt diesen Read-Only-Bridge-Pfad und vergleicht primär nur `expectedPubkey` gegen `signerPubkey`.
 - `wp-ensure-user-key` wird im Alltag damit nur noch fuer den ungebundenen Erstzuordnungsfall benoetigt.
 - Die Host-Statusanzeige ist fuer den Compare-Only-Fall jetzt explizit: `Signer-Bridge bereit. Pubkey kann verglichen werden.` (statt unklarem `Verbindung wird vorbereitet ...`).
-- Bei Bundle-Kopien in das WordPress-Plugin muessen relative Modulpfade plugin-spezifisch bleiben (`signer/signer-nip46.js` -> `../vendor/...`, `identity-link/index.js` -> `../nostrclient/nostr.js`), sonst laedt der Browser HTML statt Modul-JS.
+- Bei Bundle-Kopien in das WordPress-Plugin muessen relative Modulpfade plugin-spezifisch bleiben (`signer/signer-nip46.js` -> `../vendor/...`, `identity-link/index.js` -> `../nostrclient/shared/nostr.js`), sonst laedt der Browser HTML statt Modul-JS.
 - Im Signer-Tab `Verwaltung` gibt es zusaetzlich zwei WP-Backup-Aktionen:
   - `Export in WordPress speichern` (speichert den verschluesselten Export im User-Profil)
   - `Aus WordPress wiederherstellen` (laedt diesen Export und importiert ihn lokal im aktuellen Browser)

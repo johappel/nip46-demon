@@ -9,6 +9,7 @@ const projectRoot = path.resolve(__dirname, "..");
 const pluginSlug = "nostr-identity-link";
 const sourcePluginDir = path.join(projectRoot, "integrations", "wordpress", pluginSlug);
 const sourceNostrClientDir = path.join(projectRoot, "nostrclient");
+const sourceBridgeModuleFile = path.join(sourceNostrClientDir, "shared", "nostr.js");
 const sourcePluginPhpFile = path.join(sourcePluginDir, `${pluginSlug}.php`);
 
 const distRootDir = path.join(projectRoot, "dist", "wordpress");
@@ -42,6 +43,7 @@ async function validateSourcePaths() {
   await assertPathExists(path.join(sourcePluginDir, "public"), "Plugin public directory");
   await assertPathExists(path.join(sourceNostrClientDir, "apps"), "nostrclient apps directory");
   await assertPathExists(path.join(sourceNostrClientDir, "shared"), "nostrclient shared directory");
+  await assertPathExists(sourceBridgeModuleFile, "nostr bridge module");
   await assertPathExists(
     path.join(sourceNostrClientDir, "integrations", "wordpress", "adapter"),
     "nostrclient WordPress adapter directory"
@@ -71,6 +73,10 @@ async function buildWordPressPluginArtifact(buildToken, zipOutputFile) {
   await copyDirectoryRecursive(
     path.join(sourceNostrClientDir, "integrations", "wordpress", "adapter"),
     path.join(distPluginDir, "public", "nostrclient", "integrations", "wordpress", "adapter")
+  );
+  await copyFileWithParentDirs(
+    sourceBridgeModuleFile,
+    path.join(distPluginDir, "public", "nostrclient", "shared", "nostr.js")
   );
 
   await patchIdentityLinkHtml(path.join(distPluginDir, "public", "identity-link", "index.html"), buildToken);
