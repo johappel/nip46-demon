@@ -13,7 +13,7 @@ Implementierung eines dritten Clients fuer die Verknuepfung von SSO-Identitaeten
 - [x] A3. Runtime-Konfiguration via `data-*` Attribute definieren (`provider`, `apiBaseUrl`, `signerUri`, etc.).
 - [x] A4. Bestehende `createBunkerConnectClient(...)`-Bausteine aus `democlient/nostr.js` integrieren.
 - [x] A5. Core-vs-Adapter Modulgrenze definieren (kein Provider-spezifischer Code im Core).
-- [x] A6. Feature-Flag fuer NEW-vs-Legacy Sync-Pfad im Identity-Link-Client einfuehren.
+- [x] A6. Feature-Flag fuer nostrclient-vs-Legacy Sync-Pfad im Identity-Link-Client einfuehren.
 
 ## Epic B: Adapter-Architektur (inkl. OIDC)
 
@@ -23,7 +23,7 @@ Implementierung eines dritten Clients fuer die Verknuepfung von SSO-Identitaeten
 - [x] B3. `wordpressAdapter` implementieren (WP-spezifische Session/Nonce/Endpoint-Details).
 - [ ] B4. `drupalAdapter` spezifizieren (Phase-1 optional, Phase-2 verpflichtend).
 - [x] B5. Adapter-Resolver implementieren (`provider` -> Adapterinstanz).
-- [x] B6. NEW-Contracts/Ports (`IdentityStrategy`, `BindingStrategy`, `BackupStrategy`, `AuthStrategy`, `SignerBridgePort`) als Laufzeitvertraege anlegen.
+- [x] B6. nostrclient-Contracts/Ports (`IdentityStrategy`, `BindingStrategy`, `BackupStrategy`, `AuthStrategy`, `SignerBridgePort`) als Laufzeitvertraege anlegen.
 
 ## Epic C: Identity-Input aus Backend
 
@@ -38,7 +38,7 @@ Implementierung eines dritten Clients fuer die Verknuepfung von SSO-Identitaeten
 - [x] D2. Response-Handling fuer `wp-user-key-result` robust abbilden (Timeout/Fehler/locked).
 - [x] D3. Vergleich `expectedPubkey` vs. `signerPubkey` implementieren.
 - [x] D4. Binding-Statusmodell im Client halten (`unbound`, `matched`, `mismatched`).
-- [x] D5. Compare-First auch im NEW-Core-Use-Case (`ensureSignerKeyUseCase`) anwenden.
+- [x] D5. Compare-First auch im nostrclient-Core-Use-Case (`ensureSignerKeyUseCase`) anwenden.
 
 ## Epic E: Konfliktbehandlung
 

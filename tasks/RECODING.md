@@ -663,56 +663,56 @@ Refactoring von `signer.html` in wartbare Module plus neue Aufmerksamkeits-Featu
   - validiert Struktur über `nip46IdentityLinkLooksLikeBackupPayload(...)`
 - [x] Ziel: Fälle mit `sourceCount>0` und `parseOk=false` auflösen, obwohl Backup in `usermeta` vorhanden ist.
 
-## Fortschritt 2026-02-18 (Architektur-Start: NEW Strangler-Zone)
+## Fortschritt 2026-02-18 (Architektur-Start: nostrclient Strangler-Zone)
 
-- [x] Neue Migrationsstruktur angelegt: `NEW/` (bestehende Pfade bleiben unverändert).
+- [x] Neue Migrationsstruktur angelegt: `nostrclient/` (bestehende Pfade bleiben unverändert).
 - [x] Adapter-Contracts mit Laufzeitvalidierung erstellt:
-  - `NEW/shared/adapter-contracts/authStrategy.js`
-  - `NEW/shared/adapter-contracts/backupStrategy.js`
-  - `NEW/shared/adapter-contracts/bindingStrategy.js`
-  - `NEW/shared/adapter-contracts/identityStrategy.js`
-  - `NEW/shared/adapter-contracts/signerBridgePort.js`
-  - `NEW/shared/adapter-contracts/index.js`
+  - `nostrclient/shared/adapter-contracts/authStrategy.js`
+  - `nostrclient/shared/adapter-contracts/backupStrategy.js`
+  - `nostrclient/shared/adapter-contracts/bindingStrategy.js`
+  - `nostrclient/shared/adapter-contracts/identityStrategy.js`
+  - `nostrclient/shared/adapter-contracts/signerBridgePort.js`
+  - `nostrclient/shared/adapter-contracts/index.js`
 - [x] Identity-Link-Core-Skeleton erstellt:
-  - `NEW/shared/identity-link-core/state.js`
-  - `NEW/shared/identity-link-core/useCases/loadIdentityUseCase.js`
-  - `NEW/shared/identity-link-core/useCases/ensureSignerKeyUseCase.js`
-  - `NEW/shared/identity-link-core/useCases/compareKeysUseCase.js`
-  - `NEW/shared/identity-link-core/index.js`
+  - `nostrclient/shared/identity-link-core/state.js`
+  - `nostrclient/shared/identity-link-core/useCases/loadIdentityUseCase.js`
+  - `nostrclient/shared/identity-link-core/useCases/ensureSignerKeyUseCase.js`
+  - `nostrclient/shared/identity-link-core/useCases/compareKeysUseCase.js`
+  - `nostrclient/shared/identity-link-core/index.js`
 - [x] Signer-Core-Skeleton erstellt:
-  - `NEW/shared/signer-core/state.js`
-  - `NEW/shared/signer-core/services/getSignerStatusService.js`
-  - `NEW/shared/signer-core/index.js`
+  - `nostrclient/shared/signer-core/state.js`
+  - `nostrclient/shared/signer-core/services/getSignerStatusService.js`
+  - `nostrclient/shared/signer-core/index.js`
 - [x] WordPress-Adapter-Skeleton erstellt:
-  - `NEW/integrations/wordpress/adapter/config.js`
-  - `NEW/integrations/wordpress/adapter/wordpressIdentityStrategy.js`
-  - `NEW/integrations/wordpress/adapter/wordpressBindingStrategy.js`
-  - `NEW/integrations/wordpress/adapter/wordpressBackupStrategy.js`
-  - `NEW/integrations/wordpress/adapter/wordpressAuthStrategy.js`
-  - `NEW/integrations/wordpress/adapter/wordpressSignerBridgePort.js`
-  - `NEW/integrations/wordpress/adapter/index.js`
+  - `nostrclient/integrations/wordpress/adapter/config.js`
+  - `nostrclient/integrations/wordpress/adapter/wordpressIdentityStrategy.js`
+  - `nostrclient/integrations/wordpress/adapter/wordpressBindingStrategy.js`
+  - `nostrclient/integrations/wordpress/adapter/wordpressBackupStrategy.js`
+  - `nostrclient/integrations/wordpress/adapter/wordpressAuthStrategy.js`
+  - `nostrclient/integrations/wordpress/adapter/wordpressSignerBridgePort.js`
+  - `nostrclient/integrations/wordpress/adapter/index.js`
 - [x] Neuer Kompositions-Einstieg für den Identity-Link-Flow erstellt:
-  - `NEW/apps/identity-link/index.js`
-- [x] Workspace-Doku angelegt: `NEW/README.md`
+  - `nostrclient/apps/identity-link/index.js`
+- [x] Workspace-Doku angelegt: `nostrclient/README.md`
 
-## Fortschritt 2026-02-18 (Identity-Link: Feature-Flag + NEW-Core-Fallback)
+## Fortschritt 2026-02-18 (Identity-Link: Feature-Flag + nostrclient-Core-Fallback)
 
 - [x] `integrations/wordpress/nostr-identity-link/public/identity-link/index.html` um Runtime-Flags erweitert:
   - `data-use-new-core="false"`
   - `data-new-core-module-uri=""`
 - [x] `integrations/wordpress/nostr-identity-link/public/identity-link/index.js` erweitert:
   - RuntimeConfig um `useNewCore` und `newCoreModuleUri`
-  - `runConfiguredSyncCycle()` mit Umschaltung NEW-Core vs. Legacy
-  - NEW-Core-Fallback auf Legacy bei Import-/Laufzeitfehlern
-  - Log-Zeile beim Start (`Sync-Modus: NEW-Core|Legacy`)
-- [x] NEW-Core-RPC-Brücke im Legacy-Client ergänzt:
+  - `runConfiguredSyncCycle()` mit Umschaltung nostrclient-Core vs. Legacy
+  - nostrclient-Core-Fallback auf Legacy bei Import-/Laufzeitfehlern
+  - Log-Zeile beim Start (`Sync-Modus: nostrclient-Core|Legacy`)
+- [x] nostrclient-Core-RPC-Brücke im Legacy-Client ergänzt:
   - `createNewCoreRpcAdapter()`
   - `resolveSignerStatusForNewCoreRpc()`
   - `runSyncWithNewCore()`
-- [x] `NEW/shared/identity-link-core/useCases/ensureSignerKeyUseCase.js` auf Compare-First angepasst:
+- [x] `nostrclient/shared/identity-link-core/useCases/ensureSignerKeyUseCase.js` auf Compare-First angepasst:
   - zuerst aktiven Signer-Status lesen
   - `wp-ensure-user-key` nur als Fallback
-- [x] WordPress-Adapter im NEW-Pfad gehärtet:
+- [x] WordPress-Adapter im nostrclient-Pfad gehärtet:
   - `credentials: "include"` für Session-/Bind-/Rebind-/Backup-Requests
   - robustere Session-Normalisierung (direkte Felder oder `payload.identity`)
 
@@ -723,13 +723,20 @@ Refactoring von `signer.html` in wartbare Module plus neue Aufmerksamkeits-Featu
   - Alias: `build:indenty-link:wordpress`
 - [x] `scripts/build-identity-link-wordpress.mjs` erstellt (ohne externe Dependencies):
   - erzeugt `dist/wordpress/nostr-identity-link/`
-  - kopiert Plugin-Source und NEW-Module nach `public/new/...`
+  - kopiert Plugin-Source und nostrclient-Module nach `public/nostrclient/...`
   - patcht Dist-`identity-link/index.html` auf:
     - `data-use-new-core="true"`
-    - feste Modul-URL `../new/apps/identity-link/index.js?v=<buildToken>`
+    - feste Modul-URL `../nostrclient/apps/identity-link/index.js?v=<buildToken>`
   - erzeugt installierbares ZIP:
     - `dist/wordpress/nostr-identity-link-0.1.0.zip`
 - [x] `integrations/wordpress/nostr-identity-link/nostr-identity-link.php` erweitert:
-  - Alias `identity-link/new/ -> new/`
-  - Allowlist um Prefix `new/` ergänzt
+  - Alias `identity-link/nostrclient/ -> nostrclient/`
+  - Allowlist um Prefix `nostrclient/` ergänzt (plus `new/` als Legacy-Kompatibilität)
+
+## Fortschritt 2026-02-18 (Namensanpassung: NEW -> nostrclient)
+
+- [x] Architektur-Workspace von `NEW/` nach `nostrclient/` umbenannt.
+- [x] Build-Skript auf `nostrclient/` als Source umgestellt.
+- [x] Dist-Deploymentpfad für Core-Module auf `public/nostrclient/...` umgestellt.
+- [x] Dokumentation und Tasks auf neue Pfadnamen aktualisiert.
 

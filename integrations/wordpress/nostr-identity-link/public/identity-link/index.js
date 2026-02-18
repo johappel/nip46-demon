@@ -43,8 +43,8 @@ const signerFrameEl = /** @type {HTMLIFrameElement|null} */ (document.getElement
  * @property {string} rebindEndpoint - Endpoint for forced rebind.
  * @property {string} wpRestNonce - Optional WP REST nonce for write calls.
  * @property {boolean} autoBindOnUnbound - Whether unbound identities auto-bind.
- * @property {boolean} useNewCore - Enables NEW architecture sync path.
- * @property {string} newCoreModuleUri - URL to NEW architecture entry module.
+ * @property {boolean} useNewCore - Enables nostrclient architecture sync path.
+ * @property {string} newCoreModuleUri - URL to nostrclient architecture entry module.
  */
 
 /**
@@ -881,7 +881,7 @@ async function resolveSignerResultForActiveIdentity() {
 }
 
 /**
- * Resolves current signer status for NEW core RPC bridge.
+ * Resolves current signer status for nostrclient core RPC bridge.
  * @returns {Promise<{locked: boolean, activePubkey: string, activeKeyId: string}>} Status payload.
  */
 async function resolveSignerStatusForNewCoreRpc() {
@@ -908,13 +908,13 @@ async function resolveSignerStatusForNewCoreRpc() {
 }
 
 /**
- * Builds RPC adapter used by NEW core module.
+ * Builds RPC adapter used by nostrclient core module.
  * @returns {{request: (method: string, params?: any) => Promise<any>}} RPC adapter.
  */
 function createNewCoreRpcAdapter() {
     return {
         /**
-         * Routes NEW core RPC method calls to existing bridge actions.
+         * Routes nostrclient core RPC method calls to existing bridge actions.
          * @param {string} method - RPC method name.
          * @param {any} params - RPC params payload.
          * @returns {Promise<any>} RPC result payload.
@@ -924,7 +924,7 @@ function createNewCoreRpcAdapter() {
             if (normalizedMethod === "wp-ensure-user-key") {
                 const userId = String(params?.userId || params?.subject || state.activeIdentity?.subject || "").trim();
                 if (!userId) {
-                    throw new Error("NEW-Core RPC: userId/subject fehlt fuer wp-ensure-user-key.");
+                    throw new Error("nostrclient-Core RPC: userId/subject fehlt fuer wp-ensure-user-key.");
                 }
                 await waitForSignerBridgeReady(25000, 500);
                 return requestWpEnsureUserKey(userId, 120000);
@@ -934,14 +934,14 @@ function createNewCoreRpcAdapter() {
                 return resolveSignerStatusForNewCoreRpc();
             }
 
-            throw new Error(`NEW-Core RPC Methode nicht unterstuetzt: ${normalizedMethod}`);
+            throw new Error(`nostrclient-Core RPC Methode nicht unterstuetzt: ${normalizedMethod}`);
         }
     };
 }
 
 /**
- * Applies NEW core sync result to legacy UI state.
- * @param {any} syncResult - NEW core sync result payload.
+ * Applies nostrclient core sync result to legacy UI state.
+ * @param {any} syncResult - nostrclient core sync result payload.
  */
 function applyNewCoreSyncResult(syncResult) {
     const rawIdentity = syncResult?.identity || {};
@@ -979,18 +979,18 @@ function applyNewCoreSyncResult(syncResult) {
 }
 
 /**
- * Runs sync through NEW architecture module.
- * @returns {Promise<void>} Resolves when NEW sync completed.
+ * Runs sync through nostrclient architecture module.
+ * @returns {Promise<void>} Resolves when nostrclient sync completed.
  */
 async function runSyncWithNewCore() {
     const moduleUri = String(state.runtimeConfig.newCoreModuleUri || "").trim();
     if (!moduleUri) {
-        throw new Error("NEW-Core aktiviert, aber data-new-core-module-uri fehlt.");
+        throw new Error("nostrclient-Core aktiviert, aber data-new-core-module-uri fehlt.");
     }
 
     const moduleNs = await import(moduleUri);
     if (typeof moduleNs?.runNewIdentityLinkFlow !== "function") {
-        throw new Error("NEW-Core Modul exportiert runNewIdentityLinkFlow nicht.");
+        throw new Error("nostrclient-Core Modul exportiert runNewIdentityLinkFlow nicht.");
     }
 
     const apiBaseUrl = resolveIdentityApiBaseUrl(state.runtimeConfig.identityEndpoint);
@@ -1003,7 +1003,7 @@ async function runSyncWithNewCore() {
     );
 
     applyNewCoreSyncResult(syncResult);
-    appendResultLine(`NEW-Core Sync ausgefuehrt: ${String(syncResult?.status || "ok")}`);
+    appendResultLine(`nostrclient-Core Sync ausgefuehrt: ${String(syncResult?.status || "ok")}`);
 }
 
 /**
@@ -1017,8 +1017,8 @@ async function runConfiguredSyncCycle() {
             await reconcileBindingState();
             return;
         } catch (error) {
-            const fallbackReason = String(error?.message || "NEW-Core Fehler.");
-            appendResultLine(`NEW-Core deaktiviert (Fallback Legacy): ${fallbackReason}`);
+            const fallbackReason = String(error?.message || "nostrclient-Core Fehler.");
+            appendResultLine(`nostrclient-Core deaktiviert (Fallback Legacy): ${fallbackReason}`);
         }
     }
 
@@ -1299,7 +1299,7 @@ function destroyIdentityLinkClient() {
  */
 async function bootstrap() {
     state.runtimeConfig = resolveRuntimeConfig();
-    appendResultLine(`Sync-Modus: ${state.runtimeConfig.useNewCore ? "NEW-Core" : "Legacy"}`);
+    appendResultLine(`Sync-Modus: ${state.runtimeConfig.useNewCore ? "nostrclient-Core" : "Legacy"}`);
     bindUiEvents();
     renderIdentity(null);
     renderSignerResult(null);

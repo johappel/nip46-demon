@@ -21,7 +21,7 @@ export function createBridgeClient(rpcClient) {
 }
 
 /**
- * Runs identity-link sync through the NEW architecture path.
+ * Runs identity-link sync through the nostrclient architecture path.
  * @param {{ apiBaseUrl: string, restNonce?: string }} adapterConfig Adapter configuration.
  * @param {{ request: Function }} rpcClient Existing RPC client.
  * @returns {Promise<object>} Sync result state.

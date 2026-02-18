@@ -809,26 +809,26 @@ Hinweis zur Frontend-Integration:
   - `Export in WordPress speichern` (speichert den verschluesselten Export im User-Profil)
   - `Aus WordPress wiederherstellen` (laedt diesen Export und importiert ihn lokal im aktuellen Browser)
 - Der Signer-Service-Worker umgeht `GET /wp-json/...` bewusst (kein Cache), damit REST-Daten wie Backup-Status nicht stale aus dem Offline-Cache kommen.
-- Für die schrittweise Architektur-Migration gibt es eine getrennte Strangler-Zone unter `NEW/`:
-  - `NEW/shared/adapter-contracts` (Ports/Contracts)
-  - `NEW/shared/identity-link-core` und `NEW/shared/signer-core` (provider-neutrale Core-Logik)
-  - `NEW/integrations/wordpress/adapter` (WordPress-Strategien)
-  - `NEW/apps/identity-link` (neuer Kompositions-Einstieg)
+- Für die schrittweise Architektur-Migration gibt es eine getrennte Strangler-Zone unter `nostrclient/`:
+  - `nostrclient/shared/adapter-contracts` (Ports/Contracts)
+  - `nostrclient/shared/identity-link-core` und `nostrclient/shared/signer-core` (provider-neutrale Core-Logik)
+  - `nostrclient/integrations/wordpress/adapter` (WordPress-Strategien)
+  - `nostrclient/apps/identity-link` (neuer Kompositions-Einstieg)
 - Der produktive Signer-/Client-Pfad bleibt bis zur Feature-Flag-Umschaltung unverändert.
 - Der Identity-Link-Client unterstützt dafür jetzt Runtime-Flags:
-  - `data-use-new-core="true|false"` aktiviert/deaktiviert den NEW-Pfad.
-  - `data-new-core-module-uri="..."` setzt die Modul-URL zum NEW-Entry-Point.
-  - Bei NEW-Import-/Laufzeitfehlern fällt der Client automatisch auf den Legacy-Sync zurück.
+  - `data-use-new-core="true|false"` aktiviert/deaktiviert den nostrclient-Pfad.
+  - `data-new-core-module-uri="..."` setzt die Modul-URL zum nostrclient-Entry-Point.
+  - Bei nostrclient-Import-/Laufzeitfehlern fällt der Client automatisch auf den Legacy-Sync zurück.
 - Deployment ist als Build-Artefakt vorgesehen (kein manuelles Copy/Paste):
   - `npm run build:identity-link:wordpress`
   - oder `pnpm run build:identity-link:wordpress`
   - erzeugt:
     - `dist/wordpress/nostr-identity-link/` (installierbares Plugin-Verzeichnis)
     - `dist/wordpress/nostr-identity-link-<version>.zip` (WP-Upload)
-  - Dist-`identity-link/index.html` wird dabei auf NEW-Core gesetzt:
+  - Dist-`identity-link/index.html` wird dabei auf nostrclient-Core gesetzt:
     - `data-use-new-core="true"`
-    - `data-new-core-module-uri="../new/apps/identity-link/index.js?v=<buildToken>"`
-- Das Plugin erlaubt für diese NEW-Module zusätzlich den Public-Prefix `new/` unter `/nostr/new/...`.
+    - `data-new-core-module-uri="../nostrclient/apps/identity-link/index.js?v=<buildToken>"`
+- Das Plugin erlaubt für diese nostrclient-Module den Public-Prefix `nostrclient/` unter `/nostr/nostrclient/...`.
 
 Beispiel:
 

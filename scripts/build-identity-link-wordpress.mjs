@@ -8,7 +8,7 @@ const projectRoot = path.resolve(__dirname, "..");
 
 const pluginSlug = "nostr-identity-link";
 const sourcePluginDir = path.join(projectRoot, "integrations", "wordpress", pluginSlug);
-const sourceNewDir = path.join(projectRoot, "NEW");
+const sourceNostrClientDir = path.join(projectRoot, "nostrclient");
 const sourcePluginPhpFile = path.join(sourcePluginDir, `${pluginSlug}.php`);
 
 const distRootDir = path.join(projectRoot, "dist", "wordpress");
@@ -40,11 +40,11 @@ async function validateSourcePaths() {
   await assertPathExists(sourcePluginDir, "Plugin source directory");
   await assertPathExists(sourcePluginPhpFile, "Plugin main PHP file");
   await assertPathExists(path.join(sourcePluginDir, "public"), "Plugin public directory");
-  await assertPathExists(path.join(sourceNewDir, "apps"), "NEW apps directory");
-  await assertPathExists(path.join(sourceNewDir, "shared"), "NEW shared directory");
+  await assertPathExists(path.join(sourceNostrClientDir, "apps"), "nostrclient apps directory");
+  await assertPathExists(path.join(sourceNostrClientDir, "shared"), "nostrclient shared directory");
   await assertPathExists(
-    path.join(sourceNewDir, "integrations", "wordpress", "adapter"),
-    "NEW WordPress adapter directory"
+    path.join(sourceNostrClientDir, "integrations", "wordpress", "adapter"),
+    "nostrclient WordPress adapter directory"
   );
 }
 
@@ -60,11 +60,17 @@ async function buildWordPressPluginArtifact(buildToken, zipOutputFile) {
   await copyFileWithParentDirs(sourcePluginPhpFile, path.join(distPluginDir, `${pluginSlug}.php`));
   await copyDirectoryRecursive(path.join(sourcePluginDir, "public"), path.join(distPluginDir, "public"));
 
-  await copyDirectoryRecursive(path.join(sourceNewDir, "apps"), path.join(distPluginDir, "public", "new", "apps"));
-  await copyDirectoryRecursive(path.join(sourceNewDir, "shared"), path.join(distPluginDir, "public", "new", "shared"));
   await copyDirectoryRecursive(
-    path.join(sourceNewDir, "integrations", "wordpress", "adapter"),
-    path.join(distPluginDir, "public", "new", "integrations", "wordpress", "adapter")
+    path.join(sourceNostrClientDir, "apps"),
+    path.join(distPluginDir, "public", "nostrclient", "apps")
+  );
+  await copyDirectoryRecursive(
+    path.join(sourceNostrClientDir, "shared"),
+    path.join(distPluginDir, "public", "nostrclient", "shared")
+  );
+  await copyDirectoryRecursive(
+    path.join(sourceNostrClientDir, "integrations", "wordpress", "adapter"),
+    path.join(distPluginDir, "public", "nostrclient", "integrations", "wordpress", "adapter")
   );
 
   await patchIdentityLinkHtml(path.join(distPluginDir, "public", "identity-link", "index.html"), buildToken);
@@ -154,14 +160,14 @@ async function copyDirectoryRecursive(sourceDir, destinationDir) {
 }
 
 /**
- * Patches identity-link HTML in dist to activate NEW core path.
+ * Patches identity-link HTML in dist to activate nostrclient core path.
  * @param {string} htmlFilePath Dist HTML file path.
  * @param {string} buildToken Cache-busting token.
  * @returns {Promise<void>} Resolves when patching is complete.
  */
 async function patchIdentityLinkHtml(htmlFilePath, buildToken) {
   let html = await fs.readFile(htmlFilePath, "utf8");
-  const moduleUri = `../new/apps/identity-link/index.js?v=${buildToken}`;
+  const moduleUri = `../nostrclient/apps/identity-link/index.js?v=${buildToken}`;
 
   if (/data-use-new-core="[^"]*"/.test(html)) {
     html = html.replace(/data-use-new-core="[^"]*"/, 'data-use-new-core="true"');

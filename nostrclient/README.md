@@ -1,4 +1,4 @@
-﻿# NEW Architecture Workspace
+﻿# nostrclient Architecture Workspace
 
 This folder contains the incremental migration target for a hexagonal architecture with strategy-based provider adapters.
 
@@ -12,4 +12,4 @@ Initial scope in this folder:
 - `shared/identity-link-core`: provider-neutral identity-link use cases.
 - `shared/signer-core`: provider-neutral signer use cases.
 - `integrations/wordpress/adapter`: WordPress strategy implementations.
-- `apps/identity-link`: new composition entry point.
+- `apps/identity-link`: nostrclient composition entry point.

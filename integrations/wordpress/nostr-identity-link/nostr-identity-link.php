@@ -284,6 +284,7 @@ function nip46IdentityLinkApplyPublicPathAliases(string $normalizedPath): string
         'identity-link/democlient/' => 'democlient/',
         'identity-link/vendor/' => 'vendor/',
         'identity-link/signer/' => 'signer/',
+        'identity-link/nostrclient/' => 'nostrclient/',
         'identity-link/new/' => 'new/',
         'signer-ui.css' => 'signer/signer-ui.css',
         'signer-ui.js' => 'signer/signer-ui.js',
@@ -387,7 +388,7 @@ function nip46IdentityLinkGetCurrentRequestUrl(): string
  */
 function nip46IdentityLinkIsAllowedPublicPath(string $normalizedPath): bool
 {
-    $allowedPrefixes = ['signer/', 'identity-link/', 'democlient/', 'vendor/', 'new/'];
+    $allowedPrefixes = ['signer/', 'identity-link/', 'democlient/', 'vendor/', 'new/', 'nostrclient/'];
     if (in_array($normalizedPath, ['signer', 'identity-link'], true)) {
         return true;
     }

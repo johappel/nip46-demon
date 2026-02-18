@@ -220,19 +220,19 @@ Empfohlene erste 5 Commits:
 
 ## 10. Umgesetzt am 2026-02-18
 
-- [x] Strangler-Workspace `NEW/` angelegt, ohne bestehende Produktionspfade anzurühren.
-- [x] Contracts angelegt unter `NEW/shared/adapter-contracts/*`.
+- [x] Strangler-Workspace `nostrclient/` angelegt, ohne bestehende Produktionspfade anzurühren.
+- [x] Contracts angelegt unter `nostrclient/shared/adapter-contracts/*`.
 - [x] Core-Skeleton angelegt unter:
-  - `NEW/shared/identity-link-core/*`
-  - `NEW/shared/signer-core/*`
+  - `nostrclient/shared/identity-link-core/*`
+  - `nostrclient/shared/signer-core/*`
 - [x] WordPress-Strategien als Adapter-Skeleton angelegt unter:
-  - `NEW/integrations/wordpress/adapter/*`
+  - `nostrclient/integrations/wordpress/adapter/*`
 - [x] Neue Kompositions-Entry-Point angelegt:
-  - `NEW/apps/identity-link/index.js`
+  - `nostrclient/apps/identity-link/index.js`
 - [x] Feature-Flag-Vorbereitung im bestehenden Identity-Link-Client gestartet:
   - `data-use-new-core`
   - `data-new-core-module-uri`
-  - Fallback auf Legacy-Pfad bei NEW-Core-Fehler
+  - Fallback auf Legacy-Pfad bei nostrclient-Core-Fehler
 - [x] Build-/Deployment-Strategie umgesetzt:
   - plattformunabhängiges npm/pnpm-Buildscript für ein zip-fähiges WordPress-Plugin-Artefakt
   - Dist-Ausgabe unter `dist/wordpress/`
