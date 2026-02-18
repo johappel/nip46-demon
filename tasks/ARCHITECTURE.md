@@ -236,3 +236,7 @@ Empfohlene erste 5 Commits:
 - [x] Build-/Deployment-Strategie umgesetzt:
   - plattformunabhängiges npm/pnpm-Buildscript für ein zip-fähiges WordPress-Plugin-Artefakt
   - Dist-Ausgabe unter `dist/wordpress/`
+- [x] Zusätzliche Dist-Artefakte für getrennte Deployment-Ziele eingeführt:
+  - `dist/nostrclient/` via `build`
+  - `dist/embedclients/` via `build:embedclients`
+  - `dist/signer/` via `build:signer`

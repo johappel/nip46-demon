@@ -1,4 +1,4 @@
-﻿import { createBunkerConnectClient } from "../democlient/nostr.js";
+﻿import { createBunkerConnectClient } from "../nostrclient/nostr.js";
 
 const BRIDGE_SOURCE = "nip46-signer-bridge";
 const DEFAULT_PROVIDER = "wordpress";
@@ -705,7 +705,7 @@ function requestWpEnsureUserKey(userId, timeoutMs = 15000) {
             state.signerUnlockFlowActive = true;
             openSignerDialog();
             requestSignerManagementView();
-            reject(new Error("Keine Antwort vom Signer auf wp-ensure-user-key. Bitte Signer öffnen, entsperren und erneut versuchen."));
+            reject(new Error("Keine Antwort vom Signer auf wp-ensure-user-key. Bitte Signer �ffnen, entsperren und erneut versuchen."));
         }
 
         const timeoutHandle = setTimeout(onTimeout, timeoutMs);

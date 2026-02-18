@@ -68,6 +68,12 @@ Implementierung eines dritten Clients fuer die Verknuepfung von SSO-Identitaeten
 - [ ] H3. Optionalen README-Verweis nur falls noetig ergaenzen (keine volle Doku dort).
 - [x] H4. Architektur-Migrationsplan in `tasks/ARCHITECTURE.md` pflegen.
 - [x] H5. Build-/Deployment-Skript fuer WordPress-Plugin-ZIP (`npm/pnpm run build:identity-link:wordpress`) anlegen.
+- [x] H6. Zusaetzliche Build-Targets anlegen:
+  - `npm/pnpm run build`
+  - `npm/pnpm run build:embedclients`
+  - `npm/pnpm run build:signer`
+- [x] H7. Eigenes Build-Target fuer Demo-Client ohne Signer-Bundle anlegen:
+  - `npm/pnpm run build:democlient`
 
 ## Epic I: Test- und Abnahmekriterien
 

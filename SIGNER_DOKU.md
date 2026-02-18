@@ -327,6 +327,7 @@ import { nostrclient } from "./nostreclient.js";
 
 const config = {
   signer_iframe_uri: "../signer.html",
+  signer_iframe_mode: "interactive",
   relays: [],
   allow_nip07: false
 };
@@ -349,6 +350,7 @@ console.log(pubkey, relayUrls, response);
 ```js
 {
   signer_iframe_uri: "../signer.html", // oder signerIframeUri
+  signer_iframe_mode: "interactive",   // oder signerIframeMode ("fixed"|"interactive")
   form_uri: "./forms/schemas/kind1.json", // oder formUri, optional
   relays: ["wss://relay.damus.io"],    // optional, leer => Demo-Defaults
   allow_nip07: true,                   // oder allowNip07
@@ -426,6 +428,7 @@ Signatur:
 init(options?: {
   config?: {
     signer_iframe_uri?: string; // Alias: signerIframeUri
+    signer_iframe_mode?: "fixed" | "interactive"; // Alias: signerIframeMode
     form_uri?: string;          // Alias: formUri
     relays?: string[];
     allow_nip07?: boolean;      // Alias: allowNip07
@@ -437,6 +440,7 @@ init(options?: {
 Config-Felder:
 
 - `signer_iframe_uri`: Pfad zur Signer-Seite. Default: `../signer.html`
+- `signer_iframe_mode`: `interactive` fragt beim Start nach einer URL (mit localStorage-Merker), `fixed` nutzt direkt `signer_iframe_uri`
 - `form_uri`: URI zu einem JSON-Form-Schema. Leer => kein generiertes Formular (API-only Modus)
 - `relays`: optionale Relay-Liste fuer den Client. Leer = interne Defaults
 - `allow_nip07`: wenn `true`, kann intern `window.nostr` bereitgestellt werden
@@ -512,6 +516,7 @@ import { nostrclient } from "./nostreclient.js";
 
 const config = {
   signer_iframe_uri: "../signer.html",
+  signer_iframe_mode: "interactive",
   // form_uri optional
   relays: [],
   allow_nip07: false
@@ -746,7 +751,7 @@ Rewrite-Routen (ueber WordPress):
 - `/nostr/` -> Redirect auf `/nostr/identity-link/`
 - `/nostr/identity-link/` -> Identity-Link-Client aus dem Plugin
 - `/nostr/signer/` -> NIP-46 Signer aus dem Plugin
-- `/nostr/democlient/*` und `/nostr/vendor/*` -> benoetigte Modul-Abhaengigkeiten
+- `/nostr/nostrclient/*` und `/nostr/vendor/*` -> benoetigte Modul-Abhaengigkeiten
 
 Shortcode:
 
@@ -804,7 +809,7 @@ Hinweis zur Frontend-Integration:
 - Der Identity-Link-Client nutzt fuer den Standardfall jetzt diesen Read-Only-Bridge-Pfad und vergleicht primär nur `expectedPubkey` gegen `signerPubkey`.
 - `wp-ensure-user-key` wird im Alltag damit nur noch fuer den ungebundenen Erstzuordnungsfall benoetigt.
 - Die Host-Statusanzeige ist fuer den Compare-Only-Fall jetzt explizit: `Signer-Bridge bereit. Pubkey kann verglichen werden.` (statt unklarem `Verbindung wird vorbereitet ...`).
-- Bei Bundle-Kopien in das WordPress-Plugin muessen relative Modulpfade plugin-spezifisch bleiben (`signer/signer-nip46.js` -> `../vendor/...`, `identity-link/index.js` -> `../democlient/...`), sonst laedt der Browser HTML statt Modul-JS.
+- Bei Bundle-Kopien in das WordPress-Plugin muessen relative Modulpfade plugin-spezifisch bleiben (`signer/signer-nip46.js` -> `../vendor/...`, `identity-link/index.js` -> `../nostrclient/nostr.js`), sonst laedt der Browser HTML statt Modul-JS.
 - Im Signer-Tab `Verwaltung` gibt es zusaetzlich zwei WP-Backup-Aktionen:
   - `Export in WordPress speichern` (speichert den verschluesselten Export im User-Profil)
   - `Aus WordPress wiederherstellen` (laedt diesen Export und importiert ihn lokal im aktuellen Browser)
@@ -820,6 +825,19 @@ Hinweis zur Frontend-Integration:
   - `data-new-core-module-uri="..."` setzt die Modul-URL zum nostrclient-Entry-Point.
   - Bei nostrclient-Import-/Laufzeitfehlern fällt der Client automatisch auf den Legacy-Sync zurück.
 - Deployment ist als Build-Artefakt vorgesehen (kein manuelles Copy/Paste):
+  - `npm run build` / `pnpm run build`
+    - `dist/nostrclient/nostrclient/`
+    - `dist/nostrclient/nostrclient.zip`
+  - `npm run build:democlient` / `pnpm run build:democlient`
+    - `dist/democlient/democlient/`
+    - `dist/democlient/vendor/ndk-3.0.0.js`
+    - `dist/democlient/democlient.zip`
+  - `npm run build:embedclients` / `pnpm run build:embedclients`
+    - `dist/embedclients/embedclients/`
+    - `dist/embedclients/embedclients.zip`
+  - `npm run build:signer` / `pnpm run build:signer`
+    - `dist/signer/signer-standalone/`
+    - `dist/signer/signer-standalone.zip`
   - `npm run build:identity-link:wordpress`
   - oder `pnpm run build:identity-link:wordpress`
   - erzeugt:

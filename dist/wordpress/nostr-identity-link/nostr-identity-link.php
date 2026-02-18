@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 /**
  * Plugin Name: NIP-46 Identity Link
  * Description: Stellt REST-Endpunkte fuer die Verknuepfung von WordPress-Usern mit Nostr-Pubkeys bereit.
@@ -281,7 +281,6 @@ function nip46IdentityLinkNormalizePublicPath(string $routePath): string
 function nip46IdentityLinkApplyPublicPathAliases(string $normalizedPath): string
 {
     $aliases = [
-        'identity-link/democlient/' => 'democlient/',
         'identity-link/vendor/' => 'vendor/',
         'identity-link/signer/' => 'signer/',
         'identity-link/nostrclient/' => 'nostrclient/',
@@ -388,7 +387,7 @@ function nip46IdentityLinkGetCurrentRequestUrl(): string
  */
 function nip46IdentityLinkIsAllowedPublicPath(string $normalizedPath): bool
 {
-    $allowedPrefixes = ['signer/', 'identity-link/', 'democlient/', 'vendor/', 'new/', 'nostrclient/'];
+    $allowedPrefixes = ['signer/', 'identity-link/', 'vendor/', 'new/', 'nostrclient/'];
     if (in_array($normalizedPath, ['signer', 'identity-link'], true)) {
         return true;
     }

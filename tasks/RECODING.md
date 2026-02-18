@@ -740,3 +740,61 @@ Refactoring von `signer.html` in wartbare Module plus neue Aufmerksamkeits-Featu
 - [x] Dist-Deploymentpfad für Core-Module auf `public/nostrclient/...` umgestellt.
 - [x] Dokumentation und Tasks auf neue Pfadnamen aktualisiert.
 
+## Fortschritt 2026-02-18 (Neue Build-Targets: nostrclient, embedclients, signer)
+
+- [x] `package.json` erweitert:
+  - `build`
+  - `build:embedclients`
+  - `build:signer`
+- [x] Gemeinsame Build-Utilities erstellt: `scripts/build-utils.mjs`
+  - rekursives Copying
+  - Dist-Cleanups
+  - ZIP-Erzeugung ohne externe Dependencies
+- [x] Neues Artifact-Skript erstellt: `scripts/build-nostrclient.mjs`
+  - erzeugt `dist/nostrclient/nostrclient/`
+  - erzeugt `dist/nostrclient/nostrclient.zip`
+  - enthält Identity-Link + nostrclient-Core + Signer + Abhängigkeiten
+  - Build-Tree vereinfacht: Core liegt unter `core/` (kein `nostrclient/nostrclient`-Nesting)
+- [x] Neues Artifact-Skript erstellt: `scripts/build-embedclients.mjs`
+  - erzeugt `dist/embedclients/embedclients/`
+  - erzeugt `dist/embedclients/embedclients.zip`
+- [x] Neues Artifact-Skript erstellt: `scripts/build-signer.mjs`
+  - erzeugt `dist/signer/signer-standalone/`
+  - erzeugt `dist/signer/signer-standalone.zip`
+- [x] Alle drei Build-Commands erfolgreich ausgeführt und Artefakte erzeugt.
+
+## Fortschritt 2026-02-18 (Demo-Client fokussiert ohne Signer-Bundle)
+
+- [x] `democlient/index.js` erweitert: `signer_iframe_mode` unterstuetzt jetzt `interactive` fuer runtime URL-Eingabe.
+- [x] Standard im Demo-Client auf `signer_iframe_mode: "interactive"` gesetzt.
+- [x] Signer-URL-Merker in `localStorage` robust gemacht (read/write mit Fallback bei blockiertem Storage).
+- [x] Neues Build-Target erstellt: `scripts/build-democlient.mjs`.
+- [x] `package.json` erweitert um `build:democlient`.
+- [x] `build:democlient` erzeugt nur:
+  - `dist/democlient/democlient/`
+  - `dist/democlient/vendor/ndk-3.0.0.js`
+  - `dist/democlient/democlient.zip`
+
+## Fortschritt 2026-02-18 (Build-Namensschema vereinfacht)
+
+- [x] `build:nostrclient` als primaeres Kommando durch `build` ersetzt.
+- [x] `npm run build`/`pnpm run build` erzeugt jetzt direkt das nostrclient-Hauptartefakt.
+- [x] Doku/Task-Referenzen entsprechend aktualisiert (`SIGNER_DOKU.md`, `tasks/ARCHITECTURE.md`, `tasks/IDENTITY_LINK_CLIENT_TASKLIST.md`).
+
+## Fortschritt 2026-02-18 (WordPress: democlient-Pfad entfernt)
+
+- [x] Plugin-Identity-Link-Import umgestellt:
+  - `integrations/wordpress/nostr-identity-link/public/identity-link/index.js`
+  - von `../democlient/nostr.js` auf `../nostrclient/nostr.js`
+- [x] Plugin-Dateistruktur umgestellt:
+  - `integrations/wordpress/nostr-identity-link/public/nostrclient/nostr.js`
+  - `public/democlient/` entfernt
+- [x] Rewrite-Allowlist im Plugin bereinigt:
+  - Prefix `democlient/` entfernt
+  - kein Alias `identity-link/democlient/` mehr
+- [x] Build-Skript `scripts/build-nostrclient.mjs` angepasst:
+  - Bridge-Modul wird in `dist/nostrclient/nostrclient/nostrclient/nostr.js` ausgegeben
+- [x] Dist neu gebaut:
+  - `npm run build:identity-link:wordpress`
+  - `npm run build`
+

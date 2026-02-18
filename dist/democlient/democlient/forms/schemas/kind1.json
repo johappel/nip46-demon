@@ -1,0 +1,21 @@
+﻿{
+  "version": "nostr-form-v1",
+  "id": "kind1-default",
+  "title": "Text Note",
+  "description": "Einfaches kind:1 Formular fuer kurze Nachrichten.",
+  "kind": 1,
+  "adapter": "kind-1",
+  "submitLabel": "Signieren + senden",
+  "contentField": "content",
+  "fields": [
+    {
+      "name": "content",
+      "label": "Content (kind:1)",
+      "type": "textarea",
+      "required": true,
+      "maxLength": 280,
+      "rows": 5,
+      "placeholder": "Hallo von meinem eigenen Nostr Client"
+    }
+  ]
+}

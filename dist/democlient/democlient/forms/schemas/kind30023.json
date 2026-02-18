@@ -1,0 +1,89 @@
+﻿{
+  "version": "nostr-form-v1",
+  "id": "kind30023-longform",
+  "title": "Long Form (NIP-23)",
+  "description": "Beispielschema fuer NIP-23 Long-Form-Posts mit Draft/Publish Auswahl und automatischem published_at.",
+  "kind": 30023,
+  "adapter": "kind-30023",
+  "kindSelectorField": "publishMode",
+  "kindSelectorMap": {
+    "publish": 30023,
+    "draft": 30024
+  },
+  "submitLabel": "Long Form signieren + senden",
+  "fields": [
+    {
+      "name": "publishMode",
+      "label": "Modus",
+      "type": "select",
+      "required": true,
+      "defaultValue": "publish",
+      "options": [
+        {
+          "label": "Publish (kind:30023)",
+          "value": "publish"
+        },
+        {
+          "label": "Draft (kind:30024)",
+          "value": "draft"
+        }
+      ]
+    },
+    {
+      "name": "identifier",
+      "label": "Identifier (d-Tag)",
+      "type": "text",
+      "required": true,
+      "maxLength": 80,
+      "placeholder": "mein-erster-longform-post"
+    },
+    {
+      "name": "title",
+      "label": "Titel",
+      "type": "text",
+      "required": true,
+      "maxLength": 140,
+      "placeholder": "Mein Long Form Beitrag"
+    },
+    {
+      "name": "summary",
+      "label": "Kurzfassung",
+      "type": "textarea",
+      "required": false,
+      "maxLength": 500,
+      "rows": 3
+    },
+    {
+      "name": "image",
+      "label": "Titelbild URL",
+      "type": "url",
+      "required": false,
+      "placeholder": "https://..."
+    },
+    {
+      "name": "topics",
+      "label": "Themen (t-Tags, Komma oder Zeilen)",
+      "type": "text",
+      "required": false,
+      "placeholder": "nostr, longform, tutorial"
+    },
+    {
+      "name": "tagsJson",
+      "label": "Weitere Tags (JSON, optional)",
+      "type": "textarea",
+      "required": false,
+      "rows": 4,
+      "placeholder": "[[\"e\",\"<eventId>\",\"wss://relay.example.com\"],[\"a\",\"30023:<pubkey>:<d>\",\"wss://relay.nostr.org\"]]"
+    },
+    {
+      "name": "content",
+      "label": "Inhalt",
+      "type": "textarea",
+      "required": true,
+      "maxLength": 20000,
+      "rows": 14
+    }
+  ]
+}
+
+
