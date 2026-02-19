@@ -245,3 +245,6 @@ Empfohlene erste 5 Commits:
   - neue Quelle: `nostrclient/shared/nostr.js`
   - `democlient`, `embedclients` und `wordpress identity-link` importieren nun denselben Shared-Pfad
   - Build-Skripte kopieren nur noch den Shared-Pfad (`build:democlient`, `build:embedclients`, `build`)
+- [x] Standalone-`build` Dist-Tree bereinigt:
+  - kein zusaetzlicher Duplikatpfad `dist/nostrclient/nostrclient/nostrclient/shared/`
+  - `dist/nostrclient/nostrclient/identity-link/index.js` nutzt `../core/shared/nostr.js`

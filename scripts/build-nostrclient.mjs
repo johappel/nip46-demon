@@ -74,7 +74,6 @@ async function buildBundle(buildToken) {
   );
   await copyDirectoryRecursive(path.join(projectRoot, "nostrclient"), path.join(distBundleDir, coreDirName));
 
-  await copyFileWithParentDirs(path.join(projectRoot, "nostrclient", "shared", "nostr.js"), path.join(distBundleDir, "nostrclient", "shared", "nostr.js"));
   await copyFileWithParentDirs(path.join(projectRoot, "vendor", "ndk-3.0.0.js"), path.join(distBundleDir, "vendor", "ndk-3.0.0.js"));
 
   await copyFileWithParentDirs(path.join(projectRoot, "signer.html"), path.join(distBundleDir, "signer.html"));
@@ -85,6 +84,7 @@ async function buildBundle(buildToken) {
   await copyFileWithParentDirs(path.join(projectRoot, "manifest.webmanifest"), path.join(distBundleDir, "manifest.webmanifest"));
   await copyDirectoryRecursive(path.join(projectRoot, "icons"), path.join(distBundleDir, "icons"));
 
+  await patchIdentityLinkScript(path.join(distBundleDir, "identity-link", "index.js"));
   await patchIdentityLinkHtml(path.join(distBundleDir, "identity-link", "index.html"), buildToken);
   await writeBundleEntryIndexHtml(path.join(distBundleDir, "index.html"));
   await createZipArchive(distBundleDir, distBundleName, distZipFile);
@@ -119,7 +119,7 @@ async function writeBundleEntryIndexHtml(indexFilePath) {
     "    <li><a href=\"./identity-link/index.html\">Identity Link Client</a></li>\n" +
     "    <li><a href=\"./signer.html\">Signer</a></li>\n" +
     "  </ul>\n" +
-    "  <p>Bridge module path: <code>./nostrclient/shared/nostr.js</code></p>\n" +
+    "  <p>Bridge module path: <code>./core/shared/nostr.js</code></p>\n" +
     "</body>\n" +
     "</html>\n";
 
@@ -150,6 +150,23 @@ async function patchIdentityLinkHtml(htmlFilePath, buildToken) {
   );
 
   await fs.writeFile(htmlFilePath, html, "utf8");
+}
+
+/**
+ * Patches identity-link script import for nostrclient standalone bundle.
+ * In standalone dist, the bridge module is served from `core/shared/nostr.js`.
+ * @param {string} scriptFilePath Script file path.
+ * @returns {Promise<void>} Resolves when patching is complete.
+ */
+async function patchIdentityLinkScript(scriptFilePath) {
+  let script = await fs.readFile(scriptFilePath, "utf8");
+
+  script = script.replace(
+    /from "\.\.\/nostrclient\/shared\/nostr\.js"/,
+    'from "../core/shared/nostr.js"'
+  );
+
+  await fs.writeFile(scriptFilePath, script, "utf8");
 }
 
 main().catch((error) => {

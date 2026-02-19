@@ -838,3 +838,14 @@ Refactoring von `signer.html` in wartbare Module plus neue Aufmerksamkeits-Featu
   - `scripts/build-nostrclient.mjs`
   - `scripts/build-identity-link-wordpress.mjs`
 
+## Fortschritt 2026-02-18 (nostrclient Dist-Tree bereinigt)
+
+- [x] `scripts/build-nostrclient.mjs` entdupliziert:
+  - kein separates Copy mehr nach `dist/nostrclient/nostrclient/nostrclient/shared/nostr.js`
+  - Bridge-Datei kommt im Standalone-Bundle nur noch aus `dist/nostrclient/nostrclient/core/shared/nostr.js`
+- [x] Standalone-Identity-Link-Skript wird beim Build gepatcht:
+  - Import von `../nostrclient/shared/nostr.js` auf `../core/shared/nostr.js`
+- [x] Bundle-Einstiegsseite aktualisiert:
+  - `Bridge module path` zeigt auf `./core/shared/nostr.js`
+- [x] Verifiziert mit `npm run build`: kein `nostrclient/nostrclient/nostrclient/` Unterbaum mehr.
+
