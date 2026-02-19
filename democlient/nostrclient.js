@@ -1217,6 +1217,3 @@ export const nostrclient = {
     publishSignedEvent,
     publishTextNote
 };
-
-export const nostrclient = nostrclient;
-

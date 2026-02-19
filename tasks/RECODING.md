@@ -862,3 +862,7 @@ Refactoring von `signer.html` in wartbare Module plus neue Aufmerksamkeits-Featu
 - [x] Deployment-Hinweise und Zielpfade in `dist/` klar beschrieben.
 - [x] Zeichensatzprobleme (Mojibake) entfernt, ASCII-konforme README hergestellt.
 
+## Fortschritt 2026-02-19 (Demo-Client Export-Fix)
+
+- [x] `democlient/nostrclient.js`: doppelte Blockdeklaration `nostrclient` entfernt.
+- [x] Syntaxfehler "Blockbereich kann nicht erneut deklariert werden" beseitigt.
