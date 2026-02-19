@@ -866,3 +866,14 @@ Refactoring von `signer.html` in wartbare Module plus neue Aufmerksamkeits-Featu
 
 - [x] `democlient/nostrclient.js`: doppelte Blockdeklaration `nostrclient` entfernt.
 - [x] Syntaxfehler "Blockbereich kann nicht erneut deklariert werden" beseitigt.
+
+## Fortschritt 2026-02-19 (GitHub Pages Build + Deploy)
+
+- [x] Neues Build-Skript `scripts/build-pages.mjs` erstellt.
+- [x] `package.json` um `build:pages` erweitert.
+- [x] Pages-Build erzeugt ein gemeinsames Deploy-Verzeichnis `dist/pages/` mit:
+  - `signer.html` + Signer-Assets auf Root
+  - `democlient/` + benoetigte Runtime-Abhaengigkeiten
+  - `democlient.html` als Redirect auf `./democlient/`
+- [x] GitHub Pages Workflow erstellt: `.github/workflows/deploy-pages.yml`.
+- [x] `SIGNER_DOKU.md` um Pages-Build- und Deploy-Dokumentation erweitert.

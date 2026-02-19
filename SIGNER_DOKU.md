@@ -829,6 +829,11 @@ Hinweis zur Frontend-Integration:
     - `dist/nostrclient/nostrclient/`
     - `dist/nostrclient/nostrclient/index.html` (Bundle-Einstieg)
     - `dist/nostrclient/nostrclient.zip`
+  - `npm run build:pages` / `pnpm run build:pages`
+    - `dist/pages/` (GitHub-Pages Bundle mit Signer + Democlient)
+    - `dist/pages/signer.html`
+    - `dist/pages/democlient/`
+    - `dist/pages/democlient.html` (Redirect auf `./democlient/`)
   - `npm run build:democlient` / `pnpm run build:democlient`
     - `dist/democlient/democlient/`
     - `dist/democlient/vendor/ndk-3.0.0.js`
@@ -846,6 +851,14 @@ Hinweis zur Frontend-Integration:
     - `dist/wordpress/nostr-identity-link-<version>.zip` (WP-Upload)
   - Dist-`identity-link/index.html` wird dabei auf nostrclient-Core gesetzt:
     - `data-new-core-module-uri="../nostrclient/apps/identity-link/index.js?v=<buildToken>"`
+- GitHub Pages CI-Deployment:
+  - Workflow: `.github/workflows/deploy-pages.yml`
+  - Build-Kommando: `npm run build:pages`
+  - Deploy-Artefakt: `dist/pages`
+  - Verfuegbare Einstiege nach Deploy:
+    - `/signer.html`
+    - `/democlient/`
+    - `/democlient.html` (Redirect auf `/democlient/`)
 - Das Plugin erlaubt für diese nostrclient-Module den Public-Prefix `nostrclient/` unter `/nostr/nostrclient/...`.
 
 Beispiel:
