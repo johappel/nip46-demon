@@ -1,0 +1,12 @@
+﻿{
+  "name": "nip46-demon",
+  "private": true,
+  "scripts": {
+    "build": "node scripts/build-nostrclient.mjs",
+    "build:democlient": "node scripts/build-democlient.mjs",
+    "build:embedclients": "node scripts/build-embedclients.mjs",
+    "build:signer": "node scripts/build-signer.mjs",
+    "build:identity-link:wordpress": "node scripts/build-identity-link-wordpress.mjs",
+    "build:indenty-link:wordpress": "npm run build:identity-link:wordpress"
+  }
+}

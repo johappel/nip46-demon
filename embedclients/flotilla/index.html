@@ -1,0 +1,73 @@
+﻿<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; connect-src 'self' https: wss:; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; frame-src 'self' https: http:; object-src 'none'; base-uri 'self'; form-action 'self';">
+    <title>Embed Client - Flotilla Login Guide</title>
+    <link rel="stylesheet" href="./index.css">
+</head>
+<body>
+    <main
+        id="embed-root"
+        class="layout"
+        data-app-name="Flotilla"
+        data-app-url="https://app.flotilla.social/"
+        data-signer-uri="../../signer.html"
+    >
+        <section class="panel guide-panel">
+            <p class="eyebrow">Embed Client</p>
+            <h1>Flotilla Login Assistent</h1>
+            <p class="muted">
+                Diese Seite führt den Login mit Remote Signer in Flotilla.
+                Du arbeitest links die Schritte ab und führst sie rechts im Flotilla-iframe aus.
+            </p>
+
+            <ol class="steps">
+                <li id="step-open-login">In Flotilla: <strong>Log in</strong> öffnen.</li>
+                <li id="step-remote-signer">In Flotilla: <strong>Log in with Remote Signer</strong> wählen.</li>
+                <li id="step-copy-bunker">Bunker-Link kopieren und in Flotilla einfügen.</li>
+                <li id="step-finish-login">In Flotilla: <strong>Next</strong> klicken.</li>
+            </ol>
+
+            <div class="control-group">
+                <label for="bunker-uri-output">Bunker Link (zum Einfügen in Flotilla)</label>
+                <textarea id="bunker-uri-output" rows="3" readonly placeholder="Warte auf Signer-Verbindung ..."></textarea>
+                <div class="actions">
+                    <button id="copy-bunker-btn" type="button">Bunker Link kopieren</button>
+                    <button id="refresh-link-btn" type="button" class="secondary-btn">Bunker Link aktualisieren</button>
+                </div>
+            </div>
+
+            <div class="control-group">
+                <p id="embed-status" class="status" data-state="idle">Initialisiere Embed Client ...</p>
+                <div class="actions">
+                    <button id="open-signer-btn" type="button">Signer öffnen</button>
+                    <button id="open-app-tab-btn" type="button" class="secondary-btn">Flotilla im Tab öffnen</button>
+                </div>
+            </div>
+        </section>
+
+        <section class="panel app-panel">
+            <div class="app-head">
+                <h2>Flotilla App</h2>
+                <p class="muted">Falls das iframe vom Ziel gesperrt wird, bitte den Tab-Button links nutzen.</p>
+            </div>
+            <iframe id="embedded-app-frame" title="Flotilla App" src="https://app.flotilla.social/" referrerpolicy="no-referrer"></iframe>
+        </section>
+    </main>
+
+    <dialog id="signer-dialog" class="signer-dialog">
+        <section class="panel signer-panel">
+            <div class="dialog-head">
+                <h2>NIP-46 Signer</h2>
+                <button id="close-signer-btn" type="button" class="close-btn" aria-label="Dialog schliessen">X</button>
+            </div>
+            <p id="signer-status" class="status" data-state="idle">Noch nicht verbunden.</p>
+            <iframe id="signer-frame" title="Signer" src="about:blank"></iframe>
+        </section>
+    </dialog>
+
+    <script type="module" src="./index.js"></script>
+</body>
+</html>
