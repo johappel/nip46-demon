@@ -204,20 +204,20 @@ Refactoring von `signer.html` in wartbare Module plus neue Aufmerksamkeits-Featu
 
 ## Fortschritt 2026-02-17 (One-Command Client Init API)
 
-- [x] Neues Modul `democlient/nostreclient.js` hinzugefuegt mit Public API `nostreclient.init({ config })`.
+- [x] Neues Modul `democlient/nostrclient.js` hinzugefuegt mit Public API `nostrclient.init({ config })`.
 - [x] Konfigurations-Schema eingefuehrt (snake_case + camelCase): `signer_iframe_uri`, `relays`, `allow_nip07`, `custom_bunker_uri`.
-- [x] `democlient/index.js` auf minimalen Entry-Point reduziert (nur Config + `nostreclient.init(...)`).
+- [x] `democlient/index.js` auf minimalen Entry-Point reduziert (nur Config + `nostrclient.init(...)`).
 - [x] Wrapper-Methoden ergaenzt: `getPublicKey`, `signEvent`, `publishSignedEvent`, `publishTextNote`, `getState`, `destroy`.
 - [x] `SIGNER_DOKU.md` auf den neuen Integrationsweg aktualisiert.
 
-## Fortschritt 2026-02-17 (API-Doku nostrclient/nostreclient)
+## Fortschritt 2026-02-17 (API-Doku nostrclient/nostrclient)
 
-- [x] `SIGNER_DOKU.md`: neue API-Referenz fuer `democlient/nostreclient.js` ergaenzt (Import, Config, Methoden, Rueckgaben, Verhalten).
-- [x] `democlient/nostreclient.js`: Alias-Export `nostrclient` hinzugefuegt (identisch zu `nostreclient`) fuer klarere Benennung im Client-Code.
+- [x] `SIGNER_DOKU.md`: neue API-Referenz fuer `democlient/nostrclient.js` ergaenzt (Import, Config, Methoden, Rueckgaben, Verhalten).
+- [x] `democlient/nostrclient.js`: Alias-Export `nostrclient` hinzugefuegt (identisch zu `nostrclient`) fuer klarere Benennung im Client-Code.
 
 ## Fortschritt 2026-02-17 (DOM-Rollen mit data-nostr)
 
-- [x] `democlient/nostreclient.js`: DOM-Resolution auf semantische Rollen erweitert (`data-nostr="<rolle>"` mit `id`-Fallback).
+- [x] `democlient/nostrclient.js`: DOM-Resolution auf semantische Rollen erweitert (`data-nostr="<rolle>"` mit `id`-Fallback).
 - [x] `democlient/index.html`: zentrale Elemente mit `data-nostr` versehen (u. a. `post-form`, `post-content`, `send-btn`, Dialog-Elemente).
 - [x] `SIGNER_DOKU.md`: API-Doku praezisiert (`nostrclient.<methode>()` statt globalen Einzel-Funktionen).
 - [x] `SIGNER_DOKU.md`: DOM-Binding fuer CMS-Integrationen dokumentiert (inkl. Post-Flow-Mapping).
@@ -236,7 +236,7 @@ Refactoring von `signer.html` in wartbare Module plus neue Aufmerksamkeits-Featu
 - [x] `nip52-calendar.json` von `generic-kind` auf `adapter: \"nip-52\"` umgestellt und um RSVP-relevante Felder erweitert.
 - [x] Adapter-Refactor: `kind-adapters/index.js` auf Registry/Dispatch reduziert.
 - [x] Adapter in eigene Dateien ausgelagert: `generic.js`, `kind1.js`, `nip23.js`, `nip52.js`, `shared.js`.
-- [x] `democlient/nostreclient.js` auf dynamischen Submit-Flow umgestellt (`collect -> validate -> adapter -> sign -> publish`).
+- [x] `democlient/nostrclient.js` auf dynamischen Submit-Flow umgestellt (`collect -> validate -> adapter -> sign -> publish`).
 - [x] `democlient/index.html` um `data-nostr=\"form-fields\"` als Render-Container erweitert.
 - [x] `democlient/index.js` um `config.form_uri` erweitert.
 - [x] `SIGNER_DOKU.md` um Architektur-Abschnitt (NIP vs Kind, Schema vs Adapter, Schema-Format) erweitert.
@@ -285,14 +285,14 @@ Refactoring von `signer.html` in wartbare Module plus neue Aufmerksamkeits-Featu
 ## Fortschritt 2026-02-17 (Demo-UI ohne Public-Key-Button)
 
 - [x] `democlient/index.html`: Button `Public Key laden` aus der Standard-UI entfernt.
-- [x] `democlient/nostreclient.js`: Abhaengigkeiten zu `pubkey-btn` entfernt (Required-Roles, Listener, Busy/Enable-State).
+- [x] `democlient/nostrclient.js`: Abhaengigkeiten zu `pubkey-btn` entfernt (Required-Roles, Listener, Busy/Enable-State).
 - [x] `SIGNER_DOKU.md`: Verhalten dokumentiert (Public Key wird intern bei Bedarf geladen).
 
 ## Fortschritt 2026-02-17 (Form-URI optional / API-only Modus)
 
 - [x] `democlient/forms/schema-loader.js`: `loadFormSchema(...)` um `allowEmpty` erweitert (`null` bei leerem `form_uri`).
-- [x] `democlient/nostreclient.js`: Formularmodus optional gemacht; ohne `form_uri` wird kein Formular gerendert.
-- [x] `democlient/nostreclient.js`: Required-DOM-Rollen in Basis- und Formularrollen getrennt, damit API-only Setup ohne Formular-Elemente moeglich ist.
+- [x] `democlient/nostrclient.js`: Formularmodus optional gemacht; ohne `form_uri` wird kein Formular gerendert.
+- [x] `democlient/nostrclient.js`: Required-DOM-Rollen in Basis- und Formularrollen getrennt, damit API-only Setup ohne Formular-Elemente moeglich ist.
 - [x] `democlient/index.js`: Default-Config auf formularlosen Start umgestellt (Kommentar fuer Custom-Event-Flow).
 - [x] `SIGNER_DOKU.md`: API-Doku auf neues Verhalten aktualisiert (`form_uri` optional, API-only ohne Formular).
 
@@ -825,7 +825,7 @@ Refactoring von `signer.html` in wartbare Module plus neue Aufmerksamkeits-Featu
 
 - [x] Gemeinsames Bridge-Modul aus `democlient/` in `nostrclient/shared/nostr.js` verschoben.
 - [x] Imports umgestellt:
-  - `democlient/nostreclient.js` -> `../nostrclient/shared/nostr.js`
+  - `democlient/nostrclient.js` -> `../nostrclient/shared/nostr.js`
   - `embedclients/identity-link/index.js` -> `../../nostrclient/shared/nostr.js`
   - `embedclients/flotilla/index.js` -> `../../nostrclient/shared/nostr.js`
   - `integrations/wordpress/nostr-identity-link/public/identity-link/index.js` -> `../nostrclient/shared/nostr.js`
@@ -848,4 +848,17 @@ Refactoring von `signer.html` in wartbare Module plus neue Aufmerksamkeits-Featu
 - [x] Bundle-Einstiegsseite aktualisiert:
   - `Bridge module path` zeigt auf `./core/shared/nostr.js`
 - [x] Verifiziert mit `npm run build`: kein `nostrclient/nostrclient/nostrclient/` Unterbaum mehr.
+
+## Fortschritt 2026-02-19 (README grundlegend ueberarbeitet)
+
+- [x] `README.md` komplett neu strukturiert und auf aktuellen Stand gebracht.
+- [x] Build-Matrix ergaenzt mit Zweck pro Build-Target:
+  - `build`
+  - `build:democlient`
+  - `build:embedclients`
+  - `build:signer`
+  - `build:identity-link:wordpress`
+  - Alias `build:indenty-link:wordpress`
+- [x] Deployment-Hinweise und Zielpfade in `dist/` klar beschrieben.
+- [x] Zeichensatzprobleme (Mojibake) entfernt, ASCII-konforme README hergestellt.
 

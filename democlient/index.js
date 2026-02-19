@@ -1,4 +1,4 @@
-﻿import { nostrclient } from "./nostreclient.js";
+﻿import { nostrclient } from "./nostrclient.js";
 
 window.nostrclient = nostrclient;
 

@@ -283,7 +283,7 @@ Use-Case: Multi-User-Systeme (z. B. WordPress), in denen pro App-User ein eigene
 - `democlient/index.html` (Boilerplate UI fuer eigene Clients)
 - `democlient/index.css` (ausgelagerte Demo-Styles)
 - `nostrclient/shared/nostr.js` (gekapselte Bunkerconnect-Lib mit Auto-Connect + Dialog-Mirroring)
-- `democlient/nostreclient.js` (High-Level Wrapper mit `nostrclient.init(...)`)
+- `democlient/nostrclient.js` (High-Level Wrapper mit `nostrclient.init(...)`)
 - `democlient/index.js` (minimaler Entry-Point mit einer Init-Config)
 - `democlient/forms/schema-loader.js` (laedt und normalisiert JSON-Form-Schemata)
 - `democlient/forms/form-generator.js` (rendert Felder + sammelt/validiert Formwerte)
@@ -317,13 +317,13 @@ In deiner Client-Seite:
 Die Demo trennt bewusst:
 
 - `nostrclient/shared/nostr.js`: wiederverwendbare NIP-46/Bunkerconnect Logik
-- `democlient/nostreclient.js`: High-Level Wrapper fuer One-Command-Setup
+- `democlient/nostrclient.js`: High-Level Wrapper fuer One-Command-Setup
 - `democlient/index.js`: nur Konfiguration + Start
 
 ### Schritt 2: Ein Kommando fuer Einbettung + Auto-Connect
 
 ```js
-import { nostrclient } from "./nostreclient.js";
+import { nostrclient } from "./nostrclient.js";
 
 const config = {
   signer_iframe_uri: "../signer.html",
@@ -392,10 +392,10 @@ Alternativ granular:
 
 Empfehlung:
 
-- `democlient/nostreclient.js` als stabilen Wrapper nutzen
+- `democlient/nostrclient.js` als stabilen Wrapper nutzen
 - bei tieferer Kontrolle direkt `nostrclient/shared/nostr.js` nutzen
 
-## 12. API-Doku: `democlient/nostreclient.js`
+## 12. API-Doku: `democlient/nostrclient.js`
 
 Diese API ist fuer den Einsatz im Demo-HTML (`democlient/index.html`) gedacht.
 
@@ -404,18 +404,18 @@ Wichtig:
 - Die API ist ein ES-Modul-Export, kein globales `window`-Objekt.
 - In `index.html` wird sie ueber `democlient/index.js` importiert und gestartet.
 - App-Aufrufe immer namespaced: `nostrclient.getPublicKey()` statt globalem `getPublicKey()`.
-- Export-Namen: `nostreclient` und Alias `nostrclient` (beide identisch, empfohlen: `nostrclient`).
+- Export-Namen: `nostrclient` und Alias `nostrclient` (beide identisch, empfohlen: `nostrclient`).
 
 ### 12.1 Import
 
 ```js
-import { nostrclient } from "./nostreclient.js";
+import { nostrclient } from "./nostrclient.js";
 ```
 
 Optional (Alias):
 
 ```js
-import { nostreclient } from "./nostreclient.js";
+import { nostrclient } from "./nostrclient.js";
 ```
 
 ### 12.2 `init(options)`
@@ -512,7 +512,7 @@ destroy(): void
 ### 12.9 Beispiel fuer `index.html`/`index.js`
 
 ```js
-import { nostrclient } from "./nostreclient.js";
+import { nostrclient } from "./nostrclient.js";
 
 const config = {
   signer_iframe_uri: "../signer.html",

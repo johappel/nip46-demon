@@ -1208,7 +1208,7 @@ async function publishTextNote(content, tags) {
     return client.publishTextNote(content, tags);
 }
 
-export const nostreclient = {
+export const nostrclient = {
     init,
     destroy,
     getState,
@@ -1218,5 +1218,5 @@ export const nostreclient = {
     publishTextNote
 };
 
-export const nostrclient = nostreclient;
+export const nostrclient = nostrclient;
 
