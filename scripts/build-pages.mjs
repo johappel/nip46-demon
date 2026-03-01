@@ -17,7 +17,7 @@ const projectRoot = path.resolve(__dirname, "..");
 const distRootDir = path.join(projectRoot, "dist", "pages");
 
 /**
- * Runs GitHub Pages build for signer and democlient.
+ * Runs GitHub Pages build for signer, democlient and embedclients.
  * @returns {Promise<void>} Resolves when build is complete.
  */
 async function main() {
@@ -45,6 +45,7 @@ async function validateSourcePaths() {
     [path.join(projectRoot, "manifest.webmanifest"), "manifest"],
     [path.join(projectRoot, "icons"), "icons"],
     [path.join(projectRoot, "democlient"), "democlient source"],
+    [path.join(projectRoot, "embedclients"), "embedclients source"],
     [path.join(projectRoot, "nostrclient", "shared", "nostr.js"), "nostr bridge module"],
     [path.join(projectRoot, "vendor", "ndk-3.0.0.js"), "vendor ndk"]
   ];
@@ -64,8 +65,11 @@ async function buildPagesBundle(buildToken) {
 
   await copySignerAssets();
   await copyDemoclientAssets();
+  await copyEmbedclientsAssets();
   await patchSignerHtml(path.join(distRootDir, "signer.html"), buildToken);
-  await writeDemoclientRedirect(path.join(distRootDir, "democlient.html"));
+  await writeEmbedclientsIndex(path.join(distRootDir, "embedclients", "index.html"));
+  await writeRedirectHtml(path.join(distRootDir, "democlient.html"), "./democlient/", "Democlient");
+  await writeRedirectHtml(path.join(distRootDir, "embedclients.html"), "./embedclients/", "Embedclients");
   await writeRootIndex(path.join(distRootDir, "index.html"));
   await writeNoJekyllFile(path.join(distRootDir, ".nojekyll"));
 }
@@ -98,6 +102,14 @@ async function copyDemoclientAssets() {
 }
 
 /**
+ * Copies embedclients files.
+ * @returns {Promise<void>} Resolves when copy is complete.
+ */
+async function copyEmbedclientsAssets() {
+  await copyDirectoryRecursive(path.join(projectRoot, "embedclients"), path.join(distRootDir, "embedclients"));
+}
+
+/**
  * Patches signer HTML with cache-busted module URI.
  * @param {string} htmlFilePath HTML file path.
  * @param {string} buildToken Cache-busting token.
@@ -113,23 +125,28 @@ async function patchSignerHtml(htmlFilePath, buildToken) {
 }
 
 /**
- * Writes one democlient redirect page for convenience URLs.
+ * Writes one redirect page for convenience URLs.
  * @param {string} filePath Redirect file path.
+ * @param {string} targetPath Redirect target path.
+ * @param {string} targetLabel Human-readable target label.
  * @returns {Promise<void>} Resolves when file is written.
  */
-async function writeDemoclientRedirect(filePath) {
+async function writeRedirectHtml(filePath, targetPath, targetLabel) {
+  const safeTargetPath = String(targetPath || "").trim() || "./";
+  const safeTargetLabel = String(targetLabel || "").trim() || "Seite";
+
   const html =
     "<!DOCTYPE html>\n" +
     "<html lang=\"de\">\n" +
     "<head>\n" +
     "  <meta charset=\"UTF-8\">\n" +
-    "  <meta http-equiv=\"refresh\" content=\"0; url=./democlient/\">\n" +
+    `  <meta http-equiv="refresh" content="0; url=${safeTargetPath}">\n` +
     "  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n" +
-    "  <title>Weiterleitung zum Democlient</title>\n" +
+    `  <title>Weiterleitung zu ${safeTargetLabel}</title>\n` +
     "</head>\n" +
     "<body>\n" +
-    "  <p>Weiterleitung zu <a href=\"./democlient/\">./democlient/</a> ...</p>\n" +
-    "  <script>window.location.replace('./democlient/');</script>\n" +
+    `  <p>Weiterleitung zu <a href="${safeTargetPath}">${safeTargetPath}</a> ...</p>\n` +
+    `  <script>window.location.replace('${safeTargetPath}');</script>\n` +
     "</body>\n" +
     "</html>\n";
 
@@ -137,7 +154,39 @@ async function writeDemoclientRedirect(filePath) {
 }
 
 /**
- * Writes one root index page with signer and democlient links.
+ * Writes one embedclients index page with available client variants.
+ * @param {string} filePath Output file path.
+ * @returns {Promise<void>} Resolves when file is written.
+ */
+async function writeEmbedclientsIndex(filePath) {
+  const html =
+    "<!DOCTYPE html>\n" +
+    "<html lang=\"de\">\n" +
+    "<head>\n" +
+    "  <meta charset=\"UTF-8\">\n" +
+    "  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n" +
+    "  <title>Embedclients</title>\n" +
+    "  <style>\n" +
+    "    body { font-family: Arial, sans-serif; margin: 2rem; line-height: 1.45; }\n" +
+    "    h1 { margin-bottom: 0.5rem; }\n" +
+    "    ul { padding-left: 1.2rem; }\n" +
+    "    a { color: #0b63c8; }\n" +
+    "  </style>\n" +
+    "</head>\n" +
+    "<body>\n" +
+    "  <h1>Embedclients</h1>\n" +
+    "  <ul>\n" +
+    "    <li><a href=\"./flotilla/\">Flotilla</a></li>\n" +
+    "    <li><a href=\"./identity-link/\">Identity Link</a></li>\n" +
+    "  </ul>\n" +
+    "</body>\n" +
+    "</html>\n";
+
+  await fs.writeFile(filePath, html, "utf8");
+}
+
+/**
+ * Writes one root index page with signer, democlient and embedclients links.
  * @param {string} filePath Output file path.
  * @returns {Promise<void>} Resolves when file is written.
  */
@@ -164,6 +213,8 @@ async function writeRootIndex(filePath) {
     "    <li><a href=\"./signer.html\">Signer</a></li>\n" +
     "    <li><a href=\"./democlient/\">Democlient</a></li>\n" +
     "    <li><a href=\"./democlient.html\">Democlient (redirect)</a></li>\n" +
+    "    <li><a href=\"./embedclients/\">Embedclients</a></li>\n" +
+    "    <li><a href=\"./embedclients.html\">Embedclients (redirect)</a></li>\n" +
     "  </ul>\n" +
     "  <p>Bridge-Modulpfad: <code>./nostrclient/shared/nostr.js</code></p>\n" +
     "</body>\n" +

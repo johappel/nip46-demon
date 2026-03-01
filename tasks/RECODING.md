@@ -875,5 +875,7 @@ Refactoring von `signer.html` in wartbare Module plus neue Aufmerksamkeits-Featu
   - `signer.html` + Signer-Assets auf Root
   - `democlient/` + benoetigte Runtime-Abhaengigkeiten
   - `democlient.html` als Redirect auf `./democlient/`
+  - `embedclients/` inkl. Einstieg `embedclients/index.html`
+  - `embedclients.html` als Redirect auf `./embedclients/`
 - [x] GitHub Pages Workflow erstellt: `.github/workflows/deploy-pages.yml`.
 - [x] `SIGNER_DOKU.md` um Pages-Build- und Deploy-Dokumentation erweitert.

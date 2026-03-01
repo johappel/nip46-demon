@@ -830,10 +830,12 @@ Hinweis zur Frontend-Integration:
     - `dist/nostrclient/nostrclient/index.html` (Bundle-Einstieg)
     - `dist/nostrclient/nostrclient.zip`
   - `npm run build:pages` / `pnpm run build:pages`
-    - `dist/pages/` (GitHub-Pages Bundle mit Signer + Democlient)
+    - `dist/pages/` (GitHub-Pages Bundle mit Signer + Democlient + Embedclients)
     - `dist/pages/signer.html`
     - `dist/pages/democlient/`
     - `dist/pages/democlient.html` (Redirect auf `./democlient/`)
+    - `dist/pages/embedclients/`
+    - `dist/pages/embedclients.html` (Redirect auf `./embedclients/`)
   - `npm run build:democlient` / `pnpm run build:democlient`
     - `dist/democlient/democlient/`
     - `dist/democlient/vendor/ndk-3.0.0.js`
@@ -859,6 +861,8 @@ Hinweis zur Frontend-Integration:
     - `/signer.html`
     - `/democlient/`
     - `/democlient.html` (Redirect auf `/democlient/`)
+    - `/embedclients/`
+    - `/embedclients.html` (Redirect auf `/embedclients/`)
 - Das Plugin erlaubt für diese nostrclient-Module den Public-Prefix `nostrclient/` unter `/nostr/nostrclient/...`.
 
 Beispiel:
