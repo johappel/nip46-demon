@@ -117,6 +117,7 @@ npm run build:identity-link:wordpress
 - Neuer Core liegt unter `nostrclient/`.
 - Zielbild: Hexagonal Architecture + Strategy Pattern.
 - Integrationsspezifisches Verhalten lebt in Adaptern statt in kopierten Client-/Signer-Varianten.
+- Stabilitäts-Update: Periodischer Heartbeat hält Signer-Relays im Desktop-Modus nun durchgehend aktiv.
 
 Weitere Infos:
 - Strategie: `tasks/ARCHITECTURE.md`
